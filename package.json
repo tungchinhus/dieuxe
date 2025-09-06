@@ -6,7 +6,10 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "test": "ng test",
+    "increment-build": "node scripts/increment-build.js",
+    "build:prod": "npm run increment-build && ng build --configuration production",
+    "deploy": "npm run build:prod && firebase deploy"
   },
   "prettier": {
     "overrides": [
@@ -28,8 +31,13 @@
     "@angular/material": "^20.2.2",
     "@angular/platform-browser": "^20.1.0",
     "@angular/router": "^20.1.0",
+    "@google-cloud/storage": "^7.17.0",
+    "firebase": "^12.2.1",
+    "gapi-script": "^1.2.0",
+    "googleapis": "^159.0.0",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
+    "xlsx": "^0.18.5",
     "zone.js": "~0.15.0"
   },
   "devDependencies": {

@@ -15,7 +15,21 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
+import { UploadInstructionsDialogComponent } from './upload-instructions-dialog/upload-instructions-dialog.component';
+import { DirectUploadDialogComponent } from './direct-upload-dialog/direct-upload-dialog.component';
+import { RealUploadDialogComponent } from './real-upload-dialog/real-upload-dialog.component';
 import { Registration } from '../../models/registration.model';
+import { GoogleDriveService } from '../../services/google-drive.service';
+import { GoogleDriveSimpleService } from '../../services/google-drive-simple.service';
+import { GoogleDriveDirectService } from '../../services/google-drive-direct.service';
+import { GoogleDriveUploadService } from '../../services/google-drive-upload.service';
+import { GoogleDriveRealService } from '../../services/google-drive-real.service';
+import { GoogleDriveDirectUploadService } from '../../services/google-drive-direct-upload.service';
+import { GoogleDriveRealUploadService } from '../../services/google-drive-real-upload.service';
+import { GoogleDriveSimpleUploadService } from '../../services/google-drive-simple-upload.service';
+import { GoogleDriveWebUploadService } from '../../services/google-drive-web-upload.service';
+import { ExcelService } from '../../services/excel.service';
+import { VersionService } from '../../services/version.service';
 
 @Component({
   selector: 'app-dangkyxe',
@@ -57,11 +71,23 @@ export class DangKyXeComponent implements OnInit {
   ];
   
   selectedRegistrations = new Set<number>();
+  buildInfo = '';
 
   constructor(
     private sidenavService: SidenavService,
     private dialog: MatDialog,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private googleDriveService: GoogleDriveService,
+    private googleDriveSimpleService: GoogleDriveSimpleService,
+    private googleDriveDirectService: GoogleDriveDirectService,
+    private googleDriveUploadService: GoogleDriveUploadService,
+    private googleDriveRealService: GoogleDriveRealService,
+    private googleDriveDirectUploadService: GoogleDriveDirectUploadService,
+    private googleDriveRealUploadService: GoogleDriveRealUploadService,
+    private googleDriveSimpleUploadService: GoogleDriveSimpleUploadService,
+    private googleDriveWebUploadService: GoogleDriveWebUploadService,
+    private excelService: ExcelService,
+    private versionService: VersionService
   ) {}
 
   toggleSidenav(): void {
@@ -71,6 +97,7 @@ export class DangKyXeComponent implements OnInit {
   ngOnInit(): void {
     console.log('Component initialized successfully!');
     this.loadMockData();
+    this.buildInfo = this.versionService.getBuildInfo();
   }
 
   ngAfterViewInit(): void {
@@ -202,14 +229,239 @@ export class DangKyXeComponent implements OnInit {
     input.click();
   }
 
-  private handleFileUpload(file: File): void {
-    console.log('File selected:', file.name);
-    this.snackBar.open(`File ${file.name} đã được chọn!`, 'Đóng', {
-      duration: 3000,
-      horizontalPosition: 'right',
-      verticalPosition: 'top'
+  // File upload for Google Drive only
+  openFileUploadForDrive(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.uploadToGoogleDrive(file);
+      }
+    };
+    input.click();
+  }
+
+  // Direct upload to Google Drive - one click upload
+  async uploadToGoogleDrive(file: File): Promise<void> {
+    try {
+      // Show loading message
+      const loadingSnackBar = this.snackBar.open('Đang upload file lên Google Drive...', 'Đóng', {
+        duration: 0,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+      // Use web upload service
+      const uploadResult = await this.googleDriveWebUploadService.uploadFileToDrive(file, file.name);
+      
+      loadingSnackBar.dismiss();
+      
+      if (uploadResult.success) {
+        // Show success message and open Google Drive
+        const snackBarRef = this.snackBar.open(
+          `File "${file.name}" đã được upload thành công lên Google Drive!`, 
+          'Mở Google Drive', 
+          {
+            duration: 5000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+        
+        snackBarRef.onAction().subscribe(() => {
+          // Open Google Drive folder
+          this.googleDriveWebUploadService.openFolderInNewTab();
+        });
+      } else {
+        // Show error message
+        this.snackBar.open(
+          'Có lỗi xảy ra khi upload. Vui lòng thử lại.', 
+          'Thử lại', 
+          {
+            duration: 5000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        ).onAction().subscribe(() => {
+          this.uploadToGoogleDrive(file);
+        });
+      }
+
+    } catch (error) {
+      console.error('Error uploading to Google Drive:', error);
+      
+      // Show error message
+      this.snackBar.open(
+        'Có lỗi xảy ra khi upload. Vui lòng thử lại.', 
+        'Thử lại', 
+        {
+          duration: 5000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        }
+      ).onAction().subscribe(() => {
+        this.uploadToGoogleDrive(file);
+      });
+    }
+  }
+
+  // Simulate upload process
+  private async simulateUploadProcess(file: File): Promise<void> {
+    return new Promise((resolve) => {
+      // Simulate upload time based on file size
+      const uploadTime = Math.min(3000, Math.max(1000, file.size / 1000));
+      
+      setTimeout(() => {
+        console.log('File uploaded successfully:', {
+          name: file.name,
+          size: file.size,
+          type: file.type,
+          folderId: '12l5dc4YppVBQXkgx96WVuyXXzcf8DEP6'
+        });
+        resolve();
+      }, uploadTime);
     });
-    // TODO: Implement actual file processing logic here
+  }
+
+  // Upload file to Google Drive API
+  private async uploadFileToGoogleDriveAPI(file: File): Promise<any> {
+    try {
+      // For now, we'll use a simple approach
+      // In a real implementation, you would need proper OAuth2 authentication
+      
+      // Create file metadata
+      const metadata = {
+        name: file.name,
+        parents: ['12l5dc4YppVBQXkgx96WVuyXXzcf8DEP6']
+      };
+
+      // Create form data
+      const formData = new FormData();
+      formData.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
+      formData.append('file', file);
+
+      // For demonstration, we'll simulate a successful upload
+      // In reality, you would make an actual API call here
+      return new Promise((resolve) => {
+        setTimeout(() => {
+          resolve({
+            success: true,
+            fileId: 'simulated-file-id',
+            fileName: file.name,
+            message: 'File uploaded successfully'
+          });
+        }, 2000);
+      });
+
+    } catch (error) {
+      console.error('API upload failed:', error);
+      return {
+        success: false,
+        error: error
+      };
+    }
+  }
+
+  // Show upload instructions based on result
+  private showUploadInstructions(uploadResult: any): void {
+    const snackBarRef = this.snackBar.open(
+      uploadResult.message, 
+      'Mở Google Drive', 
+      {
+        duration: 8000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      }
+    );
+    
+    snackBarRef.onAction().subscribe(() => {
+      // Open Google Drive folder
+      this.googleDriveUploadService.openFolderInNewTab();
+      
+      // Download the file if available
+      if (uploadResult.downloadUrl) {
+        this.googleDriveUploadService.downloadFile(new File([uploadResult.downloadUrl], uploadResult.fileName));
+      }
+    });
+  }
+
+  // Show manual upload instructions
+  private showManualUploadInstructions(file: File): void {
+    const snackBarRef = this.snackBar.open(
+      `File "${file.name}" đã sẵn sàng để upload thủ công lên Google Drive!`, 
+      'Mở Google Drive', 
+      {
+        duration: 8000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      }
+    );
+    
+    snackBarRef.onAction().subscribe(() => {
+      // Open Google Drive folder
+      this.googleDriveUploadService.openFolderInNewTab();
+      
+      // Download the file for user to upload
+      this.googleDriveUploadService.downloadFile(file);
+    });
+  }
+
+  private async handleFileUpload(file: File): Promise<void> {
+    try {
+      console.log('File selected:', file.name);
+      
+      // Show loading message
+      const loadingSnackBar = this.snackBar.open('Đang xử lý file Excel...', 'Đóng', {
+        duration: 0, // Keep open until dismissed
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+      // Read and process Excel file
+      const registrations = await this.excelService.readExcelFile(file);
+      console.log('Excel data processed:', registrations);
+
+      // Add new registrations to the table
+      if (registrations.length > 0) {
+        const newData = [...this.dataSource.data, ...registrations];
+        this.dataSource.data = newData;
+        
+        // Dismiss loading message
+        loadingSnackBar.dismiss();
+        
+        // Show success message and offer to upload to Google Drive
+        const snackBarRef = this.snackBar.open(
+          `Đã import ${registrations.length} đăng ký từ Excel! Bạn có muốn upload file lên Google Drive không?`, 
+          'Upload lên Google Drive', 
+          {
+            duration: 8000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+        
+        snackBarRef.onAction().subscribe(() => {
+          this.uploadToGoogleDrive(file);
+        });
+      } else {
+        loadingSnackBar.dismiss();
+        this.snackBar.open('Không tìm thấy dữ liệu hợp lệ trong file Excel!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+      }
+
+    } catch (error) {
+      console.error('Error processing file:', error);
+      this.snackBar.open(`Lỗi khi xử lý file: ${error}`, 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
 
   // CRUD operations
@@ -291,5 +543,33 @@ export class DangKyXeComponent implements OnInit {
 
   checkboxLabel(): string {
     return 'Chọn tất cả';
+  }
+
+  // Excel template download
+  downloadExcelTemplate(): void {
+    try {
+      const templateBlob = this.excelService.generateExcelTemplate();
+      const url = window.URL.createObjectURL(templateBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'template_dang_ky_xe.xlsx';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      this.snackBar.open('Template Excel đã được tải xuống!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      this.snackBar.open('Lỗi khi tải template Excel!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
 }

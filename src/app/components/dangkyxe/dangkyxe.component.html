@@ -16,6 +16,9 @@
       <div class="title-container">
         <h1 class="header-title">Hệ thống Quản lý Đăng ký Xe</h1>
         <p class="header-subtitle">Nơi tập hợp và quản lý thông tin đăng ký đưa đón của nhân viên.</p>
+        <div class="version-info">
+          <span class="version-label">{{ buildInfo }}</span>
+        </div>
       </div>
     </div>
   </mat-toolbar>
@@ -49,6 +52,22 @@
                   class="action-button">
             <mat-icon>upload_file</mat-icon>
             Import từ Excel
+          </button>
+          
+          <button mat-raised-button 
+                  color="warn" 
+                  (click)="downloadExcelTemplate()"
+                  class="action-button">
+            <mat-icon>download</mat-icon>
+            Tải Template Excel
+          </button>
+          
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="openFileUploadForDrive()"
+                  class="action-button">
+            <mat-icon>cloud_upload</mat-icon>
+            Upload Excel lên Google Drive
           </button>
         </div>
       </div>
