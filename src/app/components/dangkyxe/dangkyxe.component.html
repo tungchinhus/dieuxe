@@ -1,0 +1,155 @@
+<div class="container">
+  <!-- Header Section -->
+  <mat-toolbar class="header-toolbar">
+    <button
+      type="button"
+      aria-label="Toggle sidenav"
+      mat-icon-button
+      (click)="toggleSidenav()"
+      class="menu-toggle">
+      <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
+    </button>
+    <div class="header-content">
+      <div class="logo-container">
+        <img src="assets/icons/thibidiLogo.png" alt="Thibidi Logo" class="logo" onerror="this.style.display='none'">
+      </div>
+      <div class="title-container">
+        <h1 class="header-title">Hệ thống Quản lý Đăng ký Xe</h1>
+        <p class="header-subtitle">Nơi tập hợp và quản lý thông tin đăng ký đưa đón của nhân viên.</p>
+      </div>
+    </div>
+  </mat-toolbar>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Search and Action Section -->
+    <mat-card class="action-card">
+      <div class="action-container">
+        <div class="search-container">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Tìm kiếm theo tên, mã nhân viên...</mat-label>
+            <input matInput 
+                   placeholder="Tìm kiếm theo tên, mã nhân viên...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+        </div>
+        
+        <div class="button-container">
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="openAddRegistrationDialog()"
+                  class="action-button">
+            <mat-icon>add</mat-icon>
+            Thêm Đăng ký
+          </button>
+          
+          <button mat-raised-button 
+                  color="accent" 
+                  (click)="openFileUploadDialog()"
+                  class="action-button">
+            <mat-icon>upload_file</mat-icon>
+            Import từ Excel
+          </button>
+        </div>
+      </div>
+    </mat-card>
+
+    <!-- Data Display Section -->
+    <mat-card class="table-card">
+      <div class="table-container">
+        <h3>Danh sách đăng ký xe</h3>
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+            <!-- Select Column -->
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef>
+                <mat-checkbox
+                  (change)="$event ? masterToggle() : null"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="isIndeterminate()"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </th>
+              <td mat-cell *matCellDef="let element">
+                <mat-checkbox
+                  (click)="$event.stopPropagation()"
+                  (change)="$event ? toggleSelection(element) : null"
+                  [checked]="isSelected(element)"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </td>
+            </ng-container>
+
+            <!-- Mã nhân viên Column -->
+            <ng-container matColumnDef="maNhanVien">
+              <th mat-header-cell *matHeaderCellDef>Mã NV</th>
+              <td mat-cell *matCellDef="let element">{{element.maNhanVien}}</td>
+            </ng-container>
+
+            <!-- Họ tên Column -->
+            <ng-container matColumnDef="hoTen">
+              <th mat-header-cell *matHeaderCellDef>Họ tên</th>
+              <td mat-cell *matCellDef="let element">{{element.hoTen}}</td>
+            </ng-container>
+
+            <!-- Điện thoại Column -->
+            <ng-container matColumnDef="dienThoai">
+              <th mat-header-cell *matHeaderCellDef>Điện thoại</th>
+              <td mat-cell *matCellDef="let element">{{element.dienThoai}}</td>
+            </ng-container>
+
+            <!-- Ngày đăng ký Column -->
+            <ng-container matColumnDef="ngayDangKy">
+              <th mat-header-cell *matHeaderCellDef>Ngày đăng ký</th>
+              <td mat-cell *matCellDef="let element">{{element.ngayDangKy}}</td>
+            </ng-container>
+
+            <!-- Thời gian Column -->
+            <ng-container matColumnDef="thoiGianBatDau">
+              <th mat-header-cell *matHeaderCellDef>Thời gian</th>
+              <td mat-cell *matCellDef="let element">{{element.thoiGianBatDau}} - {{element.thoiGianKetThuc}}</td>
+            </ng-container>
+
+            <!-- Tuyến xe Column -->
+            <ng-container matColumnDef="maTuyenXe">
+              <th mat-header-cell *matHeaderCellDef>Tuyến xe</th>
+              <td mat-cell *matCellDef="let element">{{element.maTuyenXe}}</td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let element">
+                <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{registration: element}">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menu="matMenu">
+                  <ng-template matMenuContent let-registration="registration">
+                    <button mat-menu-item (click)="editRegistration(registration)">
+                      <mat-icon>edit</mat-icon>
+                      <span>Chỉnh sửa</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteRegistration(registration)">
+                      <mat-icon>delete</mat-icon>
+                      <span>Xóa</span>
+                    </button>
+                  </ng-template>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" class="table-row"></tr>
+          </table>
+          
+          <mat-paginator 
+            [pageSizeOptions]="[5, 10, 25, 50]" 
+            [pageSize]="10" 
+            showFirstLastButtons
+            aria-label="Chọn trang">
+          </mat-paginator>
+        </div>
+      </div>
+    </mat-card>
+  </div>
+</div>

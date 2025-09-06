@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Generator: Adobe Illustrator 24.0.1, SVG Export Plug-In . SVG Version: 6.00 Build 0)  -->
+<svg version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" x="0px" y="0px"
+	 viewBox="0 0 132 132" style="enable-background:new 0 0 132 132;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#00B262;}
+	.st1{fill:#081931;}
+	.st2{fill:#FFFFFF;}
+	.st3{fill:#282B3E;}
+	.st4{display:none;}
+	.st5{display:inline;}
+	.st6{fill:none;}
+	
+		.st7{fill:none;stroke:#00A84F;stroke-width:2;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:20;}
+	.st8{opacity:0.8;}
+	.st9{fill:none;stroke:#FFFFFF;stroke-width:1.2;stroke-miterlimit:10;}
+	.st10{clip-path:url(#SVGID_2_);}
+	.st11{fill:#FFFFFF;stroke:#00B262;stroke-width:1.2;stroke-miterlimit:10;}
+	
+		.st12{fill:none;stroke:#00B262;stroke-width:1.2;stroke-linecap:round;stroke-linejoin:round;stroke-miterlimit:10;stroke-dasharray:20;}
+	.st13{opacity:0.9;fill:#F3716D;}
+	.st14{fill:#034EA2;}
+</style>
+<g id="Outlined">
+	<g>
+		<path class="st3" d="M66,0.89c-35.9,0-65,29.1-65,65s29.1,65,65,65c35.9,0,65-29.1,65-65S101.9,0.89,66,0.89z M66,116.66
+			c-27.99,0-50.77-22.78-50.77-50.77c0-27.99,22.77-50.77,50.77-50.77c27.99,0,50.77,22.78,50.77,50.77
+			C116.77,93.88,93.99,116.66,66,116.66z"/>
+		<rect x="38.52" y="43.73" class="st3" width="14.23" height="14.23"/>
+		<rect x="79.2" y="43.73" class="st3" width="14.23" height="14.23"/>
+		<path class="st3" d="M66,86.53c-7.31,0-13.25-5.94-13.25-13.25H38.52c0,15.15,12.33,27.48,27.48,27.48
+			c15.15,0,27.48-12.33,27.48-27.48H79.25C79.25,80.58,73.31,86.53,66,86.53z"/>
+	</g>
+</g>
+<g id="None_outline" class="st4">
+</g>
+<g id="Grid">
+</g>
+</svg>

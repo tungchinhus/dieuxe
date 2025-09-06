@@ -1,0 +1,209 @@
+.sidenav-container {
+  height: 100vh;
+}
+
+.sidenav {
+  width: 250px;
+  background: #ffffff;
+  border-right: 1px solid #e0e0e0;
+  z-index: 1000;
+}
+
+.sidenav-toolbar {
+  background: transparent !important;
+  color: #333333;
+  padding: 1rem;
+  border-bottom: 1px solid #e0e0e0;
+}
+
+.sidenav-logo {
+  height: 40px;
+  width: auto;
+  margin-right: 12px;
+  object-fit: contain;
+  filter: none;
+}
+
+.sidenav-title {
+  font-size: 1.25rem;
+  font-weight: 600;
+  color: #333333;
+}
+
+.sidenav .mat-mdc-list-item {
+  color: #2c3e50;
+  margin: 0.25rem 0.5rem;
+  border-radius: 8px;
+  transition: all 0.2s ease;
+  font-weight: 500;
+  font-size: 14px;
+  min-height: 48px;
+}
+
+.sidenav .mat-mdc-list-item:hover {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.sidenav .mat-mdc-list-item.active {
+  background-color: #1976d2 !important;
+  color: white !important;
+  font-weight: 600;
+}
+
+.sidenav .mat-mdc-list-item .mat-icon {
+  color: #5a6c7d;
+  margin-right: 12px;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  opacity: 0.8;
+}
+
+.sidenav .mat-mdc-list-item:hover .mat-icon {
+  color: #1976d2;
+}
+
+.sidenav .mat-mdc-list-item.active .mat-icon {
+  color: white !important;
+}
+
+.sidenav .mat-mdc-list-item.active span {
+  color: white !important;
+  font-weight: 600;
+}
+
+.mat-toolbar.mat-primary {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.app-logo {
+  height: 32px;
+  width: auto;
+  margin-right: 12px;
+  object-fit: contain;
+  filter: brightness(0) invert(1); /* Make logo white */
+}
+
+.content {
+  padding: 0;
+  min-height: calc(100vh - 64px);
+}
+
+.welcome-card {
+  margin-bottom: 30px;
+  max-width: 600px;
+}
+
+.feature-cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+}
+
+.feature-card {
+  height: 100%;
+}
+
+.feature-card .mat-card-header {
+  margin-bottom: 10px;
+}
+
+.feature-card .mat-icon {
+  font-size: 40px;
+  width: 40px;
+  height: 40px;
+  color: #1976d2;
+}
+
+.mat-card-avatar {
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Additional sidebar improvements */
+.sidenav {
+  box-shadow: 2px 0 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Ensure menu items are clearly visible */
+.sidenav .mat-mdc-list-item span {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+}
+
+/* Better contrast for inactive items */
+.sidenav .mat-mdc-list-item:not(.active) {
+  color: #2c3e50;
+}
+
+.sidenav .mat-mdc-list-item:not(.active) .mat-icon {
+  color: #5a6c7d;
+  opacity: 0.9;
+}
+
+.sidenav-toolbar {
+  background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%) !important;
+  border-bottom: 2px solid #1976d2;
+}
+
+.sidenav-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #1976d2;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .sidenav {
+    width: 200px;
+  }
+  
+  .sidenav-toolbar {
+    padding: 0.75rem;
+  }
+  
+  .sidenav-logo {
+    height: 32px;
+  }
+  
+  .sidenav-title {
+    font-size: 1rem;
+  }
+  
+  .content {
+    padding: 0;
+  }
+  
+  .feature-cards {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 480px) {
+  .sidenav {
+    width: 180px;
+  }
+  
+  .sidenav-toolbar {
+    padding: 0.5rem;
+  }
+  
+  .sidenav-logo {
+    height: 28px;
+  }
+  
+  .sidenav-title {
+    font-size: 0.9rem;
+  }
+}

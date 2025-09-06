@@ -1,0 +1,192 @@
+<div class="dialog-container">
+  <!-- Dialog Header -->
+  <mat-toolbar class="dialog-header">
+    <mat-toolbar-row>
+      <span class="dialog-title">
+        {{ isEditMode ? 'Chỉnh sửa Đăng ký Xe' : 'Thêm Đăng ký Xe Mới' }}
+      </span>
+      <span class="spacer"></span>
+      <button mat-icon-button (click)="onCancel()" class="close-button">
+        <mat-icon>close</mat-icon>
+      </button>
+    </mat-toolbar-row>
+  </mat-toolbar>
+
+  <!-- Dialog Content -->
+  <div class="dialog-content">
+    <form [formGroup]="registrationForm" (ngSubmit)="onSubmit()" class="registration-form">
+      
+      <!-- Basic Information Section -->
+      <div class="form-section">
+        <h3 class="section-title">Thông tin cơ bản</h3>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Mã Nhân Viên</mat-label>
+            <input matInput 
+                   formControlName="maNhanVien" 
+                   placeholder="VD: NV001">
+            <mat-error *ngIf="isFieldInvalid('maNhanVien')">
+              {{ getErrorMessage('maNhanVien') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Họ Tên</mat-label>
+            <input matInput 
+                   formControlName="hoTen" 
+                   placeholder="Nhập họ tên">
+            <mat-error *ngIf="isFieldInvalid('hoTen')">
+              {{ getErrorMessage('hoTen') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Số Điện Thoại</mat-label>
+            <input matInput 
+                   formControlName="dienThoai" 
+                   placeholder="0123 456 789">
+            <mat-error *ngIf="isFieldInvalid('dienThoai')">
+              {{ getErrorMessage('dienThoai') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Phòng Ban</mat-label>
+            <mat-select formControlName="phongBan">
+              <mat-option value="">Chọn phòng ban</mat-option>
+              <mat-option *ngFor="let dept of departments" [value]="dept.value">
+                {{ dept.label }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="isFieldInvalid('phongBan')">
+              {{ getErrorMessage('phongBan') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <!-- Schedule Information Section -->
+      <div class="form-section">
+        <h3 class="section-title">Thông tin lịch trình</h3>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Ngày Đăng Ký</mat-label>
+            <input matInput 
+                   [matDatepicker]="picker" 
+                   formControlName="ngayDangKy">
+            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+            <mat-datepicker #picker></mat-datepicker>
+            <mat-error *ngIf="isFieldInvalid('ngayDangKy')">
+              {{ getErrorMessage('ngayDangKy') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Loại Ca</mat-label>
+            <mat-select formControlName="loaiCa" (selectionChange)="onWorkShiftChange()">
+              <mat-option value="">Chọn ca làm việc</mat-option>
+              <mat-option *ngFor="let shift of workShifts" [value]="shift.value">
+                {{ shift.label }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="isFieldInvalid('loaiCa')">
+              {{ getErrorMessage('loaiCa') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Thời Gian Bắt Đầu</mat-label>
+            <input matInput 
+                   type="time" 
+                   formControlName="thoiGianBatDau">
+            <mat-error *ngIf="isFieldInvalid('thoiGianBatDau')">
+              {{ getErrorMessage('thoiGianBatDau') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Thời Gian Kết Thúc</mat-label>
+            <input matInput 
+                   type="time" 
+                   formControlName="thoiGianKetThuc">
+            <mat-error *ngIf="isFieldInvalid('thoiGianKetThuc')">
+              {{ getErrorMessage('thoiGianKetThuc') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+      </div>
+
+      <mat-divider></mat-divider>
+
+      <!-- Transportation Information Section -->
+      <div class="form-section">
+        <h3 class="section-title">Thông tin vận chuyển</h3>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Tuyến Xe</mat-label>
+            <mat-select formControlName="maTuyenXe">
+              <mat-option value="">Chọn tuyến xe</mat-option>
+              <mat-option *ngFor="let route of routes" [value]="route.value">
+                {{ route.label }}
+              </mat-option>
+            </mat-select>
+            <mat-error *ngIf="isFieldInvalid('maTuyenXe')">
+              {{ getErrorMessage('maTuyenXe') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Trạm/Điểm Đón</mat-label>
+            <input matInput 
+                   formControlName="tramXe" 
+                   placeholder="VD: Cổng 11">
+            <mat-error *ngIf="isFieldInvalid('tramXe')">
+              {{ getErrorMessage('tramXe') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row full-width">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Nội Dung Công Việc</mat-label>
+            <textarea matInput 
+                      formControlName="noiDungCongViec" 
+                      rows="3" 
+                      placeholder="Mô tả ngắn gọn công việc...">
+            </textarea>
+          </mat-form-field>
+        </div>
+
+        <div class="form-row">
+          <mat-checkbox formControlName="dangKyCom" class="checkbox-field">
+            Đăng ký cơm
+          </mat-checkbox>
+        </div>
+      </div>
+    </form>
+  </div>
+
+  <!-- Dialog Actions -->
+  <div class="dialog-actions">
+    <button mat-button 
+            type="button" 
+            (click)="onCancel()" 
+            class="cancel-button">
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            type="submit" 
+            (click)="onSubmit()" 
+            [disabled]="registrationForm.invalid"
+            class="submit-button">
+      {{ isEditMode ? 'Cập nhật' : 'Lưu Đăng Ký' }}
+    </button>
+  </div>
+</div>
