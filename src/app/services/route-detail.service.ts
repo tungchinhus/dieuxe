@@ -17,6 +17,7 @@ import {
 import { Observable, from } from 'rxjs';
 import { map } from 'rxjs/operators';
 import { RouteDetail, RouteDetailCreate, RouteDetailUpdate } from '../models/route-detail.model';
+import { app } from '../../firebase.config';
 
 @Injectable({
   providedIn: 'root'
@@ -26,7 +27,7 @@ export class RouteDetailService {
   private firestore: Firestore;
 
   constructor() {
-    this.firestore = getFirestore();
+    this.firestore = getFirestore(app);
   }
 
   /**
@@ -34,12 +35,22 @@ export class RouteDetailService {
    * @returns Observable of route details array
    */
   getRouteDetails(): Observable<RouteDetail[]> {
+    console.log('Loading all route details from Firebase collection:', this.collectionName);
     const routeDetailsRef = collection(this.firestore, this.collectionName);
     return from(getDocs(routeDetailsRef)).pipe(
-      map(snapshot => snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-      } as RouteDetail)))
+      map(snapshot => {
+        console.log('Total documents found:', snapshot.docs.length);
+        const results = snapshot.docs.map((doc: any) => {
+          const data = doc.data();
+          console.log('Document ID:', doc.id, 'Data:', data);
+          return {
+            id: doc.id,
+            ...data
+          } as RouteDetail;
+        });
+        console.log('All route details loaded:', results);
+        return results;
+      })
     );
   }
 
@@ -49,13 +60,23 @@ export class RouteDetailService {
    * @returns Observable of route details array
    */
   getRouteDetailsByRoute(routeCode: string): Observable<RouteDetail[]> {
+    console.log('Querying stations for route:', routeCode);
     const routeDetailsRef = collection(this.firestore, this.collectionName);
     const q = query(routeDetailsRef, where('maTuyenXe', '==', routeCode), orderBy('thuTu', 'asc'));
     return from(getDocs(q)).pipe(
-      map(snapshot => snapshot.docs.map((doc: any) => ({
-        id: doc.id,
-        ...doc.data()
-      } as RouteDetail)))
+      map(snapshot => {
+        console.log('Query result for route', routeCode, ':', snapshot.docs.length, 'documents found');
+        const results = snapshot.docs.map((doc: any) => {
+          const data = doc.data();
+          console.log('Station document:', doc.id, 'Data:', data);
+          return {
+            id: doc.id,
+            ...data
+          } as RouteDetail;
+        });
+        console.log('Filtered stations for route', routeCode, ':', results);
+        return results;
+      })
     );
   }
 

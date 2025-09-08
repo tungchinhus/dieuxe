@@ -14,6 +14,8 @@ import { MatDividerModule } from '@angular/material/divider';
 import { MatToolbarModule } from '@angular/material/toolbar';
 
 import { Registration, Department, WorkShift, Route, RegistrationFormData } from '../../../models/registration.model';
+import { RouteDetail } from '../../../models/route-detail.model';
+import { RouteDetailService } from '../../../services/route-detail.service';
 
 export interface DialogData {
   registration?: Registration;
@@ -49,11 +51,15 @@ export class RegistrationFormDialogComponent implements OnInit {
   departments: Department[] = [];
   workShifts: WorkShift[] = [];
   routes: Route[] = [];
+  availableRoutes: any[] = [];
+  selectedRouteStations: RouteDetail[] = [];
+  allRouteDetails: RouteDetail[] = []; // Store all route details from Firebase
 
   constructor(
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<RegistrationFormDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: DialogData
+    @Inject(MAT_DIALOG_DATA) public data: DialogData,
+    private routeDetailService: RouteDetailService
   ) {
     this.departments = data.departments;
     this.workShifts = data.workShifts;
@@ -64,6 +70,7 @@ export class RegistrationFormDialogComponent implements OnInit {
   }
 
   ngOnInit(): void {
+    this.loadAllRouteDetails();
     if (this.isEditMode && this.data.registration) {
       this.populateForm(this.data.registration);
     }
@@ -74,7 +81,6 @@ export class RegistrationFormDialogComponent implements OnInit {
       maNhanVien: ['', [Validators.required, Validators.minLength(3)]],
       hoTen: ['', [Validators.required, Validators.minLength(2)]],
       dienThoai: ['', [Validators.required, Validators.pattern(/^[0-9\s\-\+\(\)]+$/)]],
-      phongBan: ['', Validators.required],
       ngayDangKy: ['', Validators.required],
       loaiCa: ['', Validators.required],
       thoiGianBatDau: ['', Validators.required],
@@ -87,24 +93,24 @@ export class RegistrationFormDialogComponent implements OnInit {
   }
 
   private populateForm(registration: Registration): void {
-    // Find the department value by label
-    const departmentValue = this.departments.find(d => d.label === registration.phongBan)?.value || '';
-    const routeValue = this.routes.find(r => r.label === registration.maTuyenXe)?.value || '';
-
     this.registrationForm.patchValue({
       maNhanVien: registration.maNhanVien,
       hoTen: registration.hoTen,
       dienThoai: registration.dienThoai,
-      phongBan: departmentValue,
       ngayDangKy: registration.ngayDangKy,
       loaiCa: registration.loaiCa,
       thoiGianBatDau: registration.thoiGianBatDau,
       thoiGianKetThuc: registration.thoiGianKetThuc,
-      maTuyenXe: routeValue,
+      maTuyenXe: registration.maTuyenXe,
       tramXe: registration.tramXe,
       noiDungCongViec: registration.noiDungCongViec,
       dangKyCom: registration.dangKyCom
     });
+
+    // Load stations for the selected route
+    if (registration.maTuyenXe) {
+      this.loadStationsForRoute(registration.maTuyenXe);
+    }
   }
 
   onWorkShiftChange(): void {
@@ -121,6 +127,85 @@ export class RegistrationFormDialogComponent implements OnInit {
         });
       }
     }
+  }
+
+  onRouteChange(): void {
+    const selectedRoute = this.registrationForm.get('maTuyenXe')?.value;
+    console.log('Route changed to:', selectedRoute);
+    
+    // Clear the station selection first
+    this.registrationForm.patchValue({ tramXe: '' });
+    this.selectedRouteStations = [];
+    
+    if (selectedRoute) {
+      this.loadStationsForRoute(selectedRoute);
+    }
+  }
+
+  private loadAllRouteDetails(): void {
+    console.log('=== LOADING ALL ROUTE DETAILS FROM FIREBASE ===');
+    this.routeDetailService.getRouteDetails().subscribe({
+      next: (routeDetails) => {
+        console.log('Raw route details from Firebase:', routeDetails);
+        this.allRouteDetails = routeDetails;
+        
+        // Get unique routes from route details
+        const uniqueRoutes = new Map();
+        routeDetails.forEach(detail => {
+          console.log('Processing route detail:', detail);
+          if (!uniqueRoutes.has(detail.maTuyenXe)) {
+            uniqueRoutes.set(detail.maTuyenXe, {
+              maTuyenXe: detail.maTuyenXe,
+              tenTuyenXe: `Tuyến ${detail.maTuyenXe}` // You can customize this based on your data structure
+            });
+          }
+        });
+        this.availableRoutes = Array.from(uniqueRoutes.values());
+        console.log('Available routes for dropdown:', this.availableRoutes);
+        console.log('Total route details loaded:', this.allRouteDetails.length);
+        console.log('=== ALL DATA LOADED SUCCESSFULLY ===');
+      },
+      error: (error) => {
+        console.error('Error loading route details from Firebase:', error);
+        this.availableRoutes = [];
+        this.allRouteDetails = [];
+      }
+    });
+  }
+
+  private loadStationsForRoute(routeCode: string): void {
+    console.log('=== LOADING STATIONS FOR ROUTE:', routeCode, '===');
+    
+    if (!this.allRouteDetails || this.allRouteDetails.length === 0) {
+      console.log('No route details loaded yet, waiting...');
+      this.selectedRouteStations = [];
+      return;
+    }
+    
+    // Filter stations by route code from already loaded data
+    const stations = this.allRouteDetails.filter(detail => detail.maTuyenXe === routeCode);
+    console.log('Filtered stations for route', routeCode, ':', stations);
+    
+    if (stations && stations.length > 0) {
+      // Sort stations by thuTu (order) and assign to selectedRouteStations
+      this.selectedRouteStations = stations.sort((a, b) => a.thuTu - b.thuTu);
+      console.log('Successfully loaded', this.selectedRouteStations.length, 'stations for route:', routeCode);
+      console.log('Sorted stations:', this.selectedRouteStations);
+      console.log('=== STATIONS LOADED SUCCESSFULLY ===');
+    } else {
+      console.log('No stations found for route:', routeCode);
+      console.log('=== NO STATIONS FOUND ===');
+      this.selectedRouteStations = [];
+    }
+  }
+
+
+  trackByStation(index: number, station: RouteDetail): string {
+    return station.id || station.tenDiemDon;
+  }
+
+  getStationCountForRoute(routeCode: string): number {
+    return this.allRouteDetails.filter(d => d.maTuyenXe === routeCode).length;
   }
 
   onSubmit(): void {

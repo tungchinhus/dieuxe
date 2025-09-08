@@ -51,12 +51,17 @@
 .form-row {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 1rem;
-  margin-bottom: 1rem;
+  gap: 1.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .form-row.full-width {
   grid-template-columns: 1fr;
+}
+
+.form-row.single-field {
+  grid-template-columns: 1fr;
+  max-width: 50%;
 }
 
 .form-field {

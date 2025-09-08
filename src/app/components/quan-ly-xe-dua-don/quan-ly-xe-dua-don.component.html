@@ -1,0 +1,210 @@
+<div class="container">
+  <!-- Header -->
+  <mat-toolbar class="header-toolbar">
+    <button mat-icon-button (click)="toggleSidenav()" class="menu-button">
+      <mat-icon>menu</mat-icon>
+    </button>
+    <span class="header-title">Quản lý xe đưa đón</span>
+    <span class="spacer"></span>
+    <button mat-raised-button color="primary" (click)="openAddXeDuaDonDialog()" class="add-button">
+      <mat-icon>add</mat-icon>
+      Thêm xe đưa đón
+    </button>
+  </mat-toolbar>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Sidebar -->
+    <mat-sidenav-container class="sidenav-container">
+      <mat-sidenav #sidenav mode="side" opened="true" class="sidenav">
+        <mat-nav-list>
+          <div class="nav-section">
+            <h3 class="nav-title">Bộ lọc</h3>
+            
+            <!-- Search Filter -->
+            <mat-form-field appearance="outline" class="filter-field">
+              <mat-label>Tìm kiếm</mat-label>
+              <input matInput 
+                     [(ngModel)]="searchTerm" 
+                     (input)="applyFilter()"
+                     placeholder="Biển số, tên tài xế, SĐT...">
+              <mat-icon matSuffix>search</mat-icon>
+            </mat-form-field>
+
+            <!-- Loai Xe Filter -->
+            <mat-form-field appearance="outline" class="filter-field">
+              <mat-label>Loại xe</mat-label>
+              <mat-select [(ngModel)]="selectedLoaiXe" (selectionChange)="applyLoaiXeFilter()">
+                <mat-option value="">Tất cả</mat-option>
+                <mat-option *ngFor="let option of loaiXeOptions" [value]="option.value">
+                  {{ option.label }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+
+            <!-- Clear Filters -->
+            <button mat-stroked-button (click)="clearFilters()" class="clear-filters-btn">
+              <mat-icon>clear</mat-icon>
+              Xóa bộ lọc
+            </button>
+          </div>
+
+          <!-- Statistics -->
+          <div class="nav-section">
+            <h3 class="nav-title">Thống kê</h3>
+            <div class="stat-item">
+              <mat-icon>directions_bus</mat-icon>
+              <span>Tổng số xe: {{ dataSource.data.length }}</span>
+            </div>
+            <div class="stat-item">
+              <mat-icon>check_circle</mat-icon>
+              <span>Đã chọn: {{ getSelectedCount() }}</span>
+            </div>
+          </div>
+        </mat-nav-list>
+      </mat-sidenav>
+
+      <!-- Main Content Area -->
+      <mat-sidenav-content class="content">
+        <!-- Action Bar -->
+        <div class="action-bar" *ngIf="getSelectedCount() > 0">
+          <span class="selected-count">{{ getSelectedCount() }} xe đã chọn</span>
+          <button mat-button color="warn" (click)="deleteSelected()">
+            <mat-icon>delete</mat-icon>
+            Xóa đã chọn
+          </button>
+        </div>
+
+        <!-- Data Table -->
+        <div class="table-container">
+          <table mat-table [dataSource]="dataSource" matSort class="data-table">
+            <!-- Select Column -->
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef>
+                <mat-checkbox
+                  (change)="$event ? masterToggle() : null"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="isIndeterminate()"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </th>
+              <td mat-cell *matCellDef="let row">
+                <mat-checkbox
+                  (click)="$event.stopPropagation()"
+                  (change)="$event ? toggleSelection(row) : null"
+                  [checked]="isSelected(row)"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </td>
+            </ng-container>
+
+            <!-- MaXe Column -->
+            <ng-container matColumnDef="MaXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Mã xe</th>
+              <td mat-cell *matCellDef="let row">{{ row.MaXe }}</td>
+            </ng-container>
+
+            <!-- BienSoXe Column -->
+            <ng-container matColumnDef="BienSoXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Biển số xe</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="bien-so-cell">
+                  <mat-icon class="car-icon">directions_car</mat-icon>
+                  <span class="bien-so-text">{{ row.BienSoXe }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- TenTaiXe Column -->
+            <ng-container matColumnDef="TenTaiXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Tên tài xế</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="driver-cell">
+                  <mat-icon class="driver-icon">person</mat-icon>
+                  <span>{{ row.TenTaiXe }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- SoDienThoaiTaiXe Column -->
+            <ng-container matColumnDef="SoDienThoaiTaiXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Số điện thoại</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="phone-cell">
+                  <mat-icon class="phone-icon">phone</mat-icon>
+                  <a [href]="'tel:' + row.SoDienThoaiTaiXe" class="phone-link">
+                    {{ row.SoDienThoaiTaiXe }}
+                  </a>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- LoaiXe Column -->
+            <ng-container matColumnDef="LoaiXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Loại xe</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="loai-xe-badge" [ngClass]="getLoaiXeClass(row.LoaiXe)">
+                  {{ row.LoaiXe }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- GhiChu Column -->
+            <ng-container matColumnDef="GhiChu">
+              <th mat-header-cell *matHeaderCellDef>Ghi chú</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="ghi-chu-text" [title]="row.GhiChu">
+                  {{ row.GhiChu || '-' }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="action-button">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #actionMenu="matMenu">
+                  <button mat-menu-item (click)="editXeDuaDon(row)">
+                    <mat-icon>edit</mat-icon>
+                    <span>Chỉnh sửa</span>
+                  </button>
+                  <button mat-menu-item (click)="deleteXeDuaDon(row)" class="delete-action">
+                    <mat-icon>delete</mat-icon>
+                    <span>Xóa</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                [class.selected-row]="isSelected(row)"
+                (click)="toggleSelection(row)"></tr>
+          </table>
+
+          <!-- No Data Message -->
+          <div *ngIf="dataSource.data.length === 0" class="no-data">
+            <mat-icon class="no-data-icon">directions_bus</mat-icon>
+            <h3>Chưa có xe đưa đón nào</h3>
+            <p>Nhấn "Thêm xe đưa đón" để bắt đầu quản lý</p>
+            <button mat-raised-button color="primary" (click)="openAddXeDuaDonDialog()">
+              <mat-icon>add</mat-icon>
+              Thêm xe đưa đón đầu tiên
+            </button>
+          </div>
+        </div>
+
+        <!-- Paginator -->
+        <mat-paginator 
+          [pageSizeOptions]="[10, 25, 50, 100]" 
+          [pageSize]="10"
+          showFirstLastButtons
+          class="paginator">
+        </mat-paginator>
+      </mat-sidenav-content>
+    </mat-sidenav-container>
+  </div>
+</div>

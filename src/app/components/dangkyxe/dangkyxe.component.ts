@@ -171,8 +171,8 @@ export class DangKyXeComponent implements OnInit {
         const newRegistration: Registration = {
           id: this.dataSource.data.length + 1,
           ...result,
-          phongBan: this.getDepartments().find(d => d.value === result.phongBan)?.label || result.phongBan,
-          maTuyenXe: this.getRoutes().find(r => r.value === result.maTuyenXe)?.label || result.maTuyenXe
+          phongBan: '', // Remove phongBan field
+          maTuyenXe: result.maTuyenXe // Keep as is since it's now the route code
         };
         this.dataSource.data = [...this.dataSource.data, newRegistration];
         this.snackBar.open('Đăng ký mới đã được thêm thành công!', 'Đóng', {
@@ -471,7 +471,7 @@ export class DangKyXeComponent implements OnInit {
   // CRUD operations
   editRegistration(registration: Registration): void {
     const dialogRef = this.dialog.open(RegistrationFormDialogComponent, {
-      width: '800px',
+      width: '1000px',
       data: {
         registration: registration,
         departments: this.getDepartments(),
@@ -484,7 +484,12 @@ export class DangKyXeComponent implements OnInit {
       if (result) {
         const index = this.dataSource.data.findIndex(r => r.id === registration.id);
         if (index !== -1) {
-          this.dataSource.data[index] = { ...registration, ...result };
+          this.dataSource.data[index] = { 
+            ...registration, 
+            ...result,
+            phongBan: '', // Remove phongBan field
+            maTuyenXe: result.maTuyenXe // Keep as is since it's now the route code
+          };
           this.dataSource.data = [...this.dataSource.data];
           this.snackBar.open('Đăng ký đã được cập nhật thành công!', 'Đóng', {
             duration: 3000,
@@ -565,7 +570,7 @@ export class DangKyXeComponent implements OnInit {
           MaNhanVien: reg.maNhanVien,
           HoTen: reg.hoTen,
           DienThoai: reg.dienThoai,
-          PhongBan: this.mapPhongBan(reg.phongBan),
+          PhongBan: '', // Remove phongBan field
           NgayDangKy: new Date(reg.ngayDangKy),
           ThoiGianBatDau: reg.thoiGianBatDau,
           ThoiGianKetThuc: reg.thoiGianKetThuc,
@@ -636,7 +641,7 @@ export class DangKyXeComponent implements OnInit {
           maNhanVien: dangKy.MaNhanVien || '',
           hoTen: dangKy.HoTen || '',
           dienThoai: dangKy.DienThoai || '',
-          phongBan: dangKy.PhongBan || '',
+          phongBan: '', // Remove phongBan field
           ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
           loaiCa: dangKy.LoaiCa || '',
           thoiGianBatDau: dangKy.ThoiGianBatDau || '',

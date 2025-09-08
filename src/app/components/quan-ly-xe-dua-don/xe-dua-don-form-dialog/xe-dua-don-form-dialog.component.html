@@ -1,0 +1,95 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title class="dialog-title">
+    <mat-icon class="title-icon">{{ isEditMode ? 'edit' : 'add' }}</mat-icon>
+    {{ getTitle() }}
+  </h2>
+
+  <mat-dialog-content class="dialog-content">
+    <mat-card class="form-card">
+      <div class="form-grid">
+        <!-- Bien So Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Biển số xe *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.BienSoXe" 
+                 (input)="formatBienSoXe($event)"
+                 placeholder="VD: 51A-12345"
+                 maxlength="10"
+                 required>
+          <mat-icon matSuffix>directions_car</mat-icon>
+          <mat-hint>Nhập biển số xe (tối đa 10 ký tự)</mat-hint>
+        </mat-form-field>
+
+        <!-- Ten Tai Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tên tài xế *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.TenTaiXe" 
+                 placeholder="VD: Nguyễn Văn A"
+                 maxlength="50"
+                 required>
+          <mat-icon matSuffix>person</mat-icon>
+          <mat-hint>Nhập họ tên đầy đủ của tài xế</mat-hint>
+        </mat-form-field>
+
+        <!-- So Dien Thoai Tai Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Số điện thoại tài xế *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.SoDienThoaiTaiXe" 
+                 (input)="formatPhoneNumber($event)"
+                 placeholder="VD: 0901234567"
+                 maxlength="11"
+                 type="tel"
+                 required>
+          <mat-icon matSuffix>phone</mat-icon>
+          <mat-hint>Nhập số điện thoại (10-11 chữ số)</mat-hint>
+        </mat-form-field>
+
+        <!-- Loai Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Loại xe *</mat-label>
+          <mat-select [(ngModel)]="formData.LoaiXe" required>
+            <mat-option *ngFor="let option of loaiXeOptions" [value]="option.value">
+              <div class="loai-xe-option">
+                <mat-icon class="option-icon">{{ getLoaiXeIcon(option.value) }}</mat-icon>
+                <span>{{ option.label }}</span>
+              </div>
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>directions_bus</mat-icon>
+          <mat-hint>Chọn loại xe phù hợp</mat-hint>
+        </mat-form-field>
+      </div>
+      
+      <!-- Ghi Chu - Full width row -->
+      <div class="ghi-chu-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Ghi chú</mat-label>
+          <textarea matInput 
+                    [(ngModel)]="formData.GhiChu" 
+                    placeholder="Nhập ghi chú về xe (tùy chọn)"
+                    rows="3"
+                    maxlength="200"></textarea>
+          <mat-icon matSuffix>note</mat-icon>
+          <mat-hint>Ghi chú thêm về xe (tối đa 200 ký tự)</mat-hint>
+        </mat-form-field>
+      </div>
+    </mat-card>
+  </mat-dialog-content>
+
+  <mat-dialog-actions class="dialog-actions">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSave()" 
+            class="save-button"
+            [disabled]="!formData.BienSoXe || !formData.TenTaiXe || !formData.SoDienThoaiTaiXe || !formData.LoaiXe">
+      <mat-icon>{{ isEditMode ? 'save' : 'add' }}</mat-icon>
+      {{ getSaveButtonText() }}
+    </button>
+  </mat-dialog-actions>
+</div>
