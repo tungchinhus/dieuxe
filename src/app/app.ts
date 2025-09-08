@@ -29,4 +29,8 @@ import { SidenavService } from './services/sidenav.service';
 })
 export class App {
   constructor(protected sidenavService: SidenavService) {}
+
+  toggle() {
+    this.sidenavService.toggle();
+  }
 }

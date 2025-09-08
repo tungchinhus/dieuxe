@@ -21,5 +21,15 @@ service cloud.firestore {
     match /dangKyPhanXe/{document} {
       allow read, write: if true; // Tạm thời cho phép tất cả để test
     }
+    
+    // Rules cho collection routeDetails (backup)
+    match /routeDetails/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection registrations
+    match /registrations/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
   }
 }

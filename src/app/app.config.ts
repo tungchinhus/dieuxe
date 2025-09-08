@@ -3,7 +3,7 @@ import { provideRouter } from '@angular/router';
 import { provideHttpClient } from '@angular/common/http';
 
 import { routes } from './app.routes';
-import { app } from '../firebase.config';
+import { firebaseConfig } from '../firebase.config';
 
 export const appConfig: ApplicationConfig = {
   providers: [

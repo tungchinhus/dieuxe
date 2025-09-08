@@ -1,0 +1,278 @@
+.container {
+  padding: 0;
+  min-height: 100vh;
+  background-color: #f8f9fa;
+}
+
+.header-toolbar {
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
+  color: white;
+  padding: 16px 24px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 0;
+}
+
+.header-content {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  gap: 16px;
+}
+
+.title-container {
+  flex: 1;
+}
+
+.header-title {
+  font-size: 1.8rem;
+  font-weight: 600;
+  margin: 0 0 4px 0;
+  color: white;
+}
+
+.header-subtitle {
+  font-size: 1rem;
+  margin: 0;
+  opacity: 0.9;
+  color: white;
+}
+
+.main-content {
+  padding: 24px;
+  background-color: #f8f9fa;
+  min-height: calc(100vh - 80px);
+}
+
+.action-card {
+  margin-bottom: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+}
+
+.action-container {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px;
+}
+
+.search-container {
+  flex: 1;
+  max-width: 400px;
+}
+
+.search-field {
+  width: 100%;
+}
+
+.button-container {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.action-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 500;
+  border-radius: 6px;
+  padding: 8px 16px;
+  min-height: 40px;
+}
+
+.table-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.table-container {
+  padding: 0;
+}
+
+.table-container h3 {
+  margin: 0 0 16px 0;
+  padding: 20px 20px 0 20px;
+  font-size: 1.2rem;
+  font-weight: 600;
+  color: #333;
+}
+
+.table-wrapper {
+  overflow-x: auto;
+}
+
+table {
+  width: 100%;
+  background: white;
+}
+
+.mat-mdc-header-cell {
+  background-color: #f5f5f5;
+  color: #333;
+  font-weight: 600;
+  font-size: 14px;
+  padding: 16px 8px;
+  border-bottom: 2px solid #e0e0e0;
+}
+
+.mat-mdc-cell {
+  padding: 12px 8px;
+  border-bottom: 1px solid #e0e0e0;
+  font-size: 14px;
+}
+
+.table-row {
+  transition: background-color 0.2s ease;
+}
+
+.table-row:hover {
+  background-color: #f8f9fa;
+}
+
+.selected-row {
+  background-color: #e3f2fd !important;
+}
+
+.mat-mdc-paginator {
+  background-color: #f5f5f5;
+  border-top: 1px solid #e0e0e0;
+}
+
+/* Action buttons styling */
+.mat-mdc-icon-button {
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.mat-mdc-icon-button:hover {
+  color: #1976d2;
+  background-color: #f0f0f0;
+}
+
+/* Menu styling */
+.mat-mdc-menu-panel {
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.mat-mdc-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+.mat-mdc-menu-item .mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+/* Checkbox styling */
+.mat-mdc-checkbox {
+  margin: 0;
+}
+
+/* Form field styling */
+.mat-mdc-form-field {
+  font-size: 14px;
+}
+
+.mat-mdc-form-field .mat-mdc-text-field-wrapper {
+  border-radius: 6px;
+}
+
+/* Button styling */
+.mat-mdc-raised-button {
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: box-shadow 0.2s ease;
+}
+
+.mat-mdc-raised-button:hover {
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.mat-mdc-raised-button:disabled {
+  opacity: 0.6;
+  box-shadow: none;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .action-container {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 16px;
+  }
+
+  .search-container {
+    max-width: none;
+  }
+
+  .button-container {
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .main-content {
+    padding: 16px;
+  }
+
+  .header-title {
+    font-size: 1.5rem;
+  }
+
+  .header-subtitle {
+    font-size: 0.9rem;
+  }
+}
+
+@media (max-width: 480px) {
+  .action-button {
+    flex: 1;
+    justify-content: center;
+    min-width: 120px;
+  }
+
+  .button-container {
+    gap: 8px;
+  }
+
+  .table-wrapper {
+    font-size: 12px;
+  }
+
+  .mat-mdc-cell,
+  .mat-mdc-header-cell {
+    padding: 8px 4px;
+  }
+}
+
+/* Loading and empty states */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #666;
+}
+
+.empty-state .mat-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #ccc;
+  margin-bottom: 16px;
+}
+
+.empty-state h3 {
+  margin: 0 0 8px 0;
+  color: #333;
+}
+
+.empty-state p {
+  margin: 0;
+  font-size: 14px;
+}

@@ -304,10 +304,6 @@ export class VehicleDataService {
       errors.push('Số điện thoại không được để trống');
     }
 
-    if (!dangKy.PhongBan?.trim()) {
-      errors.push('Phòng ban không được để trống');
-    }
-
     if (!dangKy.NgayDangKy) {
       errors.push('Ngày đăng ký không được để trống');
     }

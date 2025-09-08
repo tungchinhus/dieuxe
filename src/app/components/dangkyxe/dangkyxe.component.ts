@@ -25,6 +25,9 @@ import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
+import { MatSidenavModule } from '@angular/material/sidenav';
+import { MatListModule } from '@angular/material/list';
+import { MatTooltipModule } from '@angular/material/tooltip';
 
 @Component({
   selector: 'app-dangkyxe',
@@ -43,7 +46,10 @@ import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
     MatPaginatorModule,
     MatSortModule,
     MatCheckboxModule,
-    MatMenuModule
+    MatMenuModule,
+    MatSidenavModule,
+    MatListModule,
+    MatTooltipModule
   ],
   templateUrl: './dangkyxe.component.html',
   styleUrl: './dangkyxe.component.css'
@@ -68,6 +74,7 @@ export class DangKyXeComponent implements OnInit {
   
   selectedRegistrations = new Set<number>();
   buildInfo = '';
+  isCollapsed = false;
 
   constructor(
     private sidenavService: SidenavService,
@@ -81,6 +88,7 @@ export class DangKyXeComponent implements OnInit {
   ) {}
 
   toggleSidenav(): void {
+    this.isCollapsed = !this.isCollapsed;
     this.sidenavService.toggle();
   }
 
@@ -218,36 +226,6 @@ export class DangKyXeComponent implements OnInit {
     };
     input.click();
   }
-
-  // Download Excel template
-  downloadExcelTemplate(): void {
-    try {
-      const blob = this.excelService.generateExcelTemplate();
-      const url = window.URL.createObjectURL(blob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = `Mau_Phieu_Bao_Lam_Them_Gio_${new Date().toISOString().split('T')[0]}.xlsx`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
-      
-      this.snackBar.open('Mẫu Excel đã được tải xuống thành công!', 'Đóng', {
-        duration: 3000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
-    } catch (error) {
-      console.error('Error downloading template:', error);
-      this.snackBar.open('Có lỗi xảy ra khi tải mẫu Excel!', 'Đóng', {
-        duration: 3000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
-    }
-  }
-
-  // File upload for Google Drive only
 
   // Direct upload to Google Drive - one click upload
   async uploadToGoogleDrive(file: File): Promise<void> {

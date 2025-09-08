@@ -1,6 +1,7 @@
 import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx';
 import { Registration } from '../models/registration.model';
+import { RouteDetail, RouteDetailCreate } from '../models/route-detail.model';
 
 @Injectable({
   providedIn: 'root'
@@ -336,6 +337,149 @@ export class ExcelService {
     
     const workbook = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(workbook, worksheet, 'Phiếu báo làm thêm giờ');
+
+    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+    return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  /**
+   * Read Excel file and convert to RouteDetail array
+   * @param file - Excel file
+   * @returns Promise with array of RouteDetail objects
+   */
+  async readRouteDetailExcelFile(file: File): Promise<RouteDetailCreate[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Get the first worksheet
+          const firstSheetName = workbook.SheetNames[0];
+          const worksheet = workbook.Sheets[firstSheetName];
+          
+          // Convert to JSON
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          
+          // Convert to RouteDetail objects
+          const routeDetails = this.convertToRouteDetails(jsonData);
+          resolve(routeDetails);
+        } catch (error) {
+          reject(new Error('Error reading Excel file: ' + error));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /**
+   * Convert Excel data to RouteDetail objects
+   * @param data - Raw Excel data
+   * @returns Array of RouteDetail objects
+   */
+  private convertToRouteDetails(data: any[]): RouteDetailCreate[] {
+    const routeDetails: RouteDetailCreate[] = [];
+    
+    // Skip header row (index 0) and process data rows
+    for (let i = 1; i < data.length; i++) {
+      const row = data[i];
+      
+      // Skip empty rows
+      if (!row || row.length === 0 || !row[0]) {
+        continue;
+      }
+      
+      try {
+        const routeDetail: RouteDetailCreate = {
+          maTuyenXe: this.getStringValue(row[1]) || '', // Column B - Route Code
+          tenDiemDon: this.getStringValue(row[2]) || '', // Column C - Stop Name
+          thuTu: this.getNumberValue(row[3]) || 1 // Column D - Order
+        };
+        
+        // Only add if required fields are present
+        if (routeDetail.maTuyenXe && routeDetail.tenDiemDon) {
+          routeDetails.push(routeDetail);
+        }
+      } catch (error) {
+        console.warn(`Error processing row ${i + 1}:`, error);
+        continue;
+      }
+    }
+    
+    return routeDetails;
+  }
+
+  /**
+   * Get number value from Excel cell
+   * @param value - Cell value
+   * @returns Number value or 0
+   */
+  private getNumberValue(value: any): number {
+    if (value === null || value === undefined || value === '') {
+      return 0;
+    }
+    const num = Number(value);
+    return isNaN(num) ? 0 : num;
+  }
+
+  /**
+   * Generate Excel template for route details
+   * @returns Blob containing Excel file
+   */
+  generateRouteDetailTemplate(): Blob {
+    const templateData = [
+      // Title
+      ['MẪU NHẬP DỮ LIỆU CHI TIẾT TUYẾN ĐƯỜNG', '', '', ''],
+      ['', '', '', ''],
+      // Instructions
+      ['Hướng dẫn:', '', '', ''],
+      ['- Cột A: STT (số thứ tự)', '', '', ''],
+      ['- Cột B: Mã Tuyến Xe (bắt buộc)', '', '', ''],
+      ['- Cột C: Tên Điểm Dừng (bắt buộc)', '', '', ''],
+      ['- Cột D: Thứ Tự (số nguyên, mặc định là 1)', '', '', ''],
+      ['- Dòng đầu tiên là tiêu đề, bỏ qua khi nhập dữ liệu', '', '', ''],
+      ['', '', '', ''],
+      // Header row
+      ['STT', 'Mã Tuyến Xe', 'Tên Điểm Dừng', 'Thứ Tự'],
+      // Sample data
+      ['1', 'HCM_HC_1', 'Bệnh viện Hòa Hảo', '1'],
+      ['2', 'HCM_HC_1', 'Điện Biên Phủ - Hai Bà Trưng', '2'],
+      ['3', 'HCM_HC_1', 'Đinh Tiên Hoàng - Điện Biên Phủ', '3'],
+      ['4', 'HCM_HC_1', 'Hàng xanh', '4'],
+      ['5', 'HCM_HC_1', 'RMK', '5'],
+      ['6', 'HCM_HC_1', 'Ngã 4 Thủ Đức', '6'],
+      ['7', 'BH_HC_1', 'Ngã 3 Long Bình Tân', '1'],
+      ['8', 'BH_HC_1', 'Ngã 3 Bến Gỗ', '2'],
+      ['9', 'BH_HC_1', 'KCN Long Đức', '3'],
+      ['10', 'BH_HC_1', 'Giáo xứ Đại Lộ', '4']
+    ];
+
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 8 },   // STT
+      { wch: 15 },  // Mã Tuyến Xe
+      { wch: 30 },  // Tên Điểm Dừng
+      { wch: 10 }   // Thứ Tự
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    // Merge cells for title
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 0 }, e: { r: 0, c: 3 } }, // Merge title cells
+      { s: { r: 1, c: 0 }, e: { r: 1, c: 3 } }  // Merge empty row
+    ];
+    
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Chi tiết tuyến đường');
 
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

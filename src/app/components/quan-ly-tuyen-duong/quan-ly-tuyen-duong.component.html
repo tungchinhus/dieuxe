@@ -1,0 +1,145 @@
+<div class="container">
+  <!-- Header Section -->
+  <mat-toolbar class="header-toolbar">
+    <div class="header-content">
+      <div class="title-container">
+        <h1 class="header-title">Quản lý Chi tiết Tuyến đường</h1>
+        <p class="header-subtitle">Quản lý các điểm dừng và thứ tự của từng tuyến xe.</p>
+      </div>
+    </div>
+  </mat-toolbar>
+
+  <!-- Main Content -->
+  <div class="main-content">
+    <!-- Search and Action Section -->
+    <mat-card class="action-card">
+      <div class="action-container">
+        <div class="search-container">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Tìm kiếm theo mã tuyến, tên điểm dừng...</mat-label>
+            <input matInput 
+                   [(ngModel)]="searchValue"
+                   (input)="applyFilter($event)"
+                   placeholder="Tìm kiếm theo mã tuyến, tên điểm dừng...">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+        </div>
+        
+        <div class="button-container">
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="openAddDialog()"
+                  class="action-button">
+            <mat-icon>add</mat-icon>
+            Thêm Chi tiết Tuyến
+          </button>
+          
+          <button mat-raised-button 
+                  color="accent" 
+                  (click)="openFileUploadDialog()"
+                  class="action-button">
+            <mat-icon>upload_file</mat-icon>
+            Import từ Excel
+          </button>
+          
+          <button mat-raised-button 
+                  color="warn" 
+                  (click)="deleteSelected()"
+                  [disabled]="selection.selected.length === 0"
+                  class="action-button">
+            <mat-icon>delete</mat-icon>
+            Xóa Đã chọn ({{selection.selected.length}})
+          </button>
+        </div>
+      </div>
+    </mat-card>
+
+    <!-- Data Display Section -->
+    <mat-card class="table-card">
+      <div class="table-container">
+        <h3>Danh sách chi tiết tuyến đường</h3>
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="dataSource" matSort class="mat-elevation-z8">
+            <!-- Select Column -->
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef>
+                <mat-checkbox
+                  (change)="$event ? masterToggle() : null"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="selection.hasValue() && !isAllSelected()"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </th>
+              <td mat-cell *matCellDef="let element">
+                <mat-checkbox
+                  (click)="$event.stopPropagation()"
+                  (change)="$event ? selection.toggle(element) : null"
+                  [checked]="selection.isSelected(element)"
+                  [aria-label]="checkboxLabel(element)">
+                </mat-checkbox>
+              </td>
+            </ng-container>
+
+            <!-- Mã Chi tiết Column -->
+            <ng-container matColumnDef="maChiTiet">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Mã Chi tiết</th>
+              <td mat-cell *matCellDef="let element">{{element.maChiTiet}}</td>
+            </ng-container>
+
+            <!-- Mã Tuyến Xe Column -->
+            <ng-container matColumnDef="maTuyenXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Mã Tuyến Xe</th>
+              <td mat-cell *matCellDef="let element">{{element.maTuyenXe}}</td>
+            </ng-container>
+
+            <!-- Tên Điểm Dừng Column -->
+            <ng-container matColumnDef="tenDiemDon">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Tên Điểm Dừng</th>
+              <td mat-cell *matCellDef="let element">{{element.tenDiemDon}}</td>
+            </ng-container>
+
+            <!-- Thứ Tự Column -->
+            <ng-container matColumnDef="thuTu">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Thứ Tự</th>
+              <td mat-cell *matCellDef="let element">{{element.thuTu}}</td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let element">
+                <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{routeDetail: element}">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menu="matMenu">
+                  <ng-template matMenuContent let-routeDetail="routeDetail">
+                    <button mat-menu-item (click)="openEditDialog(routeDetail)">
+                      <mat-icon>edit</mat-icon>
+                      <span>Chỉnh sửa</span>
+                    </button>
+                    <button mat-menu-item (click)="deleteRouteDetail(routeDetail)">
+                      <mat-icon>delete</mat-icon>
+                      <span>Xóa</span>
+                    </button>
+                  </ng-template>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                [class.selected-row]="selection.isSelected(row)"
+                class="table-row"></tr>
+          </table>
+          
+          <mat-paginator 
+            [pageSizeOptions]="[5, 10, 25, 50]" 
+            [pageSize]="10" 
+            showFirstLastButtons
+            aria-label="Chọn trang">
+          </mat-paginator>
+        </div>
+      </div>
+    </mat-card>
+  </div>
+</div>

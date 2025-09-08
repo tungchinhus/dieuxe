@@ -1,0 +1,66 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>
+    {{ isEditMode ? 'Chỉnh sửa Chi tiết Tuyến đường' : 'Thêm Chi tiết Tuyến đường' }}
+  </h2>
+
+  <mat-dialog-content>
+    <form [formGroup]="form" class="form-container">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Mã Tuyến Xe *</mat-label>
+          <mat-select formControlName="maTuyenXe" placeholder="Chọn tuyến xe">
+            <mat-option *ngFor="let route of routeOptions" [value]="route.value">
+              {{ route.label }} ({{ route.value }})
+            </mat-option>
+          </mat-select>
+          <mat-error *ngIf="form.get('maTuyenXe')?.invalid && form.get('maTuyenXe')?.touched">
+            {{ getErrorMessage('maTuyenXe') }}
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tên Điểm Dừng *</mat-label>
+          <input matInput 
+                 formControlName="tenDiemDon" 
+                 placeholder="Nhập tên điểm dừng"
+                 maxlength="50">
+          <mat-hint>Ví dụ: Bến xe Miền Đông, Ngã 4 Thủ Đức</mat-hint>
+          <mat-error *ngIf="form.get('tenDiemDon')?.invalid && form.get('tenDiemDon')?.touched">
+            {{ getErrorMessage('tenDiemDon') }}
+          </mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Thứ Tự *</mat-label>
+          <input matInput 
+                 type="number" 
+                 formControlName="thuTu" 
+                 placeholder="Nhập thứ tự"
+                 min="1" 
+                 max="100">
+          <mat-hint>Thứ tự dừng trong tuyến (1, 2, 3...)</mat-hint>
+          <mat-error *ngIf="form.get('thuTu')?.invalid && form.get('thuTu')?.touched">
+            {{ getErrorMessage('thuTu') }}
+          </mat-error>
+        </mat-form-field>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()" type="button">
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSubmit()" 
+            [disabled]="form.invalid"
+            type="button">
+      {{ isEditMode ? 'Cập nhật' : 'Thêm' }}
+    </button>
+  </mat-dialog-actions>
+</div>

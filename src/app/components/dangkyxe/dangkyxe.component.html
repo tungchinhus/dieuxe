@@ -9,18 +9,6 @@
       class="menu-toggle">
       <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
     </button>
-    <div class="header-content">
-      <div class="logo-container">
-        <img src="assets/icons/thibidiLogo.png" alt="Thibidi Logo" class="logo" width="120" height="60" loading="lazy" onerror="this.style.display='none'">
-      </div>
-      <div class="title-container">
-        <h1 class="header-title">Hệ thống Quản lý Đăng ký Xe</h1>
-        <p class="header-subtitle">Nơi tập hợp và quản lý thông tin đăng ký đưa đón của nhân viên.</p>
-        <div class="version-info">
-          <span class="version-label">{{ buildInfo }}</span>
-        </div>
-      </div>
-    </div>
   </mat-toolbar>
 
   <!-- Main Content -->
@@ -52,14 +40,6 @@
                   class="action-button">
             <mat-icon>upload_file</mat-icon>
             Import từ Excel
-          </button>
-          
-          <button mat-raised-button 
-                  color="warn" 
-                  (click)="downloadExcelTemplate()"
-                  class="action-button">
-            <mat-icon>download</mat-icon>
-            Tải mẫu Excel
           </button>
           
         </div>
