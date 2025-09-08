@@ -54,30 +54,54 @@ export class ExcelService {
   private convertToRegistrations(data: any[]): Registration[] {
     const registrations: Registration[] = [];
     
-    // Skip header row (index 0)
-    for (let i = 1; i < data.length; i++) {
+    // Find the header row (contains "Mã nhân viên")
+    let headerRowIndex = -1;
+    for (let i = 0; i < data.length; i++) {
+      const row = data[i];
+      if (row && row.length > 0) {
+        const rowString = row.join(' ').toLowerCase();
+        if (rowString.includes('mã nhân viên') || rowString.includes('stt')) {
+          headerRowIndex = i;
+          break;
+        }
+      }
+    }
+    
+    if (headerRowIndex === -1) {
+      console.warn('Header row not found, using default mapping');
+      headerRowIndex = 0;
+    }
+    
+    // Process data rows starting from the row after header
+    for (let i = headerRowIndex + 1; i < data.length; i++) {
       const row = data[i];
       
       // Skip empty rows
       if (!row || row.length === 0) continue;
       
+      // Skip rows that don't have employee ID
+      if (!this.getStringValue(row[1])) continue;
+      
       try {
+        console.log(`Processing Excel row ${i}:`, row);
+        
         const registration: Registration = {
           id: i, // Temporary ID
-          maNhanVien: this.getStringValue(row[0]) || `NV${i.toString().padStart(3, '0')}`,
-          hoTen: this.getStringValue(row[1]) || '',
-          dienThoai: this.getStringValue(row[2]) || '',
-          phongBan: this.getStringValue(row[3]) || '',
-          ngayDangKy: this.formatDate(this.getStringValue(row[4])) || new Date().toISOString().split('T')[0],
-          loaiCa: this.getStringValue(row[5]) || 'HC',
-          thoiGianBatDau: this.getStringValue(row[6]) || '08:00',
-          thoiGianKetThuc: this.getStringValue(row[7]) || '17:00',
-          maTuyenXe: this.getStringValue(row[8]) || '',
-          tramXe: this.getStringValue(row[9]) || '',
-          noiDungCongViec: this.getStringValue(row[10]) || '',
-          dangKyCom: this.getBooleanValue(row[11]) || false
+          maNhanVien: this.getStringValue(row[1]) || `NV${i.toString().padStart(3, '0')}`, // Cột B: Mã nhân viên
+          hoTen: this.getStringValue(row[2]) || '', // Cột C: Họ và tên
+          dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại
+          phongBan: '', // Default empty for now
+          ngayDangKy: this.extractDateFromExcel(data) || new Date().toISOString().split('T')[0], // Extract from document title/date
+          loaiCa: this.extractShiftFromTime(this.getStringValue(row[7])) || 'PT-cc', // Cột H: Ca (extract from time)
+          thoiGianBatDau: this.extractTimeFromString(this.getStringValue(row[7])) || '15:45', // Cột H: Thời gian làm việc (Từ...)
+          thoiGianKetThuc: this.extractTimeFromString(this.getStringValue(row[8])) || '19:00', // Cột I: Thời gian làm việc (Đến...)
+          maTuyenXe: this.extractRouteFromStation(this.getStringValue(row[3])) || '', // Cột D: Trạm xe -> derive route
+          tramXe: this.getStringValue(row[3]) || '', // Cột D: Trạm xe
+          noiDungCongViec: this.getStringValue(row[5]) || '', // Cột F: Nội dung công việc
+          dangKyCom: false // Default false for overtime work
         };
         
+        console.log(`Converted registration ${i}:`, registration);
         registrations.push(registration);
       } catch (error) {
         console.warn(`Error processing row ${i}:`, error);
@@ -145,32 +169,173 @@ export class ExcelService {
   }
 
   /**
+   * Extract date from Excel document title or content
+   * @param data - Raw Excel data
+   * @returns Formatted date string (YYYY-MM-DD)
+   */
+  private extractDateFromExcel(data: any[]): string {
+    // Look for date pattern in the first few rows
+    for (let i = 0; i < Math.min(10, data.length); i++) {
+      const row = data[i];
+      if (row && row.length > 0) {
+        const rowString = row.join(' ');
+        // Look for date patterns like "Ngày 05 tháng 09 năm 2025"
+        const dateMatch = rowString.match(/(\d{1,2})\s*tháng\s*(\d{1,2})\s*năm\s*(\d{4})/);
+        if (dateMatch) {
+          const day = dateMatch[1].padStart(2, '0');
+          const month = dateMatch[2].padStart(2, '0');
+          const year = dateMatch[3];
+          return `${year}-${month}-${day}`;
+        }
+        // Look for other date patterns
+        const otherDateMatch = rowString.match(/(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})/);
+        if (otherDateMatch) {
+          const day = otherDateMatch[1].padStart(2, '0');
+          const month = otherDateMatch[2].padStart(2, '0');
+          const year = otherDateMatch[3];
+          return `${year}-${month}-${day}`;
+        }
+      }
+    }
+    return '';
+  }
+
+  /**
+   * Extract shift information from time string
+   * @param timeString - Time string from Excel
+   * @returns Shift code
+   */
+  private extractShiftFromTime(timeString: string): string {
+    if (!timeString) return 'PT-cc';
+    
+    const time = timeString.toLowerCase();
+    if (time.includes('pt-cc') || time.includes('15h45')) {
+      return 'PT-cc';
+    }
+    if (time.includes('ca sáng') || time.includes('08:00')) {
+      return 'Ca sáng';
+    }
+    if (time.includes('ca chiều') || time.includes('14:00')) {
+      return 'Ca chiều';
+    }
+    if (time.includes('ca tối') || time.includes('22:00')) {
+      return 'Ca tối';
+    }
+    
+    return 'PT-cc'; // Default for overtime
+  }
+
+  /**
+   * Extract time from string (format: HH:mm)
+   * @param timeString - Time string from Excel
+   * @returns Formatted time string (HH:mm)
+   */
+  private extractTimeFromString(timeString: string): string {
+    if (!timeString) return '';
+    
+    // Look for time patterns like "15h45", "15:45", "15h 45"
+    const timeMatch = timeString.match(/(\d{1,2})[h:]\s*(\d{2})/);
+    if (timeMatch) {
+      const hours = timeMatch[1].padStart(2, '0');
+      const minutes = timeMatch[2];
+      return `${hours}:${minutes}`;
+    }
+    
+    // Look for standard time format
+    const standardTimeMatch = timeString.match(/(\d{1,2}):(\d{2})/);
+    if (standardTimeMatch) {
+      const hours = standardTimeMatch[1].padStart(2, '0');
+      const minutes = standardTimeMatch[2];
+      return `${hours}:${minutes}`;
+    }
+    
+    return '';
+  }
+
+  /**
+   * Extract route from station name
+   * @param stationName - Station name from Excel
+   * @returns Route code
+   */
+  private extractRouteFromStation(stationName: string): string {
+    if (!stationName) return '';
+    
+    const station = stationName.toLowerCase();
+    
+    // Map stations to routes based on common patterns
+    if (station.includes('tam hiệp') || station.includes('công viên')) {
+      return 'Tuyến 3 - Vòng xoay Tam Hiệp';
+    }
+    if (station.includes('thủ đức') || station.includes('ngã 4')) {
+      return 'Tuyến 2 - Ngã 3 Vũng Tàu';
+    }
+    if (station.includes('bv 7b') || station.includes('bệnh viện')) {
+      return 'Tuyến 4 - KCN Long Bình';
+    }
+    if (station.includes('huỳnh văn lũy') || station.includes('metro')) {
+      return 'Tuyến 1 - KCN Biên Hòa 2';
+    }
+    
+    return stationName; // Return original if no mapping found
+  }
+
+  /**
    * Generate Excel template for download
    * @returns Blob containing Excel file
    */
   generateExcelTemplate(): Blob {
-    const headers = [
-      'Mã Nhân Viên',
-      'Họ Tên',
-      'Điện Thoại',
-      'Phòng Ban',
-      'Ngày Đăng Ký',
-      'Loại Ca',
-      'Thời Gian Bắt Đầu',
-      'Thời Gian Kết Thúc',
-      'Mã Tuyến Xe',
-      'Trạm Xe',
-      'Nội Dung Công Việc',
-      'Đăng Ký Cơm'
+    // Create the overtime work report template matching the image structure
+    const today = new Date();
+    const dayOfWeek = ['Chủ nhật', 'Thứ 2', 'Thứ 3', 'Thứ 4', 'Thứ 5', 'Thứ 6', 'Thứ 7'][today.getDay()];
+    const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
+    
+    const templateData = [
+      // Title row
+      ['', '', '', '', '', '', '', '', '', 'PHIẾU BÁO LÀM THÊM GIỜ', '', '', '', ''],
+      // Empty row
+      ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      // Date row
+      [dayOfWeek, '', '', '', '', '', '', '', '', '', '', '', '', dateStr],
+      // Empty row
+      ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
+      // Header row
+      ['STT', 'Mã nhân viên', 'Họ và tên', 'Trạm xe', 'Điện thoại', 'Nội dung công việc', 'Ca', 'Thời gian làm việc', 'Thời gian làm việc', '', '', '', '', ''],
+      // Sub-header row for time columns
+      ['', '', '', '', '', '', '', 'Từ...', 'Đến...', '', '', '', '', ''],
+      // Sample data
+      [1, 'THI00137', 'Lê Văn Thư', 'Trạm xe Công Viên Tam Hiệp', '0944286128', 'KTV', 'PT-cc', '15h45', '19h', '', '', '', '', ''],
+      [2, 'THI00156', 'Lê Thành Châu', 'Trạm xe Ngã 4 Thủ Đức', '0908262300', 'Quấn bối dây hạ', 'PT-cc', '15h45', '19h', '', '', '', '', ''],
+      [3, 'THI00174', 'Vũ Trung Sơn', 'Trạm xe BV 7B', '0963101461', 'Cắt giấy', 'PT-cc', '15h45', '19h', '', '', '', '', '']
     ];
 
-    const sampleData = [
-      ['NV001', 'Nguyễn Văn An', '0901234567', 'Phòng Kỹ Thuật', '2024-01-15', 'HC', '08:00', '17:00', 'T1', 'Trạm A', 'Công việc mẫu', 'Có']
+    const worksheet = XLSX.utils.aoa_to_sheet(templateData);
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 5 },   // STT
+      { wch: 12 },  // Mã nhân viên
+      { wch: 20 },  // Họ và tên
+      { wch: 25 },  // Trạm xe
+      { wch: 12 },  // Điện thoại
+      { wch: 20 },  // Nội dung công việc
+      { wch: 8 },   // Ca
+      { wch: 10 },  // Từ...
+      { wch: 10 },  // Đến...
+      { wch: 10 },  // Empty
+      { wch: 10 },  // Empty
+      { wch: 10 },  // Empty
+      { wch: 10 },  // Empty
+      { wch: 10 }   // Empty
     ];
-
-    const worksheet = XLSX.utils.aoa_to_sheet([headers, ...sampleData]);
+    worksheet['!cols'] = colWidths;
+    
+    // Merge cells for title
+    worksheet['!merges'] = [
+      { s: { r: 0, c: 9 }, e: { r: 0, c: 13 } } // Merge title cells
+    ];
+    
     const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh sách đăng ký');
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Phiếu báo làm thêm giờ');
 
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });

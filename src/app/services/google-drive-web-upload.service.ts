@@ -6,7 +6,7 @@ import { Injectable } from '@angular/core';
 export class GoogleDriveWebUploadService {
   private readonly GOOGLE_DRIVE_FOLDER_ID = '12l5dc4YppVBQXkgx96WVuyXXzcf8DEP6';
   private readonly CLIENT_ID = '1012083510866-hbp4qb7pu973pa175tr0otignl3hud6c.apps.googleusercontent.com';
-  private readonly API_KEY = 'YOUR_API_KEY_HERE'; // Cần lấy từ Google Cloud Console
+  private readonly API_KEY = 'AIzaSyDLCHS4Oq_5deuoX4EjcKAcxWc7qkDgqt4'; // Using Firebase API key
   private readonly DISCOVERY_DOC = 'https://www.googleapis.com/discovery/v1/apis/drive/v3/rest';
   private readonly SCOPES = 'https://www.googleapis.com/auth/drive.file';
   private gapi: any = null;
@@ -29,13 +29,33 @@ export class GoogleDriveWebUploadService {
         return;
       }
 
+      // Check if script is already loaded
+      const existingScript = document.querySelector('script[src="https://apis.google.com/js/api.js"]');
+      if (existingScript) {
+        // Script already exists, wait for it to load
+        existingScript.addEventListener('load', () => {
+          this.gapi = (window as any).gapi;
+          this.initializeGapi().then(resolve).catch(reject);
+        });
+        return;
+      }
+
       const script = document.createElement('script');
       script.src = 'https://apis.google.com/js/api.js';
+      script.async = true;
+      script.defer = true;
+      script.crossOrigin = 'anonymous';
+      
       script.onload = () => {
         this.gapi = (window as any).gapi;
         this.initializeGapi().then(resolve).catch(reject);
       };
-      script.onerror = reject;
+      
+      script.onerror = (error) => {
+        console.error('Failed to load Google API script:', error);
+        reject(new Error('Failed to load Google API script. Please check your CSP settings.'));
+      };
+      
       document.head.appendChild(script);
     });
   }

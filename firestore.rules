@@ -1,0 +1,25 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Rules cho collection xeDuaDon
+    match /xeDuaDon/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection lichTrinhXe
+    match /lichTrinhXe/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection chiTietTuyenDuong
+    match /chiTietTuyenDuong/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection dangKyPhanXe
+    match /dangKyPhanXe/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+  }
+}

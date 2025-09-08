@@ -19,17 +19,12 @@ import { UploadInstructionsDialogComponent } from './upload-instructions-dialog/
 import { DirectUploadDialogComponent } from './direct-upload-dialog/direct-upload-dialog.component';
 import { RealUploadDialogComponent } from './real-upload-dialog/real-upload-dialog.component';
 import { Registration } from '../../models/registration.model';
-import { GoogleDriveService } from '../../services/google-drive.service';
-import { GoogleDriveSimpleService } from '../../services/google-drive-simple.service';
-import { GoogleDriveDirectService } from '../../services/google-drive-direct.service';
 import { GoogleDriveUploadService } from '../../services/google-drive-upload.service';
-import { GoogleDriveRealService } from '../../services/google-drive-real.service';
-import { GoogleDriveDirectUploadService } from '../../services/google-drive-direct-upload.service';
-import { GoogleDriveRealUploadService } from '../../services/google-drive-real-upload.service';
-import { GoogleDriveSimpleUploadService } from '../../services/google-drive-simple-upload.service';
 import { GoogleDriveWebUploadService } from '../../services/google-drive-web-upload.service';
 import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
+import { VehicleDataService } from '../../services/vehicle-data.service';
+import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
 
 @Component({
   selector: 'app-dangkyxe',
@@ -66,6 +61,7 @@ export class DangKyXeComponent implements OnInit {
     'dienThoai', 
     'ngayDangKy', 
     'thoiGianBatDau', 
+    'tramXe',
     'maTuyenXe', 
     'actions'
   ];
@@ -77,17 +73,11 @@ export class DangKyXeComponent implements OnInit {
     private sidenavService: SidenavService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private googleDriveService: GoogleDriveService,
-    private googleDriveSimpleService: GoogleDriveSimpleService,
-    private googleDriveDirectService: GoogleDriveDirectService,
     private googleDriveUploadService: GoogleDriveUploadService,
-    private googleDriveRealService: GoogleDriveRealService,
-    private googleDriveDirectUploadService: GoogleDriveDirectUploadService,
-    private googleDriveRealUploadService: GoogleDriveRealUploadService,
-    private googleDriveSimpleUploadService: GoogleDriveSimpleUploadService,
     private googleDriveWebUploadService: GoogleDriveWebUploadService,
     private excelService: ExcelService,
-    private versionService: VersionService
+    private versionService: VersionService,
+    private vehicleDataService: VehicleDataService
   ) {}
 
   toggleSidenav(): void {
@@ -96,7 +86,7 @@ export class DangKyXeComponent implements OnInit {
 
   ngOnInit(): void {
     console.log('Component initialized successfully!');
-    this.loadMockData();
+    this.loadDataFromFirebase(); // Load data from Firebase instead of mock data
     this.buildInfo = this.versionService.getBuildInfo();
   }
 
@@ -229,19 +219,35 @@ export class DangKyXeComponent implements OnInit {
     input.click();
   }
 
-  // File upload for Google Drive only
-  openFileUploadForDrive(): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.xlsx,.xls';
-    input.onchange = (event: any) => {
-      const file = event.target.files[0];
-      if (file) {
-        this.uploadToGoogleDrive(file);
-      }
-    };
-    input.click();
+  // Download Excel template
+  downloadExcelTemplate(): void {
+    try {
+      const blob = this.excelService.generateExcelTemplate();
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Mau_Phieu_Bao_Lam_Them_Gio_${new Date().toISOString().split('T')[0]}.xlsx`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+      
+      this.snackBar.open('Mẫu Excel đã được tải xuống thành công!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } catch (error) {
+      console.error('Error downloading template:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tải mẫu Excel!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
+
+  // File upload for Google Drive only
 
   // Direct upload to Google Drive - one click upload
   async uploadToGoogleDrive(file: File): Promise<void> {
@@ -292,9 +298,19 @@ export class DangKyXeComponent implements OnInit {
     } catch (error) {
       console.error('Error uploading to Google Drive:', error);
       
+      // Check if it's a CSP error
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      let userMessage = 'Có lỗi xảy ra khi upload. Vui lòng thử lại.';
+      
+      if (errorMessage.includes('CSP') || errorMessage.includes('Content Security Policy')) {
+        userMessage = 'Lỗi bảo mật: Vui lòng kiểm tra cài đặt CSP và thử lại.';
+      } else if (errorMessage.includes('Failed to load Google API script')) {
+        userMessage = 'Không thể tải Google API. Vui lòng kiểm tra kết nối mạng và thử lại.';
+      }
+      
       // Show error message
       this.snackBar.open(
-        'Có lỗi xảy ra khi upload. Vui lòng thử lại.', 
+        userMessage, 
         'Thử lại', 
         {
           duration: 5000,
@@ -413,7 +429,7 @@ export class DangKyXeComponent implements OnInit {
       console.log('File selected:', file.name);
       
       // Show loading message
-      const loadingSnackBar = this.snackBar.open('Đang xử lý file Excel...', 'Đóng', {
+      const loadingSnackBar = this.snackBar.open('Đang xử lý file Excel và lưu vào Firebase...', 'Đóng', {
         duration: 0, // Keep open until dismissed
         horizontalPosition: 'right',
         verticalPosition: 'top'
@@ -423,28 +439,38 @@ export class DangKyXeComponent implements OnInit {
       const registrations = await this.excelService.readExcelFile(file);
       console.log('Excel data processed:', registrations);
 
-      // Add new registrations to the table
       if (registrations.length > 0) {
-        const newData = [...this.dataSource.data, ...registrations];
-        this.dataSource.data = newData;
+        // Convert to DangKyPhanXe format and save to Firebase
+        const savedCount = await this.saveRegistrationsToFirebase(registrations);
         
         // Dismiss loading message
         loadingSnackBar.dismiss();
         
-        // Show success message and offer to upload to Google Drive
-        const snackBarRef = this.snackBar.open(
-          `Đã import ${registrations.length} đăng ký từ Excel! Bạn có muốn upload file lên Google Drive không?`, 
-          'Upload lên Google Drive', 
-          {
-            duration: 8000,
+        if (savedCount > 0) {
+          // Refresh data from Firebase
+          await this.loadDataFromFirebase();
+          
+          // Show success message
+          const snackBarRef = this.snackBar.open(
+            `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào Firebase! Bạn có muốn upload file lên Google Drive không?`, 
+            'Upload lên Google Drive', 
+            {
+              duration: 8000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            }
+          );
+          
+          snackBarRef.onAction().subscribe(() => {
+            this.uploadToGoogleDrive(file);
+          });
+        } else {
+          this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
+            duration: 3000,
             horizontalPosition: 'right',
             verticalPosition: 'top'
-          }
-        );
-        
-        snackBarRef.onAction().subscribe(() => {
-          this.uploadToGoogleDrive(file);
-        });
+          });
+        }
       } else {
         loadingSnackBar.dismiss();
         this.snackBar.open('Không tìm thấy dữ liệu hợp lệ trong file Excel!', 'Đóng', {
@@ -545,31 +571,150 @@ export class DangKyXeComponent implements OnInit {
     return 'Chọn tất cả';
   }
 
-  // Excel template download
-  downloadExcelTemplate(): void {
+
+  // ==================== FIREBASE INTEGRATION ====================
+  
+  /**
+   * Convert Registration array to DangKyPhanXe array and save to Firebase
+   */
+  private async saveRegistrationsToFirebase(registrations: Registration[]): Promise<number> {
+    let savedCount = 0;
+    
+    for (const reg of registrations) {
+      try {
+        // Convert Registration to DangKyPhanXe format
+        const dangKyPhanXe: Omit<DangKyPhanXe, 'ID' | 'createdAt' | 'updatedAt'> = {
+          MaNhanVien: reg.maNhanVien,
+          HoTen: reg.hoTen,
+          DienThoai: reg.dienThoai,
+          PhongBan: this.mapPhongBan(reg.phongBan),
+          NgayDangKy: new Date(reg.ngayDangKy),
+          ThoiGianBatDau: reg.thoiGianBatDau,
+          ThoiGianKetThuc: reg.thoiGianKetThuc,
+          LoaiCa: this.mapLoaiCa(reg.loaiCa),
+          NoiDungCongViec: reg.noiDungCongViec || '',
+          DangKyCom: reg.dangKyCom,
+          TramXe: reg.tramXe || '',
+          MaTuyenXe: reg.maTuyenXe || ''
+        };
+
+        // Validate data before saving
+        const errors = this.vehicleDataService.validateDangKyPhanXe(dangKyPhanXe);
+        if (errors.length > 0) {
+          console.warn(`Validation errors for ${reg.maNhanVien}:`, errors);
+          continue;
+        }
+
+        // Check if employee already registered for this date
+        const alreadyRegistered = await this.vehicleDataService.kiemTraDangKyTrongNgay(
+          dangKyPhanXe.MaNhanVien, 
+          dangKyPhanXe.NgayDangKy
+        );
+
+        if (alreadyRegistered) {
+          console.warn(`Employee ${reg.maNhanVien} already registered for ${reg.ngayDangKy}`);
+          continue;
+        }
+
+        // Save to Firebase
+        await this.vehicleDataService.dangKyPhanXe(dangKyPhanXe);
+        savedCount++;
+        
+      } catch (error) {
+        console.error(`Error saving registration for ${reg.maNhanVien}:`, error);
+        continue;
+      }
+    }
+    
+    return savedCount;
+  }
+
+  /**
+   * Load data from Firebase and update the table
+   */
+  async loadDataFromFirebase(): Promise<void> {
     try {
-      const templateBlob = this.excelService.generateExcelTemplate();
-      const url = window.URL.createObjectURL(templateBlob);
-      const link = document.createElement('a');
-      link.href = url;
-      link.download = 'template_dang_ky_xe.xlsx';
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
-      window.URL.revokeObjectURL(url);
+      const dangKyList = await this.vehicleDataService.layDanhSachDangKyPhanXe();
       
-      this.snackBar.open('Template Excel đã được tải xuống!', 'Đóng', {
-        duration: 3000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
+      console.log('Raw data from Firebase:', dangKyList);
+      
+      if (!dangKyList || dangKyList.length === 0) {
+        console.log('No data found in Firebase, using empty array');
+        this.dataSource.data = [];
+        return;
+      }
+      
+      // Convert DangKyPhanXe to Registration format for display
+      const registrations: Registration[] = dangKyList.map((dangKy, index) => {
+        console.log(`Processing item ${index}:`, {
+          ID: dangKy.ID,
+          MaNhanVien: dangKy.MaNhanVien,
+          HoTen: dangKy.HoTen,
+          DienThoai: dangKy.DienThoai
+        });
+        
+        return {
+          id: parseInt(dangKy.ID || (index + 1).toString()),
+          maNhanVien: dangKy.MaNhanVien || '',
+          hoTen: dangKy.HoTen || '',
+          dienThoai: dangKy.DienThoai || '',
+          phongBan: dangKy.PhongBan || '',
+          ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
+          loaiCa: dangKy.LoaiCa || '',
+          thoiGianBatDau: dangKy.ThoiGianBatDau || '',
+          thoiGianKetThuc: dangKy.ThoiGianKetThuc || '',
+          maTuyenXe: dangKy.MaTuyenXe || '',
+          tramXe: dangKy.TramXe || '',
+          noiDungCongViec: dangKy.NoiDungCongViec || '',
+          dangKyCom: dangKy.DangKyCom || false
+        };
       });
+
+      console.log('Converted registrations:', registrations);
+      this.dataSource.data = registrations;
+      console.log(`Loaded ${registrations.length} registrations from Firebase`);
     } catch (error) {
-      console.error('Error downloading template:', error);
-      this.snackBar.open('Lỗi khi tải template Excel!', 'Đóng', {
-        duration: 3000,
+      console.error('Error loading data from Firebase:', error);
+      // Fallback to empty array instead of showing error
+      this.dataSource.data = [];
+      this.snackBar.open('Không có dữ liệu trong Firebase. Bạn có thể import từ Excel để bắt đầu.', 'Đóng', {
+        duration: 5000,
         horizontalPosition: 'right',
         verticalPosition: 'top'
       });
     }
+  }
+
+  /**
+   * Map phong ban string to enum value
+   */
+  private mapPhongBan(phongBan: string): string {
+    const mapping: { [key: string]: string } = {
+      'Phòng Kỹ Thuật': PhongBan.IT,
+      'IT': PhongBan.IT,
+      'Nhân sự': PhongBan.HR,
+      'HR': PhongBan.HR,
+      'Tài chính': PhongBan.FINANCE,
+      'Marketing': PhongBan.MARKETING,
+      'Kinh doanh': PhongBan.SALES,
+      'Vận hành': PhongBan.OPERATIONS
+    };
+    
+    return mapping[phongBan] || phongBan;
+  }
+
+  /**
+   * Map loai ca string to enum value
+   */
+  private mapLoaiCa(loaiCa: string): string {
+    const mapping: { [key: string]: string } = {
+      'HC': LoaiCa.CA_SANG,
+      'Ca sáng': LoaiCa.CA_SANG,
+      'Ca chiều': LoaiCa.CA_CHIEU,
+      'Ca tối': LoaiCa.CA_TOI,
+      'Ca đêm': LoaiCa.CA_DEM
+    };
+    
+    return mapping[loaiCa] || loaiCa;
   }
 }

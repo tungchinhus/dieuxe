@@ -3,17 +3,89 @@
 }
 
 .sidenav {
-  width: 250px;
-  background: #ffffff;
+  width: 280px;
+  background: #f5f5f5;
   border-right: 1px solid #e0e0e0;
   z-index: 1000;
+  transition: width 0.3s ease;
+  padding: 16px;
+}
+
+.sidenav.collapsed {
+  width: 80px;
+  padding: 8px;
 }
 
 .sidenav-toolbar {
-  background: transparent !important;
+  background: #ffffff !important;
   color: #333333;
   padding: 1rem;
-  border-bottom: 1px solid #e0e0e0;
+  border-bottom: 2px solid #1976d2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: flex-start;
+  min-height: auto;
+  flex-direction: column;
+  border-radius: 12px;
+  margin-bottom: 16px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  position: relative;
+}
+
+.brand-section {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  width: 100%;
+}
+
+.brand-logo {
+  margin-bottom: 0.5rem;
+}
+
+.brand-text {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: #d32f2f;
+  letter-spacing: 1px;
+  padding: 8px 16px;
+  border: 2px solid #d32f2f;
+  border-radius: 8px;
+  background-color: #ffffff;
+  display: inline-block;
+}
+
+.brand-slogan {
+  font-size: 0.75rem;
+  color: #666666;
+  font-weight: 400;
+  line-height: 1.2;
+  transition: opacity 0.3s ease;
+}
+
+.brand-slogan.hidden {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+}
+
+.collapse-btn {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  color: #5a6c7d;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.collapse-btn:hover {
+  color: #1976d2;
+  background-color: #e3f2fd;
 }
 
 .sidenav-logo {
@@ -28,6 +100,68 @@
   font-size: 1.25rem;
   font-weight: 600;
   color: #333333;
+  transition: opacity 0.3s ease;
+}
+
+.sidenav-title.hidden {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
+}
+
+.nav-list {
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  gap: 12px;
+}
+
+.nav-item {
+  color: #2c3e50;
+  margin: 0;
+  border-radius: 12px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+  font-size: 14px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  position: relative;
+  text-decoration: none;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  cursor: pointer;
+}
+
+.nav-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #f5f5f5;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-right: 12px;
+  flex-shrink: 0;
+  transition: all 0.3s ease;
+}
+
+.nav-icon .mat-icon {
+  color: #5a6c7d;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.nav-text {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
+  flex: 1;
 }
 
 .sidenav .mat-mdc-list-item {
@@ -38,6 +172,46 @@
   font-weight: 500;
   font-size: 14px;
   min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  position: relative;
+}
+
+.nav-item:hover {
+  background-color: #f8f9fa;
+  color: #1976d2;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.nav-item:hover .nav-icon {
+  background-color: #e3f2fd;
+}
+
+.nav-item:hover .nav-icon .mat-icon {
+  color: #1976d2;
+}
+
+.nav-item.active {
+  background-color: #1976d2 !important;
+  color: white !important;
+  font-weight: 600;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+  border-color: #1976d2;
+}
+
+.nav-item.active .nav-icon {
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-item.active .nav-icon .mat-icon {
+  color: white !important;
+}
+
+.nav-item.active .nav-text {
+  color: white !important;
+  font-weight: 600;
 }
 
 .sidenav .mat-mdc-list-item:hover {
@@ -49,15 +223,62 @@
   background-color: #1976d2 !important;
   color: white !important;
   font-weight: 600;
+  box-shadow: 0 2px 8px rgba(25, 118, 210, 0.3);
+}
+
+.nav-item .mat-icon {
+  color: #5a6c7d;
+  margin-right: 16px;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  opacity: 1;
+  display: flex;
+  flex-shrink: 0;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  padding: 0;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.3s ease;
 }
 
 .sidenav .mat-mdc-list-item .mat-icon {
   color: #5a6c7d;
-  margin-right: 12px;
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
+  margin-right: 16px;
+  font-size: 24px;
+  width: 24px;
+  height: 24px;
   opacity: 0.8;
+  display: block;
+  flex-shrink: 0;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  padding: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.nav-item:hover .mat-icon {
+  color: #1976d2;
+  background-color: #e3f2fd;
+}
+
+.nav-item.active .mat-icon {
+  color: white !important;
+  background-color: rgba(255, 255, 255, 0.2);
+}
+
+.nav-item.active span {
+  color: white !important;
+  font-weight: 600;
+}
+
+.nav-item span {
+  font-weight: 500;
+  letter-spacing: 0.5px;
+  transition: all 0.3s ease;
 }
 
 .sidenav .mat-mdc-list-item:hover .mat-icon {
@@ -66,6 +287,7 @@
 
 .sidenav .mat-mdc-list-item.active .mat-icon {
   color: white !important;
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .sidenav .mat-mdc-list-item.active span {
@@ -139,6 +361,13 @@
 .sidenav .mat-mdc-list-item span {
   font-weight: 500;
   letter-spacing: 0.5px;
+  transition: opacity 0.3s ease;
+}
+
+.sidenav .mat-mdc-list-item span.hidden {
+  opacity: 0;
+  width: 0;
+  overflow: hidden;
 }
 
 /* Better contrast for inactive items */
@@ -206,4 +435,226 @@
   .sidenav-title {
     font-size: 0.9rem;
   }
+}
+
+/* Navigation spacer and expand button */
+.nav-spacer {
+  flex: 1;
+}
+
+.expand-btn {
+  margin: 0.5rem;
+  color: #5a6c7d;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  align-self: flex-end;
+}
+
+.expand-btn:hover {
+  color: #1976d2;
+  background-color: #e3f2fd;
+}
+
+/* Collapsed sidebar styles */
+.sidenav.collapsed .sidenav-toolbar {
+  padding: 0.5rem;
+  justify-content: center;
+  position: relative;
+  align-items: center;
+  flex-direction: row;
+}
+
+.sidenav.collapsed .brand-section {
+  align-items: center;
+}
+
+.sidenav.collapsed .brand-text {
+  font-size: 1rem;
+  margin-bottom: 0;
+  padding: 4px 8px;
+}
+
+.sidenav.collapsed .expand-btn {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 10;
+  width: 32px;
+  height: 32px;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  color: #5a6c7d;
+}
+
+.sidenav.collapsed .expand-btn:hover {
+  background-color: #e3f2fd;
+  color: #1976d2;
+}
+
+.sidenav.collapsed .nav-spacer {
+  display: none;
+}
+
+.sidenav.collapsed .nav-item {
+  justify-content: center;
+  padding: 8px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  margin: 0;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  border-radius: 12px;
+}
+
+.sidenav.collapsed .nav-icon {
+  margin-right: 0;
+  width: 40px;
+  height: 40px;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sidenav.collapsed .nav-icon .mat-icon {
+  color: #5a6c7d;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.sidenav.collapsed .nav-text {
+  display: none;
+}
+
+.sidenav.collapsed .nav-item:hover {
+  background-color: #f8f9fa;
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.sidenav.collapsed .nav-item:hover .nav-icon {
+  background-color: #e3f2fd;
+}
+
+.sidenav.collapsed .nav-item:hover .nav-icon .mat-icon {
+  color: #1976d2;
+}
+
+.sidenav.collapsed .mat-mdc-list-item {
+  justify-content: center;
+  padding: 0 8px;
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  margin: 0.25rem 0.5rem;
+}
+
+.sidenav.collapsed .nav-item .mat-icon {
+  margin-right: 0;
+  margin-left: 0;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  padding: 0;
+  transition: all 0.3s ease;
+}
+
+.sidenav.collapsed .mat-mdc-list-item .mat-icon {
+  margin-right: 0;
+  margin-left: 0;
+  font-size: 20px;
+  width: 40px;
+  height: 40px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 1;
+  visibility: visible;
+  background-color: #f5f5f5;
+  border-radius: 50%;
+  padding: 0;
+}
+
+/* Ensure icons are always visible in collapsed mode */
+.sidenav.collapsed .mat-mdc-list-item .mat-icon[matListItemIcon] {
+  display: block !important;
+  opacity: 1 !important;
+  visibility: visible !important;
+}
+
+/* Tooltip styles for collapsed mode */
+.mat-tooltip {
+  font-size: 12px;
+  background-color: #333;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+/* Additional styles for better icon visibility */
+.sidenav.collapsed .mat-mdc-list-item {
+  position: relative;
+}
+
+.sidenav.collapsed .mat-mdc-list-item .mat-icon {
+  position: relative;
+  z-index: 1;
+}
+
+/* Ensure proper spacing and alignment */
+.sidenav.collapsed .mat-mdc-list-item-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
+/* Active state for collapsed mode */
+.sidenav.collapsed .nav-item.active {
+  background-color: #1976d2 !important;
+  border-radius: 12px;
+  margin: 0;
+  box-shadow: 0 4px 12px rgba(25, 118, 210, 0.4);
+  border-color: #1976d2;
+}
+
+.sidenav.collapsed .nav-item.active .nav-icon {
+  background-color: rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+}
+
+.sidenav.collapsed .nav-item.active .nav-icon .mat-icon {
+  color: white !important;
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.sidenav.collapsed .mat-mdc-list-item.active {
+  background-color: #1976d2 !important;
+  border-radius: 8px;
+  margin: 0.25rem 0.5rem;
+}
+
+.sidenav.collapsed .mat-mdc-list-item.active .mat-icon {
+  color: white !important;
+  background-color: rgba(255, 255, 255, 0.2);
 }

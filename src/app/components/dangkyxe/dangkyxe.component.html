@@ -11,7 +11,7 @@
     </button>
     <div class="header-content">
       <div class="logo-container">
-        <img src="assets/icons/thibidiLogo.png" alt="Thibidi Logo" class="logo" onerror="this.style.display='none'">
+        <img src="assets/icons/thibidiLogo.png" alt="Thibidi Logo" class="logo" width="120" height="60" loading="lazy" onerror="this.style.display='none'">
       </div>
       <div class="title-container">
         <h1 class="header-title">Hệ thống Quản lý Đăng ký Xe</h1>
@@ -59,16 +59,9 @@
                   (click)="downloadExcelTemplate()"
                   class="action-button">
             <mat-icon>download</mat-icon>
-            Tải Template Excel
+            Tải mẫu Excel
           </button>
           
-          <button mat-raised-button 
-                  color="primary" 
-                  (click)="openFileUploadForDrive()"
-                  class="action-button">
-            <mat-icon>cloud_upload</mat-icon>
-            Upload Excel lên Google Drive
-          </button>
         </div>
       </div>
     </mat-card>
@@ -127,6 +120,12 @@
             <ng-container matColumnDef="thoiGianBatDau">
               <th mat-header-cell *matHeaderCellDef>Thời gian</th>
               <td mat-cell *matCellDef="let element">{{element.thoiGianBatDau}} - {{element.thoiGianKetThuc}}</td>
+            </ng-container>
+
+            <!-- Trạm xe Column -->
+            <ng-container matColumnDef="tramXe">
+              <th mat-header-cell *matHeaderCellDef>Trạm xe</th>
+              <td mat-cell *matCellDef="let element">{{element.tramXe}}</td>
             </ng-container>
 
             <!-- Tuyến xe Column -->
