@@ -1,57 +1,60 @@
 <div class="container">
-  <!-- Header Section -->
-  <mat-toolbar class="header-toolbar">
-    <button
-      type="button"
-      aria-label="Toggle sidenav"
-      mat-icon-button
-      (click)="toggleSidenav()"
-      class="menu-toggle">
-      <mat-icon aria-label="Side nav toggle icon">menu</mat-icon>
-    </button>
-  </mat-toolbar>
-
-  <!-- Main Content -->
+  <!-- Main Content Area -->
   <div class="main-content">
-    <!-- Search and Action Section -->
-    <mat-card class="action-card">
-      <div class="action-container">
-        <div class="search-container">
-          <mat-form-field appearance="outline" class="search-field">
-            <mat-label>Tìm kiếm theo tên, mã nhân viên...</mat-label>
-            <input matInput 
-                   placeholder="Tìm kiếm theo tên, mã nhân viên...">
-            <mat-icon matSuffix>search</mat-icon>
-          </mat-form-field>
-        </div>
-        
-        <div class="button-container">
-          <button mat-raised-button 
-                  color="primary" 
-                  (click)="openAddRegistrationDialog()"
-                  class="action-button">
-            <mat-icon>add</mat-icon>
-            Thêm Đăng ký
-          </button>
-          
-          <button mat-raised-button 
-                  color="accent" 
-                  (click)="openFileUploadDialog()"
-                  class="action-button">
-            <mat-icon>upload_file</mat-icon>
-            Import từ Excel
-          </button>
-          
-        </div>
+    <!-- Top Header Bar -->
+    <div class="top-header">
+      <div class="header-content">
+        <h1 class="header-title">Quản lý Đăng ký Xe</h1>
+        <p class="header-subtitle">Quản lý đăng ký xe đưa đón của nhân viên</p>
       </div>
-    </mat-card>
+    </div>
+
+    
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+      <!-- Search and Action Section -->
+      <div class="search-action-bar">
+      <div class="search-container">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Tìm kiếm theo mã nhân viên, tên, số điện thoại...</mat-label>
+          <input matInput 
+                 placeholder="Tìm kiếm theo mã nhân viên, tên, số điện thoại...">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+      </div>
+      
+      <div class="button-container">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openAddRegistrationDialog()"
+                class="action-button">
+          <mat-icon>add</mat-icon>
+          Thêm Đăng ký
+        </button>
+        
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openFileUploadDialog()"
+                class="action-button">
+          <mat-icon>upload_file</mat-icon>
+          Import từ Excel
+        </button>
+        
+        <button mat-raised-button 
+                color="warn" 
+                [disabled]="getSelectedCount() === 0"
+                class="action-button">
+          <mat-icon>delete</mat-icon>
+          Xóa Đã chọn ({{ getSelectedCount() }})
+        </button>
+      </div>
+    </div>
 
     <!-- Data Display Section -->
-    <mat-card class="table-card">
-      <div class="table-container">
-        <h3>Danh sách đăng ký xe</h3>
-        <div class="table-wrapper">
-          <table mat-table [dataSource]="dataSource" class="mat-elevation-z8">
+    <div class="table-section">
+      <h3 class="table-title">Danh sách đăng ký xe</h3>
+      <div class="table-wrapper">
+        <table mat-table [dataSource]="dataSource" class="data-table">
             <!-- Select Column -->
             <ng-container matColumnDef="select">
               <th mat-header-cell *matHeaderCellDef>
@@ -74,43 +77,43 @@
 
             <!-- Mã nhân viên Column -->
             <ng-container matColumnDef="maNhanVien">
-              <th mat-header-cell *matHeaderCellDef>Mã NV</th>
+              <th mat-header-cell *matHeaderCellDef>Mã Nhân Viên</th>
               <td mat-cell *matCellDef="let element">{{element.maNhanVien}}</td>
             </ng-container>
 
             <!-- Họ tên Column -->
             <ng-container matColumnDef="hoTen">
-              <th mat-header-cell *matHeaderCellDef>Họ tên</th>
+              <th mat-header-cell *matHeaderCellDef>Tên Nhân Viên</th>
               <td mat-cell *matCellDef="let element">{{element.hoTen}}</td>
             </ng-container>
 
             <!-- Điện thoại Column -->
             <ng-container matColumnDef="dienThoai">
-              <th mat-header-cell *matHeaderCellDef>Điện thoại</th>
+              <th mat-header-cell *matHeaderCellDef>Số Điện Thoại</th>
               <td mat-cell *matCellDef="let element">{{element.dienThoai}}</td>
             </ng-container>
 
             <!-- Ngày đăng ký Column -->
             <ng-container matColumnDef="ngayDangKy">
-              <th mat-header-cell *matHeaderCellDef>Ngày đăng ký</th>
+              <th mat-header-cell *matHeaderCellDef>Ngày Đăng Ký</th>
               <td mat-cell *matCellDef="let element">{{element.ngayDangKy}}</td>
             </ng-container>
 
             <!-- Thời gian Column -->
             <ng-container matColumnDef="thoiGianBatDau">
-              <th mat-header-cell *matHeaderCellDef>Thời gian</th>
+              <th mat-header-cell *matHeaderCellDef>Thời Gian</th>
               <td mat-cell *matCellDef="let element">{{element.thoiGianBatDau}} - {{element.thoiGianKetThuc}}</td>
             </ng-container>
 
             <!-- Trạm xe Column -->
             <ng-container matColumnDef="tramXe">
-              <th mat-header-cell *matHeaderCellDef>Trạm xe</th>
+              <th mat-header-cell *matHeaderCellDef>Trạm Xe</th>
               <td mat-cell *matCellDef="let element">{{element.tramXe}}</td>
             </ng-container>
 
             <!-- Tuyến xe Column -->
             <ng-container matColumnDef="maTuyenXe">
-              <th mat-header-cell *matHeaderCellDef>Tuyến xe</th>
+              <th mat-header-cell *matHeaderCellDef>Mã Tuyến Xe</th>
               <td mat-cell *matCellDef="let element">{{element.maTuyenXe}}</td>
             </ng-container>
 
@@ -148,6 +151,6 @@
           </mat-paginator>
         </div>
       </div>
-    </mat-card>
+    </div>
+    </div>
   </div>
-</div>

@@ -1,83 +1,63 @@
 <div class="container">
-  <!-- Header -->
-  <mat-toolbar class="header-toolbar">
-    <button mat-icon-button (click)="toggleSidenav()" class="menu-button">
-      <mat-icon>menu</mat-icon>
-    </button>
-    <span class="header-title">Quản lý xe đưa đón</span>
-    <span class="spacer"></span>
-    <button mat-raised-button color="primary" (click)="openAddXeDuaDonDialog()" class="add-button">
-      <mat-icon>add</mat-icon>
-      Thêm xe đưa đón
-    </button>
-  </mat-toolbar>
-
-  <!-- Main Content -->
+  <!-- Main Content Area -->
   <div class="main-content">
-    <!-- Sidebar -->
-    <mat-sidenav-container class="sidenav-container">
-      <mat-sidenav #sidenav mode="side" opened="true" class="sidenav">
-        <mat-nav-list>
-          <div class="nav-section">
-            <h3 class="nav-title">Bộ lọc</h3>
-            
-            <!-- Search Filter -->
-            <mat-form-field appearance="outline" class="filter-field">
-              <mat-label>Tìm kiếm</mat-label>
-              <input matInput 
-                     [(ngModel)]="searchTerm" 
-                     (input)="applyFilter()"
-                     placeholder="Biển số, tên tài xế, SĐT...">
-              <mat-icon matSuffix>search</mat-icon>
-            </mat-form-field>
+    <!-- Top Header Bar -->
+    <div class="top-header">
+      <div class="header-content">
+        <h1 class="header-title">Quản lý Xe Đưa Đón</h1>
+        <p class="header-subtitle">Quản lý thông tin xe đưa đón và tài xế</p>
+      </div>
+    </div>
 
-            <!-- Loai Xe Filter -->
-            <mat-form-field appearance="outline" class="filter-field">
-              <mat-label>Loại xe</mat-label>
-              <mat-select [(ngModel)]="selectedLoaiXe" (selectionChange)="applyLoaiXeFilter()">
-                <mat-option value="">Tất cả</mat-option>
-                <mat-option *ngFor="let option of loaiXeOptions" [value]="option.value">
-                  {{ option.label }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
+    
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+      <!-- Search and Action Bar -->
+      <div class="search-action-bar">
+      <div class="search-container">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Tìm kiếm theo biển số, tên tài xế, số điện thoại...</mat-label>
+          <input matInput 
+                 [(ngModel)]="searchTerm" 
+                 (input)="applyFilter()"
+                 placeholder="Tìm kiếm theo biển số, tên tài xế, số điện thoại...">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+      </div>
+      
+      <div class="button-container">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openAddXeDuaDonDialog()"
+                class="action-button">
+          <mat-icon>add</mat-icon>
+          Thêm Xe Đưa Đón
+        </button>
+        
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openFileUploadDialog()"
+                class="action-button">
+          <mat-icon>upload_file</mat-icon>
+          Import từ Excel
+        </button>
+        
+        <button mat-raised-button 
+                color="warn" 
+                [disabled]="getSelectedCount() === 0"
+                (click)="deleteSelected()"
+                class="action-button">
+          <mat-icon>delete</mat-icon>
+          Xóa Đã chọn ({{ getSelectedCount() }})
+        </button>
+      </div>
+    </div>
 
-            <!-- Clear Filters -->
-            <button mat-stroked-button (click)="clearFilters()" class="clear-filters-btn">
-              <mat-icon>clear</mat-icon>
-              Xóa bộ lọc
-            </button>
-          </div>
-
-          <!-- Statistics -->
-          <div class="nav-section">
-            <h3 class="nav-title">Thống kê</h3>
-            <div class="stat-item">
-              <mat-icon>directions_bus</mat-icon>
-              <span>Tổng số xe: {{ dataSource.data.length }}</span>
-            </div>
-            <div class="stat-item">
-              <mat-icon>check_circle</mat-icon>
-              <span>Đã chọn: {{ getSelectedCount() }}</span>
-            </div>
-          </div>
-        </mat-nav-list>
-      </mat-sidenav>
-
-      <!-- Main Content Area -->
-      <mat-sidenav-content class="content">
-        <!-- Action Bar -->
-        <div class="action-bar" *ngIf="getSelectedCount() > 0">
-          <span class="selected-count">{{ getSelectedCount() }} xe đã chọn</span>
-          <button mat-button color="warn" (click)="deleteSelected()">
-            <mat-icon>delete</mat-icon>
-            Xóa đã chọn
-          </button>
-        </div>
-
-        <!-- Data Table -->
-        <div class="table-container">
-          <table mat-table [dataSource]="dataSource" matSort class="data-table">
+    <!-- Data Table Section -->
+    <div class="table-section">
+      <h3 class="table-title">Danh sách xe đưa đón</h3>
+      <div class="table-wrapper">
+        <table mat-table [dataSource]="dataSource" matSort class="data-table">
             <!-- Select Column -->
             <ng-container matColumnDef="select">
               <th mat-header-cell *matHeaderCellDef>
@@ -100,13 +80,13 @@
 
             <!-- MaXe Column -->
             <ng-container matColumnDef="MaXe">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header>Mã xe</th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Mã Xe</th>
               <td mat-cell *matCellDef="let row">{{ row.MaXe }}</td>
             </ng-container>
 
             <!-- BienSoXe Column -->
             <ng-container matColumnDef="BienSoXe">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header>Biển số xe</th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Biển Số Xe</th>
               <td mat-cell *matCellDef="let row">
                 <div class="bien-so-cell">
                   <mat-icon class="car-icon">directions_car</mat-icon>
@@ -117,7 +97,7 @@
 
             <!-- TenTaiXe Column -->
             <ng-container matColumnDef="TenTaiXe">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header>Tên tài xế</th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Tên Tài Xế</th>
               <td mat-cell *matCellDef="let row">
                 <div class="driver-cell">
                   <mat-icon class="driver-icon">person</mat-icon>
@@ -128,7 +108,7 @@
 
             <!-- SoDienThoaiTaiXe Column -->
             <ng-container matColumnDef="SoDienThoaiTaiXe">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header>Số điện thoại</th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Số Điện Thoại</th>
               <td mat-cell *matCellDef="let row">
                 <div class="phone-cell">
                   <mat-icon class="phone-icon">phone</mat-icon>
@@ -141,7 +121,7 @@
 
             <!-- LoaiXe Column -->
             <ng-container matColumnDef="LoaiXe">
-              <th mat-header-cell *matHeaderCellDef mat-sort-header>Loại xe</th>
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Loại Xe</th>
               <td mat-cell *matCellDef="let row">
                 <span class="loai-xe-badge" [ngClass]="getLoaiXeClass(row.LoaiXe)">
                   {{ row.LoaiXe }}
@@ -151,7 +131,7 @@
 
             <!-- GhiChu Column -->
             <ng-container matColumnDef="GhiChu">
-              <th mat-header-cell *matHeaderCellDef>Ghi chú</th>
+              <th mat-header-cell *matHeaderCellDef>Ghi Chú</th>
               <td mat-cell *matCellDef="let row">
                 <span class="ghi-chu-text" [title]="row.GhiChu">
                   {{ row.GhiChu || '-' }}
@@ -161,7 +141,7 @@
 
             <!-- Actions Column -->
             <ng-container matColumnDef="actions">
-              <th mat-header-cell *matHeaderCellDef>Thao tác</th>
+              <th mat-header-cell *matHeaderCellDef></th>
               <td mat-cell *matCellDef="let row">
                 <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="action-button">
                   <mat-icon>more_vert</mat-icon>
@@ -195,16 +175,16 @@
               Thêm xe đưa đón đầu tiên
             </button>
           </div>
-        </div>
 
-        <!-- Paginator -->
-        <mat-paginator 
-          [pageSizeOptions]="[10, 25, 50, 100]" 
-          [pageSize]="10"
-          showFirstLastButtons
-          class="paginator">
-        </mat-paginator>
-      </mat-sidenav-content>
-    </mat-sidenav-container>
+          <!-- Paginator -->
+          <mat-paginator 
+            [pageSizeOptions]="[10, 25, 50, 100]" 
+            [pageSize]="10"
+            showFirstLastButtons
+            class="paginator">
+          </mat-paginator>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

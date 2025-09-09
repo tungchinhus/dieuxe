@@ -152,6 +152,23 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     });
   }
 
+  openFileUploadDialog(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.snackBar.open('Tính năng import từ Excel sẽ được phát triển trong phiên bản tiếp theo', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+      }
+    };
+    input.click();
+  }
+
   /**
    * Add new xe dua don to Firebase
    */
