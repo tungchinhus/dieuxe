@@ -6,22 +6,31 @@
 }
 
 .dialog-header {
-  background: linear-gradient(135deg, var(--thibidi-primary) 0%, var(--thibidi-dark) 100%);
+  background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
   color: white;
   flex-shrink: 0;
+  padding: 20px 24px;
+  margin: -24px -24px 0 -24px;
+  border-radius: 8px 8px 0 0;
 }
 
 .dialog-title {
   font-size: 1.25rem;
-  font-weight: 600;
+  font-weight: 500;
+  color: white;
+  margin: 0;
 }
 
 .close-button {
   color: white;
+  width: 32px;
+  height: 32px;
+  line-height: 32px;
 }
 
 .close-button:hover {
   background-color: rgba(255, 255, 255, 0.1);
+  color: white;
 }
 
 .dialog-content {

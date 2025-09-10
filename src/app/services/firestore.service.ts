@@ -21,6 +21,7 @@ import {
 } from 'firebase/firestore';
 import { FirebaseService } from './firebase.service';
 import { XeDuaDon, LichTrinhXe, ChiTietTuyenDuong, DangKyPhanXe } from '../models/vehicle.model';
+import { NhanVien, NhanVienFormData } from '../models/employee.model';
 
 @Injectable({
   providedIn: 'root'
@@ -33,7 +34,8 @@ export class FirestoreService {
     XE_DUA_DON: 'xeDuaDon',
     LICH_TRINH_XE: 'lichTrinhXe',
     CHI_TIET_TUYEN_DUONG: 'chiTietTuyenDuong',
-    DANG_KY_PHAN_XE: 'dangKyPhanXe'
+    DANG_KY_PHAN_XE: 'dangKyPhanXe',
+    NHAN_VIEN: 'nhanVien'
   };
 
   constructor(private firebaseService: FirebaseService) {
@@ -258,6 +260,92 @@ export class FirestoreService {
     await deleteDoc(docRef);
   }
 
+  // ==================== NHAN VIEN ====================
+  async createNhanVien(nhanVienData: NhanVienFormData): Promise<number> {
+    const now = new Date();
+    
+    // Generate unique employee code
+    const maNhanVien = await this.generateNextMaNhanVien();
+    
+    const data = {
+      ...nhanVienData,
+      MaNhanVien: maNhanVien,
+      NhanVienID: Date.now(), // Use timestamp as ID
+      createdAt: Timestamp.fromDate(now),
+      updatedAt: Timestamp.fromDate(now)
+    };
+    
+    const docRef = await addDoc(collection(this.firestore, this.COLLECTIONS.NHAN_VIEN), data);
+    return Date.now();
+  }
+
+  async getNhanVienById(id: number): Promise<NhanVien | null> {
+    // For now, we'll search by the generated ID in the data
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.NHAN_VIEN),
+      where('NhanVienID', '==', id)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      return this.convertFirestoreDocToNhanVien(querySnapshot.docs[0]);
+    }
+    return null;
+  }
+
+  async getAllNhanVien(): Promise<NhanVien[]> {
+    const querySnapshot = await getDocs(collection(this.firestore, this.COLLECTIONS.NHAN_VIEN));
+    return querySnapshot.docs.map(doc => this.convertFirestoreDocToNhanVien(doc));
+  }
+
+  async getNhanVienByPhongBan(phongBan: string): Promise<NhanVien[]> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.NHAN_VIEN),
+      where('PhongBan', '==', phongBan)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => this.convertFirestoreDocToNhanVien(doc));
+  }
+
+  async getNhanVienByTrangThai(trangThai: number): Promise<NhanVien[]> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.NHAN_VIEN),
+      where('TrangThai', '==', trangThai)
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => this.convertFirestoreDocToNhanVien(doc));
+  }
+
+  async updateNhanVien(id: number, data: Partial<NhanVienFormData>): Promise<void> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.NHAN_VIEN),
+      where('NhanVienID', '==', id)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const docRef = querySnapshot.docs[0].ref;
+      const updateData = {
+        ...data,
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+      await updateDoc(docRef, updateData);
+    }
+  }
+
+  async deleteNhanVien(id: number): Promise<void> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.NHAN_VIEN),
+      where('NhanVienID', '==', id)
+    );
+    const querySnapshot = await getDocs(q);
+    
+    if (!querySnapshot.empty) {
+      const docRef = querySnapshot.docs[0].ref;
+      await deleteDoc(docRef);
+    }
+  }
+
   // ==================== HELPER METHODS ====================
   private convertFirestoreDocToXeDuaDon(doc: DocumentSnapshot): XeDuaDon {
     const data = doc.data();
@@ -317,5 +405,36 @@ export class FirestoreService {
       createdAt: data?.['createdAt']?.toDate(),
       updatedAt: data?.['updatedAt']?.toDate()
     };
+  }
+
+  private convertFirestoreDocToNhanVien(doc: DocumentSnapshot): NhanVien {
+    const data = doc.data();
+    return {
+      NhanVienID: data?.['NhanVienID'] || Date.now(),
+      MaNhanVien: data?.['MaNhanVien'] || '',
+      MaTuyenXe: data?.['MaTuyenXe'] || '',
+      TramXe: data?.['TramXe'] || '',
+      HoTen: data?.['HoTen'] || '',
+      DienThoai: data?.['DienThoai'] || '',
+      CreatedAt: data?.['createdAt']?.toDate() || new Date(),
+      UpdatedAt: data?.['updatedAt']?.toDate() || new Date()
+    };
+  }
+
+  /**
+   * Generate next available MaNhanVien using timestamp
+   * @returns Promise with next MaNhanVien string
+   */
+  private async generateNextMaNhanVien(): Promise<string> {
+    try {
+      // Use timestamp-based approach to avoid permission issues
+      const timestamp = Date.now();
+      const randomSuffix = Math.floor(Math.random() * 1000);
+      return `NV${timestamp.toString().slice(-6)}${randomSuffix.toString().padStart(3, '0')}`;
+    } catch (error) {
+      console.error('Error generating next MaNhanVien:', error);
+      // Fallback to simple timestamp
+      return `NV${Date.now().toString().slice(-6)}`;
+    }
   }
 }

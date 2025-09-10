@@ -108,7 +108,6 @@ export class QuanLyTuyenDuongComponent implements OnInit {
 
   openAddDialog() {
     const dialogRef = this.dialog.open(RouteDetailDialogComponent, {
-      width: '500px',
       data: { mode: 'add' }
     });
 
@@ -121,7 +120,6 @@ export class QuanLyTuyenDuongComponent implements OnInit {
 
   openEditDialog(routeDetail: RouteDetail) {
     const dialogRef = this.dialog.open(RouteDetailDialogComponent, {
-      width: '500px',
       data: { mode: 'edit', routeDetail: routeDetail }
     });
 
@@ -133,14 +131,29 @@ export class QuanLyTuyenDuongComponent implements OnInit {
   }
 
   addRouteDetail(routeDetail: RouteDetailCreate) {
-    this.routeDetailService.addRouteDetail(routeDetail).then(() => {
+    // Auto-increment maChiTiet
+    const nextId = this.getNextId();
+    const routeDetailWithId = {
+      ...routeDetail,
+      maChiTiet: nextId
+    };
+
+    console.log('Adding route detail with auto-incremented ID:', routeDetailWithId);
+
+    this.routeDetailService.addRouteDetail(routeDetailWithId).then(() => {
       this.snackBar.open('Thêm chi tiết tuyến đường thành công!', 'Đóng', {
-        duration: 3000
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
       });
+      // Reload data to show the new item
+      this.loadData();
     }).catch((error) => {
       console.error('Error adding route detail:', error);
       this.snackBar.open('Lỗi khi thêm chi tiết tuyến đường!', 'Đóng', {
-        duration: 3000
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
       });
     });
   }
@@ -154,14 +167,23 @@ export class QuanLyTuyenDuongComponent implements OnInit {
         tenDiemDon: routeDetail.tenDiemDon,
         thuTu: routeDetail.thuTu
       };
+      
+      console.log('Updating route detail:', updateData);
+      
       this.routeDetailService.updateRouteDetail(existingItem.id, updateData).then(() => {
         this.snackBar.open('Cập nhật chi tiết tuyến đường thành công!', 'Đóng', {
-          duration: 3000
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
         });
+        // Reload data to show the updated item
+        this.loadData();
       }).catch((error) => {
         console.error('Error updating route detail:', error);
         this.snackBar.open('Lỗi khi cập nhật chi tiết tuyến đường!', 'Đóng', {
-          duration: 3000
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
         });
       });
     }
@@ -172,12 +194,18 @@ export class QuanLyTuyenDuongComponent implements OnInit {
       if (routeDetail.id) {
         this.routeDetailService.deleteRouteDetail(routeDetail.id).then(() => {
           this.snackBar.open('Xóa chi tiết tuyến đường thành công!', 'Đóng', {
-            duration: 3000
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
           });
+          // Reload data to show the updated list
+          this.loadData();
         }).catch((error) => {
           console.error('Error deleting route detail:', error);
           this.snackBar.open('Lỗi khi xóa chi tiết tuyến đường!', 'Đóng', {
-            duration: 3000
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
           });
         });
       }
@@ -187,7 +215,9 @@ export class QuanLyTuyenDuongComponent implements OnInit {
   deleteSelected() {
     if (this.selection.selected.length === 0) {
       this.snackBar.open('Vui lòng chọn ít nhất một mục để xóa!', 'Đóng', {
-        duration: 3000
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
       });
       return;
     }
@@ -201,12 +231,18 @@ export class QuanLyTuyenDuongComponent implements OnInit {
         this.routeDetailService.deleteMultipleRouteDetails(selectedIds).then(() => {
           this.selection.clear();
           this.snackBar.open('Xóa các chi tiết tuyến đường thành công!', 'Đóng', {
-            duration: 3000
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
           });
+          // Reload data to show the updated list
+          this.loadData();
         }).catch((error) => {
           console.error('Error deleting multiple route details:', error);
           this.snackBar.open('Lỗi khi xóa các chi tiết tuyến đường!', 'Đóng', {
-            duration: 3000
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
           });
         });
       }

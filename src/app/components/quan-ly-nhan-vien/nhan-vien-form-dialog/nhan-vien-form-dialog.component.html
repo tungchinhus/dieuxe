@@ -1,0 +1,118 @@
+<div class="dialog-container">
+  <!-- Dialog Header -->
+  <div class="dialog-header">
+    <div class="header-content">
+      <div class="title-section">
+        <mat-icon class="title-icon">{{ isEditMode ? 'edit' : 'person_add' }}</mat-icon>
+        <h2 class="dialog-title">{{ title }}</h2>
+      </div>
+      <button mat-icon-button (click)="onCancel()" class="close-button">
+        <mat-icon>close</mat-icon>
+      </button>
+    </div>
+  </div>
+
+  <!-- Dialog Content -->
+  <div class="dialog-content">
+    <form [formGroup]="nhanVienForm" (ngSubmit)="onSubmit()" class="form-container">
+      
+      <!-- Basic Information Card -->
+      <mat-card class="form-card">
+        <mat-card-header>
+          <mat-card-title class="card-title">
+            <mat-icon>person</mat-icon>
+            Thông tin cơ bản
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="form-row">
+            <mat-form-field appearance="outline" class="form-field ho-ten-field">
+              <mat-label>Họ và tên *</mat-label>
+              <input matInput 
+                     formControlName="HoTen"
+                     placeholder="Nhập họ và tên"
+                     maxlength="100">
+              <mat-icon matSuffix>person</mat-icon>
+              <mat-error *ngIf="hasFieldError('HoTen')">
+                {{ getFieldError('HoTen') }}
+              </mat-error>
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="form-field">
+              <mat-label>Số điện thoại *</mat-label>
+              <input matInput 
+                     formControlName="DienThoai"
+                     placeholder="Nhập số điện thoại"
+                     maxlength="20">
+              <mat-icon matSuffix>phone</mat-icon>
+              <mat-error *ngIf="hasFieldError('DienThoai')">
+                {{ getFieldError('DienThoai') }}
+              </mat-error>
+            </mat-form-field>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Work Information Card -->
+      <mat-card class="form-card">
+        <mat-card-header>
+          <mat-card-title class="card-title">
+            <mat-icon>work</mat-icon>
+            Thông tin công việc
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+        <div class="form-row">
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Tuyến Xe</mat-label>
+            <mat-select formControlName="MaTuyenXe" (selectionChange)="onRouteChange()">
+              <mat-option value="">Chọn tuyến xe</mat-option>
+              <mat-option *ngFor="let route of availableRoutes" [value]="route.maTuyenXe">
+                {{ route.tenTuyenXe }}
+              </mat-option>
+            </mat-select>
+            <mat-icon matSuffix>route</mat-icon>
+            <mat-error *ngIf="hasFieldError('MaTuyenXe')">
+              {{ getFieldError('MaTuyenXe') }}
+            </mat-error>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="form-field">
+            <mat-label>Trạm/Điểm Đón</mat-label>
+            <mat-select formControlName="TramXe">
+              <mat-option value="">Chọn điểm đón</mat-option>
+              <mat-option *ngFor="let station of selectedRouteStations; trackBy: trackByStation" [value]="station.tenDiemDon">
+                {{ station.tenDiemDon }}
+              </mat-option>
+            </mat-select>
+            <mat-icon matSuffix>location_on</mat-icon>
+            <mat-error *ngIf="hasFieldError('TramXe')">
+              {{ getFieldError('TramXe') }}
+            </mat-error>
+          </mat-form-field>
+        </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Form Actions -->
+      <div class="form-actions">
+        <button type="button" 
+                mat-button 
+                (click)="onCancel()"
+                class="cancel-button">
+          <mat-icon>cancel</mat-icon>
+          Hủy
+        </button>
+        
+        <button type="submit" 
+                mat-raised-button 
+                color="primary"
+                [disabled]="nhanVienForm.invalid"
+                class="submit-button">
+          <mat-icon>{{ isEditMode ? 'save' : 'add' }}</mat-icon>
+          {{ isEditMode ? 'Cập nhật' : 'Thêm mới' }}
+        </button>
+      </div>
+    </form>
+  </div>
+</div>

@@ -23,6 +23,10 @@ export const routes: Routes = [
     loadComponent: () => import('./components/quan-ly-xe-dua-don/quan-ly-xe-dua-don.component').then(m => m.QuanLyXeDuaDonComponent)
   },
   {
+    path: 'quan-ly-nhan-vien',
+    loadComponent: () => import('./components/quan-ly-nhan-vien/quan-ly-nhan-vien.component').then(m => m.QuanLyNhanVienComponent)
+  },
+  {
     path: 'firebase-test',
     loadComponent: () => import('./components/firebase-test/firebase-test.component').then(m => m.FirebaseTestComponent)
   }
