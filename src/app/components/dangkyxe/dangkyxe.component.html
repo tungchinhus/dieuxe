@@ -43,6 +43,7 @@
         <button mat-raised-button 
                 color="warn" 
                 [disabled]="getSelectedCount() === 0"
+                (click)="deleteSelectedRegistrations()"
                 class="action-button">
           <mat-icon>delete</mat-icon>
           Xóa Đã chọn ({{ getSelectedCount() }})
@@ -111,11 +112,6 @@
               <td mat-cell *matCellDef="let element">{{element.tramXe}}</td>
             </ng-container>
 
-            <!-- Tuyến xe Column -->
-            <ng-container matColumnDef="maTuyenXe">
-              <th mat-header-cell *matHeaderCellDef>Mã Tuyến Xe</th>
-              <td mat-cell *matCellDef="let element">{{element.maTuyenXe}}</td>
-            </ng-container>
 
             <!-- Actions Column -->
             <ng-container matColumnDef="actions">

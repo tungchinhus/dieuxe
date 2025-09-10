@@ -68,7 +68,6 @@ export class DangKyXeComponent implements OnInit {
     'ngayDangKy', 
     'thoiGianBatDau', 
     'tramXe',
-    'maTuyenXe', 
     'actions'
   ];
   
@@ -503,17 +502,110 @@ export class DangKyXeComponent implements OnInit {
 
   deleteRegistration(registration: Registration): void {
     if (confirm(`Bạn có chắc chắn muốn xóa đăng ký của ${registration.hoTen}?`)) {
-      const index = this.dataSource.data.findIndex(r => r.id === registration.id);
-      if (index !== -1) {
-        this.dataSource.data.splice(index, 1);
-        this.dataSource.data = [...this.dataSource.data];
-        this.selectedRegistrations.delete(registration.id);
-        this.snackBar.open('Đăng ký đã được xóa thành công!', 'Đóng', {
-          duration: 3000,
+      this.deleteRegistrationsFromFirebase([registration]);
+    }
+  }
+
+  deleteSelectedRegistrations(): void {
+    if (this.selectedRegistrations.size === 0) {
+      this.snackBar.open('Vui lòng chọn ít nhất một đăng ký để xóa!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
+    const selectedCount = this.selectedRegistrations.size;
+    if (confirm(`Bạn có chắc chắn muốn xóa ${selectedCount} đăng ký đã chọn?`)) {
+      const selectedRegistrations = this.dataSource.data.filter(r => this.selectedRegistrations.has(r.id));
+      this.deleteRegistrationsFromFirebase(selectedRegistrations);
+    }
+  }
+
+  private async deleteRegistrationsFromFirebase(registrations: Registration[]): Promise<void> {
+    try {
+      // Show loading message
+      const loadingSnackBar = this.snackBar.open('Đang xóa dữ liệu từ Firebase...', 'Đóng', {
+        duration: 0,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+      let deletedCount = 0;
+      const errors: string[] = [];
+
+      for (const registration of registrations) {
+        try {
+          // Find the Firebase ID for this registration
+          const firebaseId = await this.findFirebaseIdForRegistration(registration);
+          if (firebaseId) {
+            await this.vehicleDataService.huyDangKyPhanXe(firebaseId);
+            deletedCount++;
+          } else {
+            errors.push(`Không tìm thấy ID Firebase cho đăng ký ${registration.maNhanVien}`);
+          }
+        } catch (error) {
+          console.error(`Error deleting registration ${registration.maNhanVien}:`, error);
+          errors.push(`Lỗi khi xóa đăng ký ${registration.maNhanVien}: ${error}`);
+        }
+      }
+
+      // Dismiss loading message
+      loadingSnackBar.dismiss();
+
+      if (deletedCount > 0) {
+        // Refresh data from Firebase
+        await this.loadDataFromFirebase();
+        
+        // Clear selections
+        this.selectedRegistrations.clear();
+        
+        // Show success message
+        let message = `Đã xóa thành công ${deletedCount} đăng ký!`;
+        if (errors.length > 0) {
+          message += ` ${errors.length} đăng ký gặp lỗi.`;
+        }
+        
+        this.snackBar.open(message, 'Đóng', {
+          duration: 5000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+      } else {
+        this.snackBar.open('Không thể xóa đăng ký nào. Vui lòng thử lại!', 'Đóng', {
+          duration: 5000,
           horizontalPosition: 'right',
           verticalPosition: 'top'
         });
       }
+    } catch (error) {
+      console.error('Error deleting registrations:', error);
+      this.snackBar.open('Có lỗi xảy ra khi xóa dữ liệu!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  private async findFirebaseIdForRegistration(registration: Registration): Promise<string | null> {
+    try {
+      // Get all registrations from Firebase
+      const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      
+      // Find matching registration by employee ID and date
+      const matchingRegistration = allRegistrations.find(r => 
+        r.MaNhanVien === registration.maNhanVien && 
+        r.HoTen === registration.hoTen &&
+        r.DienThoai === registration.dienThoai &&
+        r.NgayDangKy.toISOString().split('T')[0] === registration.ngayDangKy
+      );
+      
+      return matchingRegistration?.ID || null;
+    } catch (error) {
+      console.error('Error finding Firebase ID:', error);
+      return null;
     }
   }
 

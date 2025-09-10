@@ -114,28 +114,12 @@
       <!-- Transportation Information Section -->
       <div class="form-section">
         <h3 class="section-title">Thông tin vận chuyển</h3>
-        <div class="form-row">
-          <mat-form-field appearance="outline" class="form-field">
-            <mat-label>Tuyến Xe</mat-label>
-            <mat-select formControlName="maTuyenXe" (selectionChange)="onRouteChange()">
-              <mat-option value="">Chọn tuyến xe</mat-option>
-              <mat-option *ngFor="let route of availableRoutes" [value]="route.maTuyenXe">
-                {{ route.tenTuyenXe }}
-              </mat-option>
-            </mat-select>
-            <mat-error *ngIf="isFieldInvalid('maTuyenXe')">
-              {{ getErrorMessage('maTuyenXe') }}
-            </mat-error>
-          </mat-form-field>
-
+        <div class="form-row single-field">
           <mat-form-field appearance="outline" class="form-field">
             <mat-label>Trạm/Điểm Đón</mat-label>
-            <mat-select formControlName="tramXe" [disabled]="!selectedRouteStations.length">
-              <mat-option value="">Chọn điểm đón</mat-option>
-              <mat-option *ngFor="let station of selectedRouteStations; trackBy: trackByStation" [value]="station.tenDiemDon">
-                {{ station.tenDiemDon }}
-              </mat-option>
-            </mat-select>
+            <input matInput 
+                   formControlName="tramXe" 
+                   placeholder="Nhập trạm/điểm đón">
             <mat-error *ngIf="isFieldInvalid('tramXe')">
               {{ getErrorMessage('tramXe') }}
             </mat-error>

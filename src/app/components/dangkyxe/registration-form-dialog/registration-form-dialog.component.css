@@ -9,9 +9,12 @@
   background: linear-gradient(135deg, #1976d2 0%, #1565c0 100%);
   color: white;
   flex-shrink: 0;
-  padding: 20px 24px;
-  margin: -24px -24px 0 -24px;
   border-radius: 8px 8px 0 0;
+  
+}
+
+::ng-deep .mat-toolbar-row, .mat-toolbar-single-row {
+  justify-content: space-between !important;
 }
 
 .dialog-title {
