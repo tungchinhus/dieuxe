@@ -48,6 +48,15 @@
           <mat-icon>delete</mat-icon>
           Xóa Đã chọn ({{ getSelectedCount() }})
         </button>
+        
+        <button mat-raised-button 
+                color="accent" 
+                [disabled]="dataSource.data.length === 0"
+                (click)="exportToPDF()"
+                class="action-button">
+          <mat-icon>picture_as_pdf</mat-icon>
+          Xuất PDF
+        </button>
       </div>
     </div>
 
@@ -103,7 +112,14 @@
             <!-- Thời gian Column -->
             <ng-container matColumnDef="thoiGianBatDau">
               <th mat-header-cell *matHeaderCellDef>Thời Gian</th>
-              <td mat-cell *matCellDef="let element">{{element.thoiGianBatDau}} - {{element.thoiGianKetThuc}}</td>
+              <td mat-cell *matCellDef="let element">
+                <span *ngIf="element.thoiGianBatDau && element.thoiGianKetThuc; else noTime">
+                  {{formatTime(element.thoiGianBatDau)}} - {{formatTime(element.thoiGianKetThuc)}}
+                </span>
+                <ng-template #noTime>
+                  <span class="no-time">Chưa có thời gian</span>
+                </ng-template>
+              </td>
             </ng-container>
 
             <!-- Trạm xe Column -->

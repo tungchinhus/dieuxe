@@ -184,6 +184,12 @@
   cursor: pointer;
 }
 
+.no-time {
+  color: #999;
+  font-style: italic;
+  font-size: 0.85rem;
+}
+
 /* ===== Paginator ===== */
 .mat-paginator {
   background: white;

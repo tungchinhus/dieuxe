@@ -24,6 +24,7 @@
             <mat-label>Mã Nhân Viên</mat-label>
             <input matInput 
                    formControlName="maNhanVien" 
+                   [readonly]="isEditMode"
                    placeholder="VD: NV001">
             <mat-error *ngIf="isFieldInvalid('maNhanVien')">
               {{ getErrorMessage('maNhanVien') }}
@@ -64,8 +65,11 @@
             <mat-label>Ngày Đăng Ký</mat-label>
             <input matInput 
                    [matDatepicker]="picker" 
-                   formControlName="ngayDangKy">
-            <mat-datepicker-toggle matSuffix [for]="picker"></mat-datepicker-toggle>
+                   formControlName="ngayDangKy"
+                   placeholder="Chọn ngày">
+            <mat-datepicker-toggle matSuffix [for]="picker">
+              <mat-icon matDatepickerToggleIcon>calendar_today</mat-icon>
+            </mat-datepicker-toggle>
             <mat-datepicker #picker></mat-datepicker>
             <mat-error *ngIf="isFieldInvalid('ngayDangKy')">
               {{ getErrorMessage('ngayDangKy') }}
@@ -74,12 +78,9 @@
 
           <mat-form-field appearance="outline" class="form-field">
             <mat-label>Loại Ca</mat-label>
-            <mat-select formControlName="loaiCa" (selectionChange)="onWorkShiftChange()">
-              <mat-option value="">Chọn ca làm việc</mat-option>
-              <mat-option *ngFor="let shift of workShifts" [value]="shift.value">
-                {{ shift.label }}
-              </mat-option>
-            </mat-select>
+            <input matInput 
+                   formControlName="loaiCa" 
+                   placeholder="VD: PT-cc, Ca sáng, Ca chiều...">
             <mat-error *ngIf="isFieldInvalid('loaiCa')">
               {{ getErrorMessage('loaiCa') }}
             </mat-error>
@@ -90,8 +91,8 @@
           <mat-form-field appearance="outline" class="form-field">
             <mat-label>Thời Gian Bắt Đầu</mat-label>
             <input matInput 
-                   type="time" 
-                   formControlName="thoiGianBatDau">
+                   formControlName="thoiGianBatDau"
+                   placeholder="VD: 15h45, 15:45, 1545">
             <mat-error *ngIf="isFieldInvalid('thoiGianBatDau')">
               {{ getErrorMessage('thoiGianBatDau') }}
             </mat-error>
@@ -100,8 +101,8 @@
           <mat-form-field appearance="outline" class="form-field">
             <mat-label>Thời Gian Kết Thúc</mat-label>
             <input matInput 
-                   type="time" 
-                   formControlName="thoiGianKetThuc">
+                   formControlName="thoiGianKetThuc"
+                   placeholder="VD: 19h, 19:00, 1900">
             <mat-error *ngIf="isFieldInvalid('thoiGianKetThuc')">
               {{ getErrorMessage('thoiGianKetThuc') }}
             </mat-error>
@@ -119,7 +120,13 @@
             <mat-label>Trạm/Điểm Đón</mat-label>
             <input matInput 
                    formControlName="tramXe" 
+                   [matAutocomplete]="auto"
                    placeholder="Nhập trạm/điểm đón">
+            <mat-autocomplete #auto="matAutocomplete" [displayWith]="displayStation">
+              <mat-option *ngFor="let station of filteredStations | async" [value]="station">
+                {{ station }}
+              </mat-option>
+            </mat-autocomplete>
             <mat-error *ngIf="isFieldInvalid('tramXe')">
               {{ getErrorMessage('tramXe') }}
             </mat-error>

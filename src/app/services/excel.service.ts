@@ -86,21 +86,29 @@ export class ExcelService {
       try {
         console.log(`Processing Excel row ${i}:`, row);
         
+        // Debug: Log the row data to understand the structure
+        console.log(`Row ${i} data:`, row);
+        console.log(`Row ${i} length:`, row.length);
+        
         const registration: Registration = {
           id: i, // Temporary ID
           maNhanVien: this.getStringValue(row[1]) || `NV${i.toString().padStart(3, '0')}`, // Cột B: Mã nhân viên
           hoTen: this.getStringValue(row[2]) || '', // Cột C: Họ và tên
           dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại
           phongBan: '', // Default empty for now
-          ngayDangKy: this.extractDateFromExcel(data) || new Date().toISOString().split('T')[0], // Extract from document title/date
+          ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
           loaiCa: this.extractShiftFromTime(this.getStringValue(row[7])) || 'PT-cc', // Cột H: Ca (extract from time)
-          thoiGianBatDau: this.extractTimeFromString(this.getStringValue(row[7])) || '15:45', // Cột H: Thời gian làm việc (Từ...)
-          thoiGianKetThuc: this.extractTimeFromString(this.getStringValue(row[8])) || '19:00', // Cột I: Thời gian làm việc (Đến...)
+          thoiGianBatDau: this.getStringValue(row[8]) || '', // Cột H: Thời gian làm việc (Từ...)
+          thoiGianKetThuc: this.getStringValue(row[9]) || '', // Cột I: Thời gian làm việc (Đến...)
           maTuyenXe: this.extractRouteFromStation(this.getStringValue(row[3])) || '', // Cột D: Trạm xe -> derive route
           tramXe: this.getStringValue(row[3]) || '', // Cột D: Trạm xe
           noiDungCongViec: this.getStringValue(row[5]) || '', // Cột F: Nội dung công việc
           dangKyCom: false // Default false for overtime work
         };
+        
+        // Debug: Log the extracted time values
+        console.log(`Row ${i} - ThoiGianBatDau: ${registration.thoiGianBatDau}, ThoiGianKetThuc: ${registration.thoiGianKetThuc}`);
+        console.log(`Row ${i} - Raw data from row[7]: "${this.getStringValue(row[7])}", row[8]: "${this.getStringValue(row[8])}"`);
         
         console.log(`Converted registration ${i}:`, registration);
         registrations.push(registration);
@@ -234,12 +242,16 @@ export class ExcelService {
   private extractTimeFromString(timeString: string): string {
     if (!timeString) return '';
     
+    console.log(`Extracting time from: "${timeString}"`);
+    
     // Look for time patterns like "15h45", "15:45", "15h 45"
     const timeMatch = timeString.match(/(\d{1,2})[h:]\s*(\d{2})/);
     if (timeMatch) {
       const hours = timeMatch[1].padStart(2, '0');
       const minutes = timeMatch[2];
-      return `${hours}:${minutes}`;
+      const result = `${hours}:${minutes}`;
+      console.log(`Time pattern match: "${timeString}" -> "${result}"`);
+      return result;
     }
     
     // Look for standard time format
@@ -247,9 +259,32 @@ export class ExcelService {
     if (standardTimeMatch) {
       const hours = standardTimeMatch[1].padStart(2, '0');
       const minutes = standardTimeMatch[2];
-      return `${hours}:${minutes}`;
+      const result = `${hours}:${minutes}`;
+      console.log(`Standard time match: "${timeString}" -> "${result}"`);
+      return result;
     }
     
+    // Look for simple hour format like "19h" -> "19:00"
+    const hourOnlyMatch = timeString.match(/(\d{1,2})h?$/);
+    if (hourOnlyMatch) {
+      const hours = hourOnlyMatch[1].padStart(2, '0');
+      const result = `${hours}:00`;
+      console.log(`Hour only match: "${timeString}" -> "${result}"`);
+      return result;
+    }
+    
+    // Look for 4-digit time like "1945" -> "19:45"
+    const fourDigitMatch = timeString.match(/^(\d{4})$/);
+    if (fourDigitMatch) {
+      const time = fourDigitMatch[1];
+      const hours = time.substring(0, 2);
+      const minutes = time.substring(2, 4);
+      const result = `${hours}:${minutes}`;
+      console.log(`4-digit time match: "${timeString}" -> "${result}"`);
+      return result;
+    }
+    
+    console.log(`No time pattern matched for: "${timeString}"`);
     return '';
   }
 
@@ -483,5 +518,14 @@ export class ExcelService {
 
     const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
     return new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  }
+
+  /**
+   * Get today's date in Vietnam timezone (YYYY-MM-DD format)
+   */
+  private getTodayVietnamDate(): string {
+    const today = new Date();
+    const vietnamDate = new Date(today.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    return vietnamDate.toISOString().split('T')[0];
   }
 }

@@ -15,15 +15,13 @@ import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
 import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
-import { UploadInstructionsDialogComponent } from './upload-instructions-dialog/upload-instructions-dialog.component';
-import { DirectUploadDialogComponent } from './direct-upload-dialog/direct-upload-dialog.component';
-import { RealUploadDialogComponent } from './real-upload-dialog/real-upload-dialog.component';
 import { Registration } from '../../models/registration.model';
 import { GoogleDriveUploadService } from '../../services/google-drive-upload.service';
 import { GoogleDriveWebUploadService } from '../../services/google-drive-web-upload.service';
 import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
+import { PdfExportService } from '../../services/pdf-export.service';
 import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
@@ -83,7 +81,8 @@ export class DangKyXeComponent implements OnInit {
     private googleDriveWebUploadService: GoogleDriveWebUploadService,
     private excelService: ExcelService,
     private versionService: VersionService,
-    private vehicleDataService: VehicleDataService
+    private vehicleDataService: VehicleDataService,
+    private pdfExportService: PdfExportService
   ) {}
 
   toggleSidenav(): void {
@@ -165,15 +164,52 @@ export class DangKyXeComponent implements OnInit {
       }
     });
 
-    dialogRef.afterClosed().subscribe(result => {
+    dialogRef.afterClosed().subscribe(async result => {
       if (result) {
+        // Check for duplicate before adding
+        const isDuplicate = await this.checkDuplicateNameAndStation(result.hoTen, result.tramXe, result.ngayDangKy);
+        
+        if (isDuplicate) {
+          this.snackBar.open(
+            `Không thể thêm: ${result.hoTen} đã đăng ký tại trạm ${result.tramXe} cho ngày ${result.ngayDangKy}`, 
+            'Đóng', 
+            {
+              duration: 5000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            }
+          );
+          return;
+        }
+
         const newRegistration: Registration = {
           id: this.dataSource.data.length + 1,
           ...result,
           phongBan: '', // Remove phongBan field
           maTuyenXe: result.maTuyenXe // Keep as is since it's now the route code
         };
-        this.dataSource.data = [...this.dataSource.data, newRegistration];
+        
+        // Convert to DangKyPhanXe and save to Firebase
+        const dangKyPhanXe: Omit<DangKyPhanXe, 'ID' | 'createdAt' | 'updatedAt'> = {
+          MaNhanVien: newRegistration.maNhanVien,
+          HoTen: newRegistration.hoTen,
+          DienThoai: newRegistration.dienThoai,
+          PhongBan: '',
+          NgayDangKy: this.createVietnamDate(newRegistration.ngayDangKy),
+          ThoiGianBatDau: newRegistration.thoiGianBatDau,
+          ThoiGianKetThuc: newRegistration.thoiGianKetThuc,
+          LoaiCa: this.mapLoaiCa(newRegistration.loaiCa),
+          NoiDungCongViec: newRegistration.noiDungCongViec || '',
+          DangKyCom: newRegistration.dangKyCom,
+          TramXe: newRegistration.tramXe || '',
+          MaTuyenXe: newRegistration.maTuyenXe || ''
+        };
+
+        // Save to Firebase
+        await this.vehicleDataService.dangKyPhanXe(dangKyPhanXe);
+        
+        // Refresh data from Firebase
+        await this.loadDataFromFirebase();
         this.snackBar.open('Đăng ký mới đã được thêm thành công!', 'Đóng', {
           duration: 3000,
           horizontalPosition: 'right',
@@ -646,6 +682,27 @@ export class DangKyXeComponent implements OnInit {
     return 'Chọn tất cả';
   }
 
+  /**
+   * Format time string to display properly in Excel format
+   */
+  formatTime(timeString: string): string {
+    if (!timeString) return '';
+    
+    // Handle different time formats and convert to Excel format (15h45)
+    if (timeString.includes('h')) {
+      // Already in Excel format
+      return timeString;
+    } else if (timeString.includes(':')) {
+      // Convert from "15:45" format to "15h45"
+      return timeString.replace(':', 'h');
+    } else if (timeString.length === 4 && !isNaN(Number(timeString))) {
+      // Convert from "1545" format to "15h45"
+      return timeString.substring(0, 2) + 'h' + timeString.substring(2);
+    }
+    
+    return timeString;
+  }
+
 
   // ==================== FIREBASE INTEGRATION ====================
   
@@ -654,6 +711,7 @@ export class DangKyXeComponent implements OnInit {
    */
   private async saveRegistrationsToFirebase(registrations: Registration[]): Promise<number> {
     let savedCount = 0;
+    const duplicateErrors: string[] = [];
     
     for (const reg of registrations) {
       try {
@@ -663,7 +721,7 @@ export class DangKyXeComponent implements OnInit {
           HoTen: reg.hoTen,
           DienThoai: reg.dienThoai,
           PhongBan: '', // Remove phongBan field
-          NgayDangKy: new Date(reg.ngayDangKy),
+          NgayDangKy: this.createVietnamDate(reg.ngayDangKy),
           ThoiGianBatDau: reg.thoiGianBatDau,
           ThoiGianKetThuc: reg.thoiGianKetThuc,
           LoaiCa: this.mapLoaiCa(reg.loaiCa),
@@ -672,6 +730,11 @@ export class DangKyXeComponent implements OnInit {
           TramXe: reg.tramXe || '',
           MaTuyenXe: reg.maTuyenXe || ''
         };
+
+        // Debug: Log the conversion
+        console.log(`Converting registration for ${reg.maNhanVien}:`);
+        console.log(`  Original: ThoiGianBatDau="${reg.thoiGianBatDau}", ThoiGianKetThuc="${reg.thoiGianKetThuc}"`);
+        console.log(`  Converted: ThoiGianBatDau="${dangKyPhanXe.ThoiGianBatDau}", ThoiGianKetThuc="${dangKyPhanXe.ThoiGianKetThuc}"`);
 
         // Validate data before saving
         const errors = this.vehicleDataService.validateDangKyPhanXe(dangKyPhanXe);
@@ -688,6 +751,15 @@ export class DangKyXeComponent implements OnInit {
 
         if (alreadyRegistered) {
           console.warn(`Employee ${reg.maNhanVien} already registered for ${reg.ngayDangKy}`);
+          duplicateErrors.push(`${reg.hoTen} (${reg.maNhanVien}) - đã đăng ký cho ngày ${reg.ngayDangKy}`);
+          continue;
+        }
+
+        // Check for duplicate name and station
+        const isDuplicate = await this.checkDuplicateNameAndStation(reg.hoTen, reg.tramXe, reg.ngayDangKy);
+        if (isDuplicate) {
+          console.warn(`Duplicate found: ${reg.hoTen} at ${reg.tramXe} for ${reg.ngayDangKy}`);
+          duplicateErrors.push(`${reg.hoTen} - đã đăng ký tại trạm ${reg.tramXe} cho ngày ${reg.ngayDangKy}`);
           continue;
         }
 
@@ -699,6 +771,19 @@ export class DangKyXeComponent implements OnInit {
         console.error(`Error saving registration for ${reg.maNhanVien}:`, error);
         continue;
       }
+    }
+    
+    // Show duplicate errors if any
+    if (duplicateErrors.length > 0) {
+      this.snackBar.open(
+        `Có ${duplicateErrors.length} đăng ký bị trùng lặp và đã bỏ qua:\n${duplicateErrors.join('\n')}`, 
+        'Đóng', 
+        {
+          duration: 8000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        }
+      );
     }
     
     return savedCount;
@@ -791,5 +876,85 @@ export class DangKyXeComponent implements OnInit {
     };
     
     return mapping[loaiCa] || loaiCa;
+  }
+
+  /**
+   * Check for duplicate name and station combination
+   */
+  private async checkDuplicateNameAndStation(hoTen: string, tramXe: string, ngayDangKy: string): Promise<boolean> {
+    try {
+      const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      
+      return allRegistrations.some(reg => 
+        reg.HoTen === hoTen && 
+        reg.TramXe === tramXe && 
+        reg.NgayDangKy.toISOString().split('T')[0] === ngayDangKy
+      );
+    } catch (error) {
+      console.error('Error checking duplicate name and station:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Create a Date object in Vietnam timezone to avoid timezone conversion issues
+   */
+  private createVietnamDate(dateString: string): Date {
+    // Parse the date string (YYYY-MM-DD format)
+    const [year, month, day] = dateString.split('-').map(Number);
+    
+    // Create date at noon Vietnam time to avoid timezone issues
+    const vietnamDate = new Date();
+    vietnamDate.setFullYear(year, month - 1, day);
+    vietnamDate.setHours(12, 0, 0, 0); // Set to noon to avoid timezone edge cases
+    
+    // Convert to Vietnam timezone
+    const vietnamTime = new Date(vietnamDate.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    
+    return vietnamTime;
+  }
+
+  /**
+   * Export registrations to PDF
+   */
+  async exportToPDF(): Promise<void> {
+    try {
+      if (this.dataSource.data.length === 0) {
+        this.snackBar.open('Không có dữ liệu để xuất PDF!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      // Show loading message
+      const loadingSnackBar = this.snackBar.open('Đang tạo file PDF...', 'Đóng', {
+        duration: 0,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+      // Export to PDF
+      await this.pdfExportService.exportToPDF();
+      
+      // Dismiss loading message
+      loadingSnackBar.dismiss();
+      
+      // Show success message
+      this.snackBar.open('File PDF đã được tạo thành công!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
 }

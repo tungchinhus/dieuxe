@@ -27,10 +27,10 @@ import { RouteDetailCreate } from '../../models/route-detail.model';
           <button mat-raised-button color="primary" (click)="testConnection()">
             Test Connection
           </button>
-          <button mat-raised-button color="accent" (click)="addTestData()">
+          <button [disabled]="true" mat-raised-button color="accent" (click)="addTestData()">
             Add Test Data
           </button>
-          <button mat-raised-button color="warn" (click)="clearData()">
+          <button [disabled]="true" mat-raised-button color="warn" (click)="clearData()">
             Clear Data
           </button>
         </mat-card-actions>
