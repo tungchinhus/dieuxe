@@ -28,8 +28,50 @@
   gap: 16px;
 }
 
-.menu-toggle {
+.menu-toggle-btn {
   color: #5f6368;
+  transition: all 0.2s ease;
+  border-radius: 50%;
+  margin-right: 8px;
+}
+
+.menu-toggle-btn:hover {
+  background-color: rgba(95, 99, 104, 0.08);
+  color: #1a73e8;
+  transform: scale(1.05);
+}
+
+.menu-toggle-btn:active {
+  transform: scale(0.95);
+}
+
+.menu-toggle-btn mat-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+  transition: all 0.2s ease;
+}
+
+/* Animation for icon change */
+.menu-toggle-btn mat-icon {
+  animation: none;
+}
+
+.menu-toggle-btn:hover mat-icon {
+  transform: rotate(90deg);
+}
+
+/* Responsive behavior */
+@media (max-width: 768px) {
+  .menu-toggle-btn {
+    margin-right: 4px;
+  }
+  
+  .menu-toggle-btn mat-icon {
+    font-size: 18px;
+    width: 18px;
+    height: 18px;
+  }
 }
 
 .project-info {
@@ -774,4 +816,64 @@
   border-top: 1px solid #e0e0e0;
   padding-top: 8px;
   margin-bottom: 8px;
+}
+
+/* Header Right Styling */
+.header-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.header-right button {
+  color: #5f6368;
+}
+
+.header-right button:hover {
+  background-color: #f5f5f5;
+}
+
+/* User Menu Styling */
+.user-info {
+  display: flex;
+  align-items: center;
+  padding: 16px;
+  gap: 12px;
+  min-width: 200px;
+}
+
+.user-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background-color: #1a73e8;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.user-details {
+  flex: 1;
+}
+
+.user-name {
+  font-weight: 500;
+  color: #202124;
+  font-size: 14px;
+  margin-bottom: 2px;
+}
+
+.user-email {
+  color: #5f6368;
+  font-size: 12px;
+  margin-bottom: 2px;
+}
+
+.user-role {
+  color: #1a73e8;
+  font-size: 12px;
+  font-weight: 500;
 }

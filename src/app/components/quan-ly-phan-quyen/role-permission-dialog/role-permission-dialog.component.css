@@ -1,0 +1,287 @@
+.dialog-container {
+  min-width: 800px;
+  max-width: 1000px;
+}
+
+h2[mat-dialog-title] {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0 0 1rem 0;
+  padding: 1rem 0;
+  border-bottom: 1px solid #e0e0e0;
+  color: #333;
+}
+
+mat-dialog-content {
+  max-height: 70vh;
+  overflow-y: auto;
+  padding: 1rem 0;
+}
+
+.role-info {
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.role-details h3 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-weight: 500;
+}
+
+.role-details p {
+  margin: 0 0 0.5rem 0;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.permissions-section {
+  margin-top: 1rem;
+}
+
+.permissions-section h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-weight: 500;
+}
+
+.permissions-description {
+  margin: 0 0 1.5rem 0;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.permissions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  max-height: 500px;
+  overflow-y: auto;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border: 1px solid #e9ecef;
+}
+
+.module-section {
+  background-color: white;
+  border-radius: 8px;
+  padding: 1rem;
+  border: 1px solid #e9ecef;
+}
+
+.module-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid #e9ecef;
+}
+
+.module-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0;
+  color: #333;
+  font-weight: 500;
+  font-size: 1rem;
+}
+
+.module-actions {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.select-all-btn, .deselect-all-btn {
+  font-size: 0.75rem;
+  padding: 0.25rem 0.75rem;
+  min-width: auto;
+}
+
+.select-all-btn {
+  color: #007bff;
+}
+
+.deselect-all-btn {
+  color: #6c757d;
+}
+
+.permissions-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 0.75rem;
+}
+
+.permission-checkbox {
+  display: flex;
+  align-items: flex-start;
+  padding: 0.75rem;
+  border-radius: 6px;
+  transition: all 0.2s ease;
+  border: 1px solid #e9ecef;
+}
+
+.permission-checkbox:hover {
+  background-color: #f8f9fa;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.permission-info {
+  display: flex;
+  flex-direction: column;
+  margin-left: 0.5rem;
+  gap: 0.25rem;
+  flex: 1;
+}
+
+.permission-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.permission-icon {
+  color: #007bff;
+  font-size: 1rem;
+  width: 1rem;
+  height: 1rem;
+}
+
+.permission-name {
+  font-weight: 500;
+  color: #333;
+  font-size: 0.875rem;
+}
+
+.permission-action {
+  font-size: 0.75rem;
+  color: #666;
+  background-color: #e9ecef;
+  padding: 0.125rem 0.5rem;
+  border-radius: 12px;
+  display: inline-block;
+  align-self: flex-start;
+}
+
+.permission-description {
+  margin: 0.25rem 0 0 0;
+  font-size: 0.75rem;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
+.permission-summary {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #e3f2fd;
+  border-radius: 8px;
+  border: 1px solid #bbdefb;
+}
+
+.summary-chip {
+  font-size: 0.875rem;
+  height: 32px;
+  padding: 0 12px;
+}
+
+.summary-chip mat-icon {
+  font-size: 1rem;
+  width: 1rem;
+  height: 1rem;
+  margin-right: 0.5rem;
+}
+
+mat-dialog-actions {
+  padding: 1rem 0;
+  border-top: 1px solid #e0e0e0;
+  margin-top: 1rem;
+}
+
+.cancel-button {
+  color: #6c757d;
+}
+
+.submit-button {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1.5rem;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+  .dialog-container {
+    min-width: 90vw;
+    max-width: 95vw;
+  }
+  
+  .module-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.5rem;
+  }
+  
+  .module-actions {
+    width: 100%;
+    justify-content: flex-end;
+  }
+  
+  .permissions-grid {
+    grid-template-columns: 1fr;
+  }
+  
+  .permissions-list {
+    max-height: 400px;
+  }
+}
+
+/* Scrollbar styling */
+.permissions-list::-webkit-scrollbar {
+  width: 6px;
+}
+
+.permissions-list::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 3px;
+}
+
+.permissions-list::-webkit-scrollbar-thumb {
+  background: #c1c1c1;
+  border-radius: 3px;
+}
+
+.permissions-list::-webkit-scrollbar-thumb:hover {
+  background: #a8a8a8;
+}
+
+/* Animation */
+.permission-checkbox {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-5px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Checkbox styling */
+mat-checkbox .mat-checkbox-label {
+  font-size: 0.875rem;
+}
+
+/* Button styling */
+button[disabled] {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

@@ -1,0 +1,89 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>
+    <mat-icon>{{isEdit ? 'edit' : 'add'}}</mat-icon>
+    {{isEdit ? 'Chỉnh sửa Vai trò' : 'Thêm Vai trò Mới'}}
+  </h2>
+
+  <mat-dialog-content>
+    <form [formGroup]="roleForm" class="role-form">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Tên vai trò *</mat-label>
+          <input matInput formControlName="name" placeholder="Nhập tên vai trò (VD: admin)">
+          <mat-error>{{getErrorMessage('name')}}</mat-error>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Tên hiển thị *</mat-label>
+          <input matInput formControlName="displayName" placeholder="Nhập tên hiển thị">
+          <mat-error>{{getErrorMessage('displayName')}}</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Mô tả</mat-label>
+          <textarea matInput formControlName="description" 
+                    placeholder="Nhập mô tả vai trò"
+                    rows="3"></textarea>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <div class="permissions-section">
+          <h4>Quyền hạn *</h4>
+          <p class="permissions-description">Chọn các quyền hạn cho vai trò này</p>
+          
+          <div class="permissions-list">
+            <div *ngFor="let module of getUniqueModules()" class="module-section">
+              <h5 class="module-title">
+                <mat-icon>folder</mat-icon>
+                {{getModuleDisplayName(module)}}
+              </h5>
+              <div class="permissions-grid">
+                <mat-checkbox 
+                  *ngFor="let permission of getPermissionsByModule(module)" 
+                  [checked]="isPermissionSelected(permission.id)"
+                  (change)="onPermissionSelectionChange(permission.id, $event.checked)"
+                  class="permission-checkbox">
+                  <div class="permission-info">
+                    <div class="permission-header">
+                      <mat-icon class="permission-icon">{{getPermissionIcon(permission.action)}}</mat-icon>
+                      <span class="permission-name">{{permission.displayName}}</span>
+                    </div>
+                    <span class="permission-action">{{getActionDisplayName(permission.action)}}</span>
+                  </div>
+                </mat-checkbox>
+              </div>
+            </div>
+          </div>
+          
+          <div *ngIf="selectedPermissions.length === 0" class="error-message">
+            Vui lòng chọn ít nhất một quyền hạn
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <mat-checkbox formControlName="isActive" class="status-checkbox">
+          Vai trò hoạt động
+        </mat-checkbox>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSubmit()"
+            [disabled]="!roleForm.valid || selectedPermissions.length === 0"
+            class="submit-button">
+      <mat-icon>{{isEdit ? 'save' : 'add'}}</mat-icon>
+      {{isEdit ? 'Cập nhật' : 'Tạo mới'}}
+    </button>
+  </mat-dialog-actions>
+</div>

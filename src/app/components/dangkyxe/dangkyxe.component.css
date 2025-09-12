@@ -111,10 +111,34 @@
 .search-container {
   flex: 1;
   min-width: 300px;
+  position: relative;
 }
 
 .search-field {
   width: 100%;
+}
+
+.search-field .mat-mdc-form-field {
+  width: 100%;
+}
+
+.search-field .mat-mdc-form-field-focus-overlay {
+  background-color: rgba(25, 118, 210, 0.04);
+}
+
+.search-field .mat-mdc-form-field-subscript-wrapper {
+  display: none;
+}
+
+/* Clear button styling */
+.search-field button[mat-icon-button] {
+  color: #666;
+  transition: color 0.2s ease;
+}
+
+.search-field button[mat-icon-button]:hover {
+  color: #1976d2;
+  background-color: rgba(25, 118, 210, 0.04);
 }
 
 .button-container {
@@ -141,13 +165,37 @@
   overflow: hidden;
 }
 
+.table-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px 24px 16px 24px;
+  border-bottom: 1px solid #e0e0e0;
+}
+
 .table-title {
   font-size: 1.25rem;
   font-weight: 600;
   color: #333;
   margin: 0;
-  padding: 24px 24px 16px 24px;
-  border-bottom: 1px solid #e0e0e0;
+}
+
+.search-results-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #666;
+  font-size: 0.875rem;
+  background-color: #f5f5f5;
+  padding: 8px 12px;
+  border-radius: 16px;
+  border: 1px solid #e0e0e0;
+}
+
+.search-results-info mat-icon {
+  font-size: 16px;
+  width: 16px;
+  height: 16px;
 }
 
 .table-wrapper {

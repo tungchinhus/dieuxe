@@ -16,10 +16,19 @@
       <div class="search-action-bar">
       <div class="search-container">
         <mat-form-field appearance="outline" class="search-field">
-          <mat-label>Tìm kiếm theo mã nhân viên, tên, số điện thoại...</mat-label>
+          <mat-label>Tìm kiếm nhanh theo họ tên, trạm xe...</mat-label>
           <input matInput 
-                 placeholder="Tìm kiếm theo mã nhân viên, tên, số điện thoại...">
+                 #searchInput
+                 (input)="applyFilter(searchInput.value)"
+                 placeholder="Tìm kiếm nhanh theo họ tên, trạm xe...">
           <mat-icon matSuffix>search</mat-icon>
+          <button mat-icon-button 
+                  matSuffix 
+                  *ngIf="searchInput.value"
+                  (click)="clearSearch(searchInput)"
+                  matTooltip="Xóa tìm kiếm">
+            <mat-icon>clear</mat-icon>
+          </button>
         </mat-form-field>
       </div>
       
@@ -52,17 +61,34 @@
         <button mat-raised-button 
                 color="accent" 
                 [disabled]="dataSource.data.length === 0"
-                (click)="exportToPDF()"
+                [matMenuTriggerFor]="pdfMenu"
                 class="action-button">
           <mat-icon>picture_as_pdf</mat-icon>
           Xuất PDF
         </button>
+        
+        <mat-menu #pdfMenu="matMenu">
+          <button mat-menu-item (click)="exportToPDF()">
+            <mat-icon>description</mat-icon>
+            <span>Phiếu báo làm thêm giờ</span>
+          </button>
+          <button mat-menu-item (click)="exportEmployeeStationPDF()">
+            <mat-icon>people</mat-icon>
+            <span>Danh sách nhân viên theo trạm</span>
+          </button>
+        </mat-menu>
       </div>
     </div>
 
     <!-- Data Display Section -->
     <div class="table-section">
-      <h3 class="table-title">Danh sách đăng ký xe</h3>
+      <div class="table-header">
+        <h3 class="table-title">Danh sách đăng ký xe</h3>
+        <div class="search-results-info" *ngIf="getFilteredCount() !== getTotalCount()">
+          <mat-icon>search</mat-icon>
+          <span>Hiển thị {{ getFilteredCount() }} / {{ getTotalCount() }} kết quả</span>
+        </div>
+      </div>
       <div class="table-wrapper">
         <table mat-table [dataSource]="dataSource" class="data-table">
             <!-- Select Column -->

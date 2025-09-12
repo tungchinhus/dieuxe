@@ -22,6 +22,7 @@ import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
+import { PdfExportEmployeeStationService } from '../../services/pdf-export-employee-station.service';
 import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
@@ -82,7 +83,8 @@ export class DangKyXeComponent implements OnInit {
     private excelService: ExcelService,
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
-    private pdfExportService: PdfExportService
+    private pdfExportService: PdfExportService,
+    private pdfExportEmployeeStationService: PdfExportEmployeeStationService
   ) {}
 
   toggleSidenav(): void {
@@ -99,6 +101,74 @@ export class DangKyXeComponent implements OnInit {
   ngAfterViewInit(): void {
     this.dataSource.paginator = this.paginator;
     this.dataSource.sort = this.sort;
+  }
+
+  /**
+   * Apply filter to the data source for quick search
+   * @param filterValue - The search term
+   */
+  applyFilter(filterValue: string): void {
+    // Remove extra spaces and convert to lowercase
+    const searchTerm = filterValue.trim().toLowerCase();
+    
+    // Set up custom filter predicate for searching in hoTen and tramXe
+    this.dataSource.filterPredicate = (data: Registration, filter: string) => {
+      if (!filter) return true;
+      
+      const searchData = filter.toLowerCase();
+      
+      // Search in hoTen (employee name)
+      const hoTenMatch = data.hoTen?.toLowerCase().includes(searchData) || false;
+      
+      // Search in tramXe (station)
+      const tramXeMatch = data.tramXe?.toLowerCase().includes(searchData) || false;
+      
+      // Search in maNhanVien (employee code) for additional functionality
+      const maNhanVienMatch = data.maNhanVien?.toLowerCase().includes(searchData) || false;
+      
+      // Search in dienThoai (phone) for additional functionality
+      const dienThoaiMatch = data.dienThoai?.toLowerCase().includes(searchData) || false;
+      
+      return hoTenMatch || tramXeMatch || maNhanVienMatch || dienThoaiMatch;
+    };
+    
+    // Apply the filter
+    this.dataSource.filter = searchTerm;
+    
+    // Reset to first page when filtering
+    if (this.dataSource.paginator) {
+      this.dataSource.paginator.firstPage();
+    }
+  }
+
+  /**
+   * Clear search filter and reset to show all data
+   * @param searchInput - Reference to the search input element
+   */
+  clearSearch(searchInput: HTMLInputElement): void {
+    searchInput.value = '';
+    this.dataSource.filter = '';
+    
+    // Reset to first page
+    if (this.dataSource.paginator) {
+      this.dataSource.paginator.firstPage();
+    }
+  }
+
+  /**
+   * Get the number of filtered results
+   * @returns Number of filtered results
+   */
+  getFilteredCount(): number {
+    return this.dataSource.filteredData.length;
+  }
+
+  /**
+   * Get the total number of records
+   * @returns Total number of records
+   */
+  getTotalCount(): number {
+    return this.dataSource.data.length;
   }
 
   private loadMockData(): void {
@@ -790,7 +860,7 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
-   * Load data from Firebase and update the table
+   * Load data from Firebase and update the table - only for today's date
    */
   async loadDataFromFirebase(): Promise<void> {
     try {
@@ -804,8 +874,22 @@ export class DangKyXeComponent implements OnInit {
         return;
       }
       
+      // Get today's date in YYYY-MM-DD format
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      console.log('Filtering data for today:', todayString);
+      
+      // Filter data to only include today's registrations
+      const todayRegistrations = dangKyList.filter(dangKy => {
+        if (!dangKy.NgayDangKy) return false;
+        const registrationDate = dangKy.NgayDangKy.toISOString().split('T')[0];
+        return registrationDate === todayString;
+      });
+      
+      console.log(`Found ${todayRegistrations.length} registrations for today out of ${dangKyList.length} total`);
+      
       // Convert DangKyPhanXe to Registration format for display
-      const registrations: Registration[] = dangKyList.map((dangKy, index) => {
+      const registrations: Registration[] = todayRegistrations.map((dangKy, index) => {
         console.log(`Processing item ${index}:`, {
           ID: dangKy.ID,
           MaNhanVien: dangKy.MaNhanVien,
@@ -830,9 +914,9 @@ export class DangKyXeComponent implements OnInit {
         };
       });
 
-      console.log('Converted registrations:', registrations);
+      console.log('Converted registrations for today:', registrations);
       this.dataSource.data = registrations;
-      console.log(`Loaded ${registrations.length} registrations from Firebase`);
+      console.log(`Loaded ${registrations.length} registrations for today from Firebase`);
     } catch (error) {
       console.error('Error loading data from Firebase:', error);
       // Fallback to empty array instead of showing error
@@ -951,6 +1035,41 @@ export class DangKyXeComponent implements OnInit {
     } catch (error) {
       console.error('Error exporting PDF:', error);
       this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
+   * Export employee station PDF
+   */
+  async exportEmployeeStationPDF(): Promise<void> {
+    try {
+      // Show loading message
+      const loadingSnackBar = this.snackBar.open('Đang tạo file PDF danh sách nhân viên...', 'Đóng', {
+        duration: 0,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+      // Export to PDF
+      await this.pdfExportEmployeeStationService.exportEmployeeStationPDF();
+      
+      // Dismiss loading message
+      loadingSnackBar.dismiss();
+      
+      // Show success message
+      this.snackBar.open('File PDF danh sách nhân viên đã được tạo thành công!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting employee station PDF:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file PDF danh sách nhân viên!', 'Đóng', {
         duration: 5000,
         horizontalPosition: 'right',
         verticalPosition: 'top'

@@ -35,7 +35,7 @@ export class PdfExportService {
       }
 
       // 2) Gom theo tuyến
-      const routeGroups = this.groupRegistrationsByRoute(todayRegistrations);
+      const routeGroups = await this.groupRegistrationsByRoute(todayRegistrations);
 
       // 3) Tạo PDF từ HTML (mỗi tuyến một trang)
       const pdf = new jsPDF('p', 'mm', 'a4');
@@ -92,13 +92,13 @@ export class PdfExportService {
   }
 
   /**
-   * Gom nhóm theo tuyến dựa trên tên trạm
+   * Gom nhóm theo tuyến dựa trên mã tuyến xe
    */
-  private groupRegistrationsByRoute(registrations: Registration[]): RouteInfo[] {
+  private async groupRegistrationsByRoute(registrations: Registration[]): Promise<RouteInfo[]> {
     const routeMap = new Map<string, RouteInfo>();
 
     for (const reg of registrations) {
-      const routeInfo = this.determineRouteFromStation(reg.tramXe);
+      const routeInfo = await this.determineRouteFromCode(reg.maTuyenXe, reg.hoTen);
 
       if (!routeMap.has(routeInfo.routeName)) {
         routeMap.set(routeInfo.routeName, {
@@ -120,57 +120,52 @@ export class PdfExportService {
   }
 
   /**
-   * Suy ra thông tin tuyến từ tên trạm
-   * (giữ nguyên mapping như file của bạn)
+   * Suy ra thông tin tuyến từ mã tuyến xe - lấy từ database
    */
-  private determineRouteFromStation(stationName: string): RouteInfo {
-    const station = (stationName || '').toLowerCase();
-
-    // Route 1: HCM 1 - 16 chỗ
-    if (station.includes('hcm 1') || station.includes('hcm1')) {
+  private async determineRouteFromCode(maTuyenXe: string, hoTen?: string): Promise<RouteInfo> {
+    if (!maTuyenXe) {
       return {
-        routeName: 'HCM 1',
+        routeName: 'Chưa phân tuyến',
         vehicleType: '16chỗ',
-        driverInfo: { name: 'TX Thắng', phone: '0962803228', vehicleNumber: '16C 60F01800' }
+        driverInfo: { name: 'TX Chung', phone: '0900000000', vehicleNumber: '16C 60F01899' }
       };
     }
 
-    // Route 2: Phước Tân - 29 chỗ
-    if (station.includes('phước tân') || station.includes('phuoc tan') ||
-        station.includes('cây xăng') || station.includes('cay xang')) {
-      return {
-        routeName: 'Phước Tân (Cây xăng Toàn Dung)',
-        vehicleType: '29chỗ',
-        driverInfo: { name: 'TX Minh', phone: '0901234567', vehicleNumber: '29C 60F01801' }
-      };
+    try {
+      // Lấy thông tin tuyến xe từ database
+      const routeInfo = await this.firestoreService.getLichTrinhXeByMaTuyen(maTuyenXe);
+      
+      if (routeInfo && routeInfo.length > 0) {
+        const route = routeInfo[0];
+        return {
+          routeName: route.TenTuyenXe || maTuyenXe,
+          vehicleType: this.determineVehicleType(route.SoGheToiDa),
+          driverInfo: {
+            name: 'TX ' + (route.MaXe || 'Chung'),
+            phone: '0900000000',
+            vehicleNumber: route.MaXe || '16C 60F01899'
+          }
+        };
+      }
+    } catch (error) {
+      console.error('Error getting route info from database:', error);
     }
 
-    // Route 3: Ngã 3 Bến Gỗ - 45 chỗ
-    if (station.includes('ngã 3') || station.includes('nga 3') ||
-        station.includes('bến gỗ') || station.includes('ben go')) {
-      return {
-        routeName: 'Ngã 3 Bến Gỗ',
-        vehicleType: '45chỗ',
-        driverInfo: { name: 'TX Long', phone: '0907654321', vehicleNumber: '45C 60F01802' }
-      };
-    }
-
-    // Route 4: Ngã 4 Thủ Đức - 29 chỗ
-    if (station.includes('ngã 4') || station.includes('nga 4') ||
-        station.includes('thủ đức') || station.includes('thu duc')) {
-      return {
-        routeName: 'Ngã 4 Thủ Đức',
-        vehicleType: '29chỗ',
-        driverInfo: { name: 'TX Hùng', phone: '0909876543', vehicleNumber: '29C 60F01803' }
-      };
-    }
-
-    // Default
+    // Fallback: sử dụng mã tuyến xe làm tên tuyến
     return {
-      routeName: 'Tuyến chung',
+      routeName: maTuyenXe,
       vehicleType: '16chỗ',
       driverInfo: { name: 'TX Chung', phone: '0900000000', vehicleNumber: '16C 60F01899' }
     };
+  }
+
+  /**
+   * Xác định loại xe dựa trên số ghế tối đa
+   */
+  private determineVehicleType(soGheToiDa: number): '16chỗ' | '29chỗ' | '45chỗ' {
+    if (soGheToiDa <= 16) return '16chỗ';
+    if (soGheToiDa <= 29) return '29chỗ';
+    return '45chỗ';
   }
 
   /**

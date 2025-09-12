@@ -1,0 +1,68 @@
+<mat-toolbar class="app-header">
+  <div class="header-content">
+    <!-- Logo and Title -->
+    <div class="header-left">
+      <div class="logo">
+        <mat-icon class="logo-icon">directions_bus</mat-icon>
+        <span class="logo-text">Dieuxe</span>
+      </div>
+    </div>
+
+    <!-- User Info and Actions -->
+    <div class="header-right" *ngIf="currentUser">
+      <div class="user-info">
+        <div class="user-details">
+          <span class="user-name">{{currentUser.fullName}}</span>
+          <div class="user-meta">
+            <mat-chip [color]="getRoleColor(currentUser.roles[0])" class="role-chip">
+              {{getRoleDisplayName(currentUser.roles[0])}}
+            </mat-chip>
+            <span class="last-login">{{formatLastLogin(currentUser.lastLogin)}}</span>
+          </div>
+        </div>
+        
+        <button mat-icon-button 
+                [matMenuTriggerFor]="userMenu"
+                class="user-avatar-button">
+          <div class="user-avatar">
+            {{getInitials(currentUser.fullName)}}
+          </div>
+        </button>
+        
+        <mat-menu #userMenu="matMenu" class="user-menu">
+          <div class="menu-header">
+            <div class="menu-user-info">
+              <div class="menu-avatar">
+                {{getInitials(currentUser.fullName)}}
+              </div>
+              <div class="menu-details">
+                <div class="menu-name">{{currentUser.fullName}}</div>
+                <div class="menu-email">{{currentUser.email}}</div>
+                <div class="menu-role">{{getRoleDisplayName(currentUser.roles[0])}}</div>
+              </div>
+            </div>
+          </div>
+          
+          <mat-divider></mat-divider>
+          
+          <button mat-menu-item (click)="goToProfile()">
+            <mat-icon>person</mat-icon>
+            <span>Thông tin cá nhân</span>
+          </button>
+          
+          <button mat-menu-item (click)="goToSettings()">
+            <mat-icon>settings</mat-icon>
+            <span>Cài đặt</span>
+          </button>
+          
+          <mat-divider></mat-divider>
+          
+          <button mat-menu-item (click)="logout()" class="logout-item">
+            <mat-icon>logout</mat-icon>
+            <span>Đăng xuất</span>
+          </button>
+        </mat-menu>
+      </div>
+    </div>
+  </div>
+</mat-toolbar>

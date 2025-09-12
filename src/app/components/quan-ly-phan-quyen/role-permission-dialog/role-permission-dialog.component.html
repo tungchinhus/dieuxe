@@ -1,0 +1,96 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>
+    <mat-icon>admin_panel_settings</mat-icon>
+    Quản lý Quyền hạn - {{data.role.displayName}}
+  </h2>
+
+  <mat-dialog-content>
+    <div class="role-info">
+      <div class="role-details">
+        <h3>{{data.role.displayName}}</h3>
+        <p>{{data.role.name}} • {{data.role.description || 'Không có mô tả'}}</p>
+        <p>Trạng thái: 
+          <mat-chip [color]="data.role.isActive ? 'primary' : 'warn'">
+            {{data.role.isActive ? 'Hoạt động' : 'Vô hiệu hóa'}}
+          </mat-chip>
+        </p>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <div class="permissions-section">
+      <h4>Quyền hạn hiện tại</h4>
+      <p class="permissions-description">Chọn các quyền hạn cho vai trò này</p>
+      
+      <div class="permissions-list">
+        <div *ngFor="let module of getUniqueModules()" class="module-section">
+          <div class="module-header">
+            <h5 class="module-title">
+              <mat-icon>folder</mat-icon>
+              {{getModuleDisplayName(module)}}
+            </h5>
+            <div class="module-actions">
+              <button mat-button 
+                      (click)="selectAllInModule(module)"
+                      [disabled]="isAllSelectedInModule(module)"
+                      class="select-all-btn">
+                <mat-icon>check_box</mat-icon>
+                Chọn tất cả
+              </button>
+              <button mat-button 
+                      (click)="deselectAllInModule(module)"
+                      [disabled]="!isSomeSelectedInModule(module) && !isAllSelectedInModule(module)"
+                      class="deselect-all-btn">
+                <mat-icon>check_box_outline_blank</mat-icon>
+                Bỏ chọn tất cả
+              </button>
+            </div>
+          </div>
+          
+          <div class="permissions-grid">
+            <mat-checkbox 
+              *ngFor="let permission of getPermissionsByModule(module)" 
+              [checked]="isPermissionSelected(permission.id)"
+              (change)="onPermissionSelectionChange(permission.id, $event.checked)"
+              class="permission-checkbox">
+              <div class="permission-info">
+                <div class="permission-header">
+                  <mat-icon class="permission-icon">{{getPermissionIcon(permission.action)}}</mat-icon>
+                  <span class="permission-name">{{permission.displayName}}</span>
+                </div>
+                <span class="permission-action">{{getActionDisplayName(permission.action)}}</span>
+                <p class="permission-description" *ngIf="permission.description">
+                  {{permission.description}}
+                </p>
+              </div>
+            </mat-checkbox>
+          </div>
+        </div>
+      </div>
+      
+      <div class="permission-summary">
+        <mat-chip-listbox>
+          <mat-chip-option [disabled]="true" class="summary-chip">
+            <mat-icon>security</mat-icon>
+            Tổng cộng: {{selectedPermissions.length}} quyền đã chọn
+          </mat-chip-option>
+        </mat-chip-listbox>
+      </div>
+    </div>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSubmit()"
+            class="submit-button">
+      <mat-icon>save</mat-icon>
+      Lưu thay đổi
+    </button>
+  </mat-dialog-actions>
+</div>

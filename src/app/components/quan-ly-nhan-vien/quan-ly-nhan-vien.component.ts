@@ -68,7 +68,7 @@ export class QuanLyNhanVienComponent implements OnInit {
   constructor(
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private firestoreService: FirestoreService
+    private firestoreService: FirestoreService,
   ) {}
 
   ngOnInit(): void {

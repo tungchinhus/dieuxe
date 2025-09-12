@@ -2,13 +2,39 @@ import { Injectable } from '@angular/core';
 import * as XLSX from 'xlsx';
 import { Registration } from '../models/registration.model';
 import { RouteDetail, RouteDetailCreate } from '../models/route-detail.model';
+import { FirestoreService } from './firestore.service';
+import { NhanVien } from '../models/employee.model';
 
 @Injectable({
   providedIn: 'root'
 })
 export class ExcelService {
+  private employeeCache: NhanVien[] | null = null;
+  private cacheTimestamp: number = 0;
+  private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 
-  constructor() {}
+  constructor(private firestoreService: FirestoreService) {}
+
+  /**
+   * Get employees with caching
+   * @returns Promise with array of employees
+   */
+  private async getEmployeesWithCache(): Promise<NhanVien[]> {
+    const now = Date.now();
+    
+    // Check if cache is valid
+    if (this.employeeCache && (now - this.cacheTimestamp) < this.CACHE_DURATION) {
+      console.log('Using cached employee data');
+      return this.employeeCache;
+    }
+    
+    // Fetch fresh data
+    console.log('Fetching fresh employee data from database');
+    this.employeeCache = await this.firestoreService.getAllNhanVien();
+    this.cacheTimestamp = now;
+    
+    return this.employeeCache;
+  }
 
   /**
    * Read Excel file and convert to Registration array
@@ -19,7 +45,7 @@ export class ExcelService {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       
-      reader.onload = (e: any) => {
+      reader.onload = async (e: any) => {
         try {
           const data = new Uint8Array(e.target.result);
           const workbook = XLSX.read(data, { type: 'array' });
@@ -31,8 +57,8 @@ export class ExcelService {
           // Convert to JSON
           const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
           
-          // Convert to Registration objects
-          const registrations = this.convertToRegistrations(jsonData);
+          // Convert to Registration objects with database lookup
+          const registrations = await this.convertToRegistrations(jsonData);
           resolve(registrations);
         } catch (error) {
           reject(new Error('Error reading Excel file: ' + error));
@@ -50,9 +76,9 @@ export class ExcelService {
   /**
    * Convert Excel data to Registration objects
    * @param data - Raw Excel data
-   * @returns Array of Registration objects
+   * @returns Promise with array of Registration objects
    */
-  private convertToRegistrations(data: any[]): Registration[] {
+  private async convertToRegistrations(data: any[]): Promise<Registration[]> {
     const registrations: Registration[] = [];
     
     // Find the header row (contains "Mã nhân viên")
@@ -90,18 +116,26 @@ export class ExcelService {
         console.log(`Row ${i} data:`, row);
         console.log(`Row ${i} length:`, row.length);
         
+        // Extract basic information
+        const hoTen = this.getStringValue(row[2]) || ''; // Cột C: Họ và tên
+        const tramXe = this.getStringValue(row[3]) || ''; // Cột D: Trạm xe
+        const quanLyNhanVien = this.getStringValue(row[6]) || ''; // Cột G: Quản lý nhân viên (if exists)
+        
+        // Get route information using database lookup
+        const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen, quanLyNhanVien);
+        
         const registration: Registration = {
           id: i, // Temporary ID
           maNhanVien: this.getStringValue(row[1]) || `NV${i.toString().padStart(3, '0')}`, // Cột B: Mã nhân viên
-          hoTen: this.getStringValue(row[2]) || '', // Cột C: Họ và tên
+          hoTen: hoTen, // Cột C: Họ và tên
           dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại
           phongBan: '', // Default empty for now
           ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
           loaiCa: this.extractShiftFromTime(this.getStringValue(row[7])) || 'PT-cc', // Cột H: Ca (extract from time)
           thoiGianBatDau: this.getStringValue(row[8]) || '', // Cột H: Thời gian làm việc (Từ...)
           thoiGianKetThuc: this.getStringValue(row[9]) || '', // Cột I: Thời gian làm việc (Đến...)
-          maTuyenXe: this.extractRouteFromStation(this.getStringValue(row[3])) || '', // Cột D: Trạm xe -> derive route
-          tramXe: this.getStringValue(row[3]) || '', // Cột D: Trạm xe
+          maTuyenXe: maTuyenXe, // Derived from database lookup
+          tramXe: tramXe, // Cột D: Trạm xe
           noiDungCongViec: this.getStringValue(row[5]) || '', // Cột F: Nội dung công việc
           dangKyCom: false // Default false for overtime work
         };
@@ -109,6 +143,7 @@ export class ExcelService {
         // Debug: Log the extracted time values
         console.log(`Row ${i} - ThoiGianBatDau: ${registration.thoiGianBatDau}, ThoiGianKetThuc: ${registration.thoiGianKetThuc}`);
         console.log(`Row ${i} - Raw data from row[7]: "${this.getStringValue(row[7])}", row[8]: "${this.getStringValue(row[8])}"`);
+        console.log(`Row ${i} - Derived maTuyenXe: "${maTuyenXe}" for hoTen: "${hoTen}", tramXe: "${tramXe}"`);
         
         console.log(`Converted registration ${i}:`, registration);
         registrations.push(registration);
@@ -289,30 +324,169 @@ export class ExcelService {
   }
 
   /**
-   * Extract route from station name
+   * Extract route from station name using database lookup
+   * @param stationName - Station name from Excel
+   * @param hoTen - Employee full name
+   * @param quanLyNhanVien - Employee manager (optional)
+   * @returns Promise with route code
+   */
+  private async extractRouteFromStationWithDatabase(stationName: string, hoTen: string, quanLyNhanVien?: string): Promise<string> {
+    if (!stationName) return '';
+    
+    try {
+      console.log(`Looking up route for: Station="${stationName}", Name="${hoTen}", Manager="${quanLyNhanVien}"`);
+      
+      // First, try to find employee in database by name and station
+      const employees = await this.getEmployeesWithCache();
+      
+      // Try exact match first (name + station)
+      let matchingEmployee = employees.find(emp => 
+        emp.HoTen && emp.HoTen.toLowerCase().includes(hoTen.toLowerCase()) &&
+        emp.TramXe && emp.TramXe.toLowerCase().includes(stationName.toLowerCase())
+      );
+      
+      if (matchingEmployee && matchingEmployee.MaTuyenXe) {
+        console.log(`Found exact match: ${matchingEmployee.HoTen}, Route: ${matchingEmployee.MaTuyenXe}`);
+        return matchingEmployee.MaTuyenXe;
+      }
+      
+      // Try fuzzy match by name only (if station doesn't match exactly)
+      if (!matchingEmployee) {
+        matchingEmployee = employees.find(emp => 
+          emp.HoTen && this.isNameMatch(emp.HoTen, hoTen)
+        );
+        
+        if (matchingEmployee && matchingEmployee.MaTuyenXe) {
+          console.log(`Found fuzzy name match: ${matchingEmployee.HoTen}, Route: ${matchingEmployee.MaTuyenXe}`);
+          return matchingEmployee.MaTuyenXe;
+        }
+      }
+      
+      // Try to find by manager if provided
+      if (!matchingEmployee && quanLyNhanVien) {
+        const managerEmployees = employees.filter(emp => 
+          emp.HoTen && this.isNameMatch(emp.HoTen, quanLyNhanVien)
+        );
+        
+        if (managerEmployees.length > 0) {
+          // Get the most common route for this manager's team
+          const routeCounts: { [key: string]: number } = {};
+          managerEmployees.forEach(emp => {
+            if (emp.MaTuyenXe) {
+              routeCounts[emp.MaTuyenXe] = (routeCounts[emp.MaTuyenXe] || 0) + 1;
+            }
+          });
+          
+          const mostCommonRoute = Object.keys(routeCounts).reduce((a, b) => 
+            routeCounts[a] > routeCounts[b] ? a : b
+          );
+          
+          console.log(`Using most common route for manager "${quanLyNhanVien}": ${mostCommonRoute}`);
+          return mostCommonRoute;
+        }
+      }
+      
+      // Try to find by station only
+      const stationEmployees = employees.filter(emp => 
+        emp.TramXe && emp.TramXe.toLowerCase().includes(stationName.toLowerCase())
+      );
+      
+      if (stationEmployees.length > 0) {
+        // Get the most common route for this station
+        const routeCounts: { [key: string]: number } = {};
+        stationEmployees.forEach(emp => {
+          if (emp.MaTuyenXe) {
+            routeCounts[emp.MaTuyenXe] = (routeCounts[emp.MaTuyenXe] || 0) + 1;
+          }
+        });
+        
+        const mostCommonRoute = Object.keys(routeCounts).reduce((a, b) => 
+          routeCounts[a] > routeCounts[b] ? a : b
+        );
+        
+        console.log(`Using most common route for station "${stationName}": ${mostCommonRoute}`);
+        return mostCommonRoute;
+      }
+      
+      // Fallback to hardcoded mapping if no database match
+      console.log(`No database match found, using hardcoded mapping for station: ${stationName}`);
+      return this.extractRouteFromStationHardcoded(stationName);
+      
+    } catch (error) {
+      console.error('Error looking up route from database:', error);
+      // Fallback to hardcoded mapping on error
+      return this.extractRouteFromStationHardcoded(stationName);
+    }
+  }
+
+  /**
+   * Check if two names match (fuzzy matching)
+   * @param name1 - First name
+   * @param name2 - Second name
+   * @returns True if names match
+   */
+  private isNameMatch(name1: string, name2: string): boolean {
+    if (!name1 || !name2) return false;
+    
+    const cleanName1 = name1.toLowerCase().trim().replace(/\s+/g, ' ');
+    const cleanName2 = name2.toLowerCase().trim().replace(/\s+/g, ' ');
+    
+    // Exact match
+    if (cleanName1 === cleanName2) return true;
+    
+    // Check if one name contains the other
+    if (cleanName1.includes(cleanName2) || cleanName2.includes(cleanName1)) return true;
+    
+    // Check if last names match (split by space and compare last parts)
+    const parts1 = cleanName1.split(' ');
+    const parts2 = cleanName2.split(' ');
+    
+    if (parts1.length > 0 && parts2.length > 0) {
+      const lastName1 = parts1[parts1.length - 1];
+      const lastName2 = parts2[parts2.length - 1];
+      
+      if (lastName1 === lastName2 && lastName1.length > 2) {
+        return true;
+      }
+    }
+    
+    return false;
+  }
+
+  /**
+   * Extract route from station name using hardcoded mapping (fallback)
    * @param stationName - Station name from Excel
    * @returns Route code
    */
-  private extractRouteFromStation(stationName: string): string {
+  private extractRouteFromStationHardcoded(stationName: string): string {
     if (!stationName) return '';
     
     const station = stationName.toLowerCase();
     
     // Map stations to routes based on common patterns
     if (station.includes('tam hiệp') || station.includes('công viên')) {
-      return 'Tuyến 3 - Vòng xoay Tam Hiệp';
+      return 'T3';
     }
     if (station.includes('thủ đức') || station.includes('ngã 4')) {
-      return 'Tuyến 2 - Ngã 3 Vũng Tàu';
+      return 'T2';
     }
     if (station.includes('bv 7b') || station.includes('bệnh viện')) {
-      return 'Tuyến 4 - KCN Long Bình';
+      return 'T4';
     }
     if (station.includes('huỳnh văn lũy') || station.includes('metro')) {
-      return 'Tuyến 1 - KCN Biên Hòa 2';
+      return 'T1';
     }
     
     return stationName; // Return original if no mapping found
+  }
+
+  /**
+   * Extract route from station name (legacy method for backward compatibility)
+   * @param stationName - Station name from Excel
+   * @returns Route code
+   */
+  private extractRouteFromStation(stationName: string): string {
+    return this.extractRouteFromStationHardcoded(stationName);
   }
 
   /**
@@ -527,5 +701,34 @@ export class ExcelService {
     const today = new Date();
     const vietnamDate = new Date(today.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     return vietnamDate.toISOString().split('T')[0];
+  }
+
+  /**
+   * Test method to demonstrate route lookup functionality
+   * @param stationName - Station name to test
+   * @param hoTen - Employee name to test
+   * @param quanLyNhanVien - Manager name to test (optional)
+   * @returns Promise with route lookup result
+   */
+  async testRouteLookup(stationName: string, hoTen: string, quanLyNhanVien?: string): Promise<{
+    stationName: string;
+    hoTen: string;
+    quanLyNhanVien?: string;
+    foundRoute: string;
+    lookupMethod: string;
+    timestamp: string;
+  }> {
+    const startTime = Date.now();
+    const foundRoute = await this.extractRouteFromStationWithDatabase(stationName, hoTen, quanLyNhanVien);
+    const endTime = Date.now();
+    
+    return {
+      stationName,
+      hoTen,
+      quanLyNhanVien,
+      foundRoute,
+      lookupMethod: foundRoute ? 'Database lookup' : 'Hardcoded fallback',
+      timestamp: new Date().toISOString()
+    };
   }
 }

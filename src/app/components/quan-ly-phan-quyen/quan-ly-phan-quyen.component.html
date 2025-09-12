@@ -1,0 +1,205 @@
+<div class="container">
+  <!-- Main Content Area -->
+  <div class="main-content">
+    <!-- Top Header Bar -->
+    <div class="top-header">
+      <div class="header-content">
+        <h1 class="header-title">Quản lý Phân quyền</h1>
+        <p class="header-subtitle">Quản lý vai trò và quyền hạn trong hệ thống</p>
+      </div>
+    </div>
+
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+      <!-- Search and Action Section -->
+      <div class="search-action-bar">
+        <div class="search-container">
+          <mat-form-field appearance="outline" class="search-field">
+            <mat-label>Tìm kiếm theo tên vai trò, mô tả...</mat-label>
+            <input matInput 
+                   placeholder="Tìm kiếm theo tên vai trò, mô tả..."
+                   (input)="applyFilter($event)">
+            <mat-icon matSuffix>search</mat-icon>
+          </mat-form-field>
+        </div>
+        
+        <div class="button-container">
+          <button mat-raised-button 
+                  color="primary" 
+                  (click)="openAddRoleDialog()"
+                  class="action-button">
+            <mat-icon>add</mat-icon>
+            Thêm Vai trò
+          </button>
+          
+          <button mat-raised-button 
+                  color="warn" 
+                  [disabled]="getSelectedCount() === 0"
+                  (click)="deleteSelectedRoles()"
+                  class="action-button">
+            <mat-icon>delete</mat-icon>
+            Xóa Đã chọn ({{ getSelectedCount() }})
+          </button>
+        </div>
+      </div>
+
+      <!-- Data Display Section -->
+      <div class="table-section">
+        <h3 class="table-title">Danh sách vai trò</h3>
+        <div class="table-wrapper">
+          <table mat-table [dataSource]="dataSource" class="data-table">
+            <!-- Select Column -->
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef>
+                <mat-checkbox
+                  (change)="$event ? masterToggle() : null"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="isIndeterminate()"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </th>
+              <td mat-cell *matCellDef="let element">
+                <mat-checkbox
+                  (click)="$event.stopPropagation()"
+                  (change)="$event ? toggleSelection(element) : null"
+                  [checked]="isSelected(element)"
+                  [disabled]="isSystemRole(element.name)"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </td>
+            </ng-container>
+
+            <!-- Name Column -->
+            <ng-container matColumnDef="name">
+              <th mat-header-cell *matHeaderCellDef>Tên Vai trò</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="role-info">
+                  <div class="role-header">
+                    <mat-icon *ngIf="isSystemRole(element.name)" 
+                              [color]="getRoleColor(element.name)"
+                              class="system-role-icon">
+                      {{getSystemRoleIcon(element.name)}}
+                    </mat-icon>
+                    <span class="role-name">{{element.name}}</span>
+                    <mat-chip *ngIf="isSystemRole(element.name)" 
+                              [color]="getRoleColor(element.name)"
+                              class="system-chip">
+                      Hệ thống
+                    </mat-chip>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Display Name Column -->
+            <ng-container matColumnDef="displayName">
+              <th mat-header-cell *matHeaderCellDef>Tên Hiển thị</th>
+              <td mat-cell *matCellDef="let element">
+                <span class="display-name">{{element.displayName}}</span>
+              </td>
+            </ng-container>
+
+            <!-- Description Column -->
+            <ng-container matColumnDef="description">
+              <th mat-header-cell *matHeaderCellDef>Mô tả</th>
+              <td mat-cell *matCellDef="let element">
+                <span class="description">{{element.description || 'Không có mô tả'}}</span>
+              </td>
+            </ng-container>
+
+            <!-- Permissions Column -->
+            <ng-container matColumnDef="permissions">
+              <th mat-header-cell *matHeaderCellDef>Quyền hạn</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="permissions-info">
+                  <mat-chip [color]="getRoleColor(element.name)" class="permission-count">
+                    {{getPermissionCount(element)}} quyền
+                  </mat-chip>
+                  <div class="permission-preview" *ngIf="element.permissions && element.permissions.length > 0">
+                    <span *ngFor="let permission of element.permissions.slice(0, 2)" 
+                          class="permission-tag">
+                      {{permission.displayName}}
+                    </span>
+                    <span *ngIf="element.permissions.length > 2" 
+                          class="permission-more">
+                      +{{element.permissions.length - 2}} khác
+                    </span>
+                  </div>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Status Column -->
+            <ng-container matColumnDef="isActive">
+              <th mat-header-cell *matHeaderCellDef>Trạng thái</th>
+              <td mat-cell *matCellDef="let element">
+                <mat-chip [color]="getStatusColor(element.isActive)">
+                  {{getStatusText(element.isActive)}}
+                </mat-chip>
+              </td>
+            </ng-container>
+
+            <!-- User Count Column -->
+            <ng-container matColumnDef="userCount">
+              <th mat-header-cell *matHeaderCellDef>Số người dùng</th>
+              <td mat-cell *matCellDef="let element">
+                <div class="user-count">
+                  <mat-icon>person</mat-icon>
+                  <span>{{getUserCount(element)}}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let element">
+                <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{role: element}">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #menu="matMenu">
+                  <ng-template matMenuContent let-role="role">
+                    <button mat-menu-item (click)="editRole(role)" 
+                            [disabled]="isSystemRole(role.name)">
+                      <mat-icon>edit</mat-icon>
+                      <span>Chỉnh sửa</span>
+                    </button>
+                    <button mat-menu-item (click)="manageRolePermissions(role)">
+                      <mat-icon>admin_panel_settings</mat-icon>
+                      <span>Quản lý quyền hạn</span>
+                    </button>
+                    <button mat-menu-item (click)="toggleRoleStatus(role)"
+                            [disabled]="isSystemRole(role.name)">
+                      <mat-icon>{{role.isActive ? 'block' : 'check_circle'}}</mat-icon>
+                      <span>{{role.isActive ? 'Vô hiệu hóa' : 'Kích hoạt'}}</span>
+                    </button>
+                    <mat-divider></mat-divider>
+                    <button mat-menu-item (click)="deleteRole(role)" 
+                            [disabled]="isSystemRole(role.name)"
+                            class="delete-action">
+                      <mat-icon>delete</mat-icon>
+                      <span>Xóa</span>
+                    </button>
+                  </ng-template>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                class="table-row"
+                [class.system-role]="isSystemRole(row.name)">
+            </tr>
+          </table>
+          
+          <mat-paginator 
+            [pageSizeOptions]="[5, 10, 25, 50]" 
+            [pageSize]="10" 
+            showFirstLastButtons
+            aria-label="Chọn trang">
+          </mat-paginator>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

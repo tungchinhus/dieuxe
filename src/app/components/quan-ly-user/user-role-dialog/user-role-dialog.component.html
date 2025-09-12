@@ -1,0 +1,109 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>
+    <mat-icon>admin_panel_settings</mat-icon>
+    Quản lý Vai trò - {{data.user.fullName}}
+  </h2>
+
+  <mat-dialog-content>
+    <div class="user-info">
+      <div class="user-details">
+        <h3>{{data.user.fullName}}</h3>
+        <p>{{data.user.email}} • {{data.user.username}}</p>
+        <p *ngIf="data.user.department">{{data.user.department}} • {{data.user.position}}</p>
+      </div>
+    </div>
+
+    <mat-divider></mat-divider>
+
+    <mat-tab-group class="role-tabs">
+      <!-- Roles Tab -->
+      <mat-tab label="Vai trò">
+        <div class="tab-content">
+          <h4>Chọn vai trò cho người dùng</h4>
+          <p class="tab-description">Chọn một hoặc nhiều vai trò để cấp quyền cho người dùng này</p>
+          
+          <div class="roles-list">
+            <mat-card *ngFor="let role of data.roles" 
+                      class="role-card"
+                      [class.selected]="isRoleSelected(role.name)">
+              <mat-card-content>
+                <div class="role-header">
+                  <mat-checkbox 
+                    [checked]="isRoleSelected(role.name)"
+                    (change)="onRoleSelectionChange(role.name, $event.checked)"
+                    class="role-checkbox">
+                  </mat-checkbox>
+                  <div class="role-info">
+                    <h5 class="role-name">{{role.displayName}}</h5>
+                    <p class="role-description">{{role.description}}</p>
+                    <div class="role-permissions">
+                      <mat-chip-listbox>
+                        <mat-chip-option *ngFor="let permission of role.permissions.slice(0, 3)" 
+                                         [disabled]="true"
+                                         class="permission-chip">
+                          {{permission.displayName}}
+                        </mat-chip-option>
+                        <mat-chip-option *ngIf="role.permissions.length > 3" 
+                                         [disabled]="true"
+                                         class="permission-chip more">
+                          +{{role.permissions.length - 3}} quyền khác
+                        </mat-chip-option>
+                      </mat-chip-listbox>
+                    </div>
+                  </div>
+                </div>
+              </mat-card-content>
+            </mat-card>
+          </div>
+        </div>
+      </mat-tab>
+
+      <!-- Permissions Tab -->
+      <mat-tab label="Quyền hạn">
+        <div class="tab-content">
+          <h4>Quyền hạn hiện tại</h4>
+          <p class="tab-description">Danh sách quyền hạn mà người dùng sẽ có dựa trên các vai trò đã chọn</p>
+          
+          <div *ngIf="userPermissions.length === 0" class="no-permissions">
+            <mat-icon>lock</mat-icon>
+            <p>Chưa có quyền hạn nào. Vui lòng chọn ít nhất một vai trò.</p>
+          </div>
+
+          <div *ngIf="userPermissions.length > 0" class="permissions-list">
+            <div *ngFor="let module of getUniqueModules()" class="module-section">
+              <h5 class="module-title">
+                <mat-icon>folder</mat-icon>
+                {{getModuleDisplayName(module)}}
+              </h5>
+              <div class="permissions-grid">
+                <div *ngFor="let permission of getPermissionsByModule(module)" 
+                     class="permission-item">
+                  <mat-icon class="permission-icon">{{getPermissionIcon(permission.action)}}</mat-icon>
+                  <div class="permission-details">
+                    <span class="permission-name">{{permission.displayName}}</span>
+                    <span class="permission-action">{{getActionDisplayName(permission.action)}}</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </mat-tab>
+    </mat-tab-group>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSubmit()"
+            [disabled]="selectedRoles.length === 0"
+            class="submit-button">
+      <mat-icon>save</mat-icon>
+      Lưu thay đổi
+    </button>
+  </mat-dialog-actions>
+</div>

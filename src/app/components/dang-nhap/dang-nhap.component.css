@@ -1,0 +1,362 @@
+.login-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  overflow: hidden;
+}
+
+.login-background {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1;
+}
+
+.background-pattern {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-image: 
+    radial-gradient(circle at 20% 80%, rgba(120, 119, 198, 0.3) 0%, transparent 50%),
+    radial-gradient(circle at 80% 20%, rgba(255, 255, 255, 0.1) 0%, transparent 50%),
+    radial-gradient(circle at 40% 40%, rgba(120, 119, 198, 0.2) 0%, transparent 50%);
+  animation: float 6s ease-in-out infinite;
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-20px) rotate(1deg); }
+}
+
+.login-content {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 400px;
+  padding: 2rem;
+}
+
+.login-card {
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(10px);
+  border-radius: 20px;
+  box-shadow: 
+    0 20px 40px rgba(0, 0, 0, 0.1),
+    0 0 0 1px rgba(255, 255, 255, 0.2);
+  padding: 2.5rem;
+  animation: slideUp 0.6s ease-out;
+}
+
+@keyframes slideUp {
+  from {
+    opacity: 0;
+    transform: translateY(30px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.login-header {
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+}
+
+.logo-icon {
+  font-size: 2.5rem;
+  width: 2.5rem;
+  height: 2.5rem;
+  color: #667eea;
+}
+
+.logo-text {
+  font-size: 2rem;
+  font-weight: 700;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  margin: 0;
+}
+
+.login-title {
+  font-size: 1.5rem;
+  font-weight: 600;
+  color: #333;
+  margin: 0 0 0.5rem 0;
+}
+
+.login-subtitle {
+  color: #666;
+  font-size: 0.875rem;
+  margin: 0;
+}
+
+.login-form {
+  margin-bottom: 1.5rem;
+}
+
+.form-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.full-width {
+  width: 100%;
+}
+
+.form-options {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1rem;
+}
+
+.remember-me {
+  font-size: 0.875rem;
+}
+
+.form-actions {
+  margin-bottom: 1rem;
+}
+
+.login-button {
+  width: 100%;
+  height: 48px;
+  font-size: 1rem;
+  font-weight: 600;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.login-button:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(102, 126, 234, 0.3);
+}
+
+.button-spinner {
+  margin-right: 0.5rem;
+}
+
+.demo-accounts {
+  margin-top: 1.5rem;
+}
+
+.demo-header {
+  text-align: center;
+  margin-bottom: 1rem;
+}
+
+.demo-header h4 {
+  margin: 0 0 0.5rem 0;
+  color: #333;
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.demo-header p {
+  margin: 0;
+  color: #666;
+  font-size: 0.875rem;
+}
+
+.demo-buttons {
+  display: flex;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+}
+
+.demo-button {
+  flex: 1;
+  min-width: 100px;
+  height: 40px;
+  border-radius: 8px;
+  font-size: 0.875rem;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  transition: all 0.3s ease;
+}
+
+.demo-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.demo-button.admin {
+  color: #dc3545;
+  border-color: #dc3545;
+}
+
+.demo-button.manager {
+  color: #fd7e14;
+  border-color: #fd7e14;
+}
+
+.demo-button.user {
+  color: #198754;
+  border-color: #198754;
+}
+
+.demo-credentials {
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  padding: 1rem;
+  font-size: 0.75rem;
+  color: #666;
+}
+
+.credential-item {
+  margin-bottom: 0.25rem;
+}
+
+.credential-item:last-child {
+  margin-bottom: 0;
+}
+
+/* Form field styling */
+mat-form-field {
+  width: 100%;
+}
+
+mat-form-field.mat-form-field-appearance-outline .mat-form-field-outline {
+  color: #e0e0e0;
+}
+
+mat-form-field.mat-form-field-appearance-outline.mat-focused .mat-form-field-outline-thick {
+  color: #667eea;
+}
+
+mat-form-field.mat-form-field-appearance-outline .mat-form-field-label {
+  color: #666;
+}
+
+mat-form-field.mat-form-field-appearance-outline.mat-focused .mat-form-field-label {
+  color: #667eea;
+}
+
+/* Button styling */
+mat-icon-button {
+  color: #666;
+}
+
+mat-icon-button:hover {
+  color: #333;
+}
+
+/* Checkbox styling */
+mat-checkbox .mat-checkbox-label {
+  font-size: 0.875rem;
+  color: #666;
+}
+
+/* Divider styling */
+mat-divider {
+  margin: 1.5rem 0;
+  border-color: #e0e0e0;
+}
+
+/* Responsive design */
+@media (max-width: 480px) {
+  .login-content {
+    padding: 1rem;
+  }
+  
+  .login-card {
+    padding: 1.5rem;
+  }
+  
+  .logo-text {
+    font-size: 1.75rem;
+  }
+  
+  .login-title {
+    font-size: 1.25rem;
+  }
+  
+  .demo-buttons {
+    flex-direction: column;
+  }
+  
+  .demo-button {
+    width: 100%;
+  }
+}
+
+@media (max-width: 360px) {
+  .login-card {
+    padding: 1rem;
+  }
+  
+  .logo {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+  
+  .logo-text {
+    font-size: 1.5rem;
+  }
+}
+
+/* Loading state */
+.login-button:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
+}
+
+/* Success and error snackbar styles */
+::ng-deep .success-snackbar {
+  background-color: #d4edda;
+  color: #155724;
+}
+
+::ng-deep .error-snackbar {
+  background-color: #f8d7da;
+  color: #721c24;
+}
+
+/* Animation for demo buttons */
+.demo-button {
+  animation: fadeInUp 0.6s ease-out;
+  animation-fill-mode: both;
+}
+
+.demo-button:nth-child(1) { animation-delay: 0.1s; }
+.demo-button:nth-child(2) { animation-delay: 0.2s; }
+.demo-button:nth-child(3) { animation-delay: 0.3s; }
+
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}

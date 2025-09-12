@@ -1,0 +1,96 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title>
+    <mat-icon>{{isEdit ? 'edit' : 'person_add'}}</mat-icon>
+    {{isEdit ? 'Chỉnh sửa Người dùng' : 'Thêm Người dùng Mới'}}
+  </h2>
+
+  <mat-dialog-content>
+    <form [formGroup]="userForm" class="user-form">
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Username *</mat-label>
+          <input matInput formControlName="username" placeholder="Nhập username">
+          <mat-error>{{getErrorMessage('username')}}</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email *</mat-label>
+          <input matInput formControlName="email" placeholder="Nhập email">
+          <mat-error>{{getErrorMessage('email')}}</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Họ và Tên *</mat-label>
+          <input matInput formControlName="fullName" placeholder="Nhập họ và tên">
+          <mat-error>{{getErrorMessage('fullName')}}</mat-error>
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Số điện thoại</mat-label>
+          <input matInput formControlName="phone" placeholder="Nhập số điện thoại">
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" class="half-width">
+          <mat-label>Phòng ban</mat-label>
+          <input matInput formControlName="department" placeholder="Nhập phòng ban">
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Chức vụ</mat-label>
+          <input matInput formControlName="position" placeholder="Nhập chức vụ">
+        </mat-form-field>
+      </div>
+
+      <div class="form-row">
+        <div class="roles-section">
+          <h4>Vai trò *</h4>
+          <p class="roles-description">Chọn vai trò cho người dùng này</p>
+          <div class="roles-list">
+            <mat-checkbox 
+              *ngFor="let role of data.roles" 
+              [checked]="isRoleSelected(role.name)"
+              (change)="onRoleSelectionChange(role.name, $event.checked)"
+              class="role-checkbox">
+              <div class="role-info">
+                <span class="role-name">{{role.displayName}}</span>
+                <span class="role-description">{{role.description}}</span>
+              </div>
+            </mat-checkbox>
+          </div>
+          <div *ngIf="selectedRoles.length === 0" class="error-message">
+            Vui lòng chọn ít nhất một vai trò
+          </div>
+        </div>
+      </div>
+
+      <div class="form-row">
+        <mat-checkbox formControlName="isActive" class="status-checkbox">
+          Tài khoản hoạt động
+        </mat-checkbox>
+      </div>
+    </form>
+  </mat-dialog-content>
+
+  <mat-dialog-actions align="end">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSubmit()"
+            [disabled]="!userForm.valid || selectedRoles.length === 0"
+            class="submit-button">
+      <mat-icon>{{isEdit ? 'save' : 'add'}}</mat-icon>
+      {{isEdit ? 'Cập nhật' : 'Tạo mới'}}
+    </button>
+  </mat-dialog-actions>
+</div>

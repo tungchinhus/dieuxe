@@ -119,6 +119,17 @@
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
 }
 
+.export-button {
+  background: linear-gradient(135deg, #4CAF50 0%, #45a049 100%);
+  color: white;
+  border: none;
+}
+
+.export-button:hover {
+  background: linear-gradient(135deg, #45a049 0%, #3d8b40 100%);
+  box-shadow: 0 4px 12px rgba(76, 175, 80, 0.3);
+}
+
 /* Table Card */
 .table-card {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
