@@ -43,6 +43,7 @@
         
         <button mat-raised-button 
                 color="primary" 
+                [disabled]="isImportingExcel"
                 (click)="openFileUploadDialog()"
                 class="action-button">
           <mat-icon>upload_file</mat-icon>
@@ -60,7 +61,7 @@
         
         <button mat-raised-button 
                 color="accent" 
-                [disabled]="dataSource.data.length === 0"
+                [disabled]="dataSource.data.length === 0 || isExportingPDF || isExportingEmployeeStationPDF"
                 [matMenuTriggerFor]="pdfMenu"
                 class="action-button">
           <mat-icon>picture_as_pdf</mat-icon>
@@ -101,11 +102,11 @@
                   [aria-label]="checkboxLabel()">
                 </mat-checkbox>
               </th>
-              <td mat-cell *matCellDef="let element">
+              <td mat-cell *matCellDef="let row">
                 <mat-checkbox
                   (click)="$event.stopPropagation()"
-                  (change)="$event ? toggleSelection(element) : null"
-                  [checked]="isSelected(element)"
+                  (change)="$event ? toggleSelection(row) : null"
+                  [checked]="isSelected(row)"
                   [aria-label]="checkboxLabel()">
                 </mat-checkbox>
               </td>
@@ -114,33 +115,33 @@
             <!-- Mã nhân viên Column -->
             <ng-container matColumnDef="maNhanVien">
               <th mat-header-cell *matHeaderCellDef>Mã Nhân Viên</th>
-              <td mat-cell *matCellDef="let element">{{element.maNhanVien}}</td>
+              <td mat-cell *matCellDef="let row">{{row.maNhanVien}}</td>
             </ng-container>
 
             <!-- Họ tên Column -->
             <ng-container matColumnDef="hoTen">
               <th mat-header-cell *matHeaderCellDef>Tên Nhân Viên</th>
-              <td mat-cell *matCellDef="let element">{{element.hoTen}}</td>
+              <td mat-cell *matCellDef="let row">{{row.hoTen}}</td>
             </ng-container>
 
             <!-- Điện thoại Column -->
             <ng-container matColumnDef="dienThoai">
               <th mat-header-cell *matHeaderCellDef>Số Điện Thoại</th>
-              <td mat-cell *matCellDef="let element">{{element.dienThoai}}</td>
+              <td mat-cell *matCellDef="let row">{{row.dienThoai}}</td>
             </ng-container>
 
             <!-- Ngày đăng ký Column -->
             <ng-container matColumnDef="ngayDangKy">
               <th mat-header-cell *matHeaderCellDef>Ngày Đăng Ký</th>
-              <td mat-cell *matCellDef="let element">{{element.ngayDangKy}}</td>
+              <td mat-cell *matCellDef="let row">{{row.ngayDangKy}}</td>
             </ng-container>
 
             <!-- Thời gian Column -->
             <ng-container matColumnDef="thoiGianBatDau">
               <th mat-header-cell *matHeaderCellDef>Thời Gian</th>
-              <td mat-cell *matCellDef="let element">
-                <span *ngIf="element.thoiGianBatDau && element.thoiGianKetThuc; else noTime">
-                  {{formatTime(element.thoiGianBatDau)}} - {{formatTime(element.thoiGianKetThuc)}}
+              <td mat-cell *matCellDef="let row">
+                <span *ngIf="row.thoiGianBatDau && row.thoiGianKetThuc; else noTime">
+                  {{formatTime(row.thoiGianBatDau)}} - {{formatTime(row.thoiGianKetThuc)}}
                 </span>
                 <ng-template #noTime>
                   <span class="no-time">Chưa có thời gian</span>
@@ -151,15 +152,15 @@
             <!-- Trạm xe Column -->
             <ng-container matColumnDef="tramXe">
               <th mat-header-cell *matHeaderCellDef>Trạm Xe</th>
-              <td mat-cell *matCellDef="let element">{{element.tramXe}}</td>
+              <td mat-cell *matCellDef="let row">{{row.tramXe}}</td>
             </ng-container>
 
 
             <!-- Actions Column -->
             <ng-container matColumnDef="actions">
               <th mat-header-cell *matHeaderCellDef></th>
-              <td mat-cell *matCellDef="let element">
-                <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{registration: element}">
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="menu" [matMenuTriggerData]="{registration: row}">
                   <mat-icon>more_vert</mat-icon>
                 </button>
                 <mat-menu #menu="matMenu">
@@ -178,7 +179,8 @@
             </ng-container>
 
             <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
-            <tr mat-row *matRowDef="let row; columns: displayedColumns;" class="table-row"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                [class.selected-row]="isSelected(row)"></tr>
           </table>
           
           <mat-paginator 
@@ -190,5 +192,22 @@
         </div>
       </div>
     </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Loading Overlay -->
+  <div *ngIf="isImportingExcel || isExportingPDF || isExportingEmployeeStationPDF" class="loading-overlay">
+    <div class="loading-content">
+      <mat-spinner class="loading-spinner" diameter="50"></mat-spinner>
+      <div class="loading-text">
+        <span *ngIf="isImportingExcel">Đang import dữ liệu từ Excel...</span>
+        <span *ngIf="isExportingPDF">Đang tạo file PDF...</span>
+        <span *ngIf="isExportingEmployeeStationPDF">Đang tạo file PDF danh sách nhân viên...</span>
+      </div>
+      <div class="loading-subtitle">
+        <span *ngIf="isImportingExcel">Vui lòng chờ trong giây lát</span>
+        <span *ngIf="isExportingPDF">Vui lòng chờ trong giây lát</span>
+        <span *ngIf="isExportingEmployeeStationPDF">Vui lòng chờ trong giây lát</span>
+      </div>
     </div>
   </div>

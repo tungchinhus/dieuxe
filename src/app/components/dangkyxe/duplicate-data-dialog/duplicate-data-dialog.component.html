@@ -1,0 +1,53 @@
+<div class="duplicate-dialog">
+  <!-- Header -->
+  <div class="dialog-header">
+    <h2 mat-dialog-title>
+      <mat-icon class="warning-icon" *ngIf="!data.allDuplicates">warning</mat-icon>
+      <mat-icon class="error-icon" *ngIf="data.allDuplicates">error</mat-icon>
+      <span *ngIf="!data.allDuplicates">Phát hiện dữ liệu trùng lặp</span>
+      <span *ngIf="data.allDuplicates">Tất cả dữ liệu đều trùng lặp</span>
+    </h2>
+  </div>
+
+  <mat-divider></mat-divider>
+
+  <!-- Duplicate Data List -->
+  <div class="duplicate-section">
+    <h3 class="section-title">
+      <mat-icon>list</mat-icon>
+      Danh sách dữ liệu trùng lặp
+    </h3>
+    
+    <div class="duplicate-list">
+      <div class="duplicate-item" *ngFor="let duplicate of data.duplicates; let i = index">
+        <div class="duplicate-content">
+          <div class="employee-info">
+            <mat-icon class="person-icon">person</mat-icon>
+            <div class="info-text">
+              <div class="employee-name">{{ duplicate.hoTen }}</div>
+              <div class="employee-code">{{ duplicate.maNhanVien }}</div>
+            </div>
+          </div>
+          
+          <div class="station-info">
+            <mat-icon class="location-icon">location_on</mat-icon>
+            <div class="info-text">
+              <div class="station-name">{{ duplicate.tramXe }}</div>
+              <div class="station-date">{{ duplicate.ngayDangKy }}</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <mat-divider></mat-divider>
+
+  <!-- Action Buttons -->
+  <div class="dialog-actions">
+    <button mat-button (click)="cancelImport()" class="close-button">
+      <mat-icon>close</mat-icon>
+      Đóng
+    </button>
+  </div>
+</div>

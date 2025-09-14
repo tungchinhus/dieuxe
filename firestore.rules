@@ -36,5 +36,30 @@ service cloud.firestore {
     match /nhanVien/{document} {
       allow read, write: if true; // Tạm thời cho phép tất cả để test
     }
+    
+    // Rules cho collection users (quản lý người dùng)
+    match /users/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection roles (quản lý vai trò)
+    match /roles/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection permissions (quản lý quyền)
+    match /permissions/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection userRoles (liên kết người dùng-vai trò)
+    match /userRoles/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
+    // Rules cho collection userPermissions (liên kết người dùng-quyền)
+    match /userPermissions/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
   }
 }

@@ -13,8 +13,10 @@ import { MatPaginatorModule, MatPaginator } from '@angular/material/paginator';
 import { MatSortModule, MatSort } from '@angular/material/sort';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
+import { DuplicateDataDialogComponent } from './duplicate-data-dialog/duplicate-data-dialog.component';
 import { Registration } from '../../models/registration.model';
 import { GoogleDriveUploadService } from '../../services/google-drive-upload.service';
 import { GoogleDriveWebUploadService } from '../../services/google-drive-web-upload.service';
@@ -46,6 +48,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     MatSortModule,
     MatCheckboxModule,
     MatMenuModule,
+    MatProgressSpinnerModule,
     MatSidenavModule,
     MatListModule,
     MatTooltipModule
@@ -73,6 +76,11 @@ export class DangKyXeComponent implements OnInit {
   selectedRegistrations = new Set<number>();
   buildInfo = '';
   isCollapsed = false;
+  
+  // Loading states
+  isImportingExcel = false;
+  isExportingPDF = false;
+  isExportingEmployeeStationPDF = false;
 
   constructor(
     private sidenavService: SidenavService,
@@ -511,51 +519,75 @@ export class DangKyXeComponent implements OnInit {
     try {
       console.log('File selected:', file.name);
       
-      // Show loading message
-      const loadingSnackBar = this.snackBar.open('Đang xử lý file Excel và lưu vào Firebase...', 'Đóng', {
-        duration: 0, // Keep open until dismissed
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
+      // Set loading state
+      this.isImportingExcel = true;
 
       // Read and process Excel file
       const registrations = await this.excelService.readExcelFile(file);
       console.log('Excel data processed:', registrations);
 
       if (registrations.length > 0) {
-        // Convert to DangKyPhanXe format and save to Firebase
-        const savedCount = await this.saveRegistrationsToFirebase(registrations);
+        // Check for duplicates
+        const duplicateCheck = await this.checkDuplicatesInImportData(registrations);
         
-        // Dismiss loading message
-        loadingSnackBar.dismiss();
-        
-        if (savedCount > 0) {
-          // Refresh data from Firebase
-          await this.loadDataFromFirebase();
-          
-          // Show success message
-          const snackBarRef = this.snackBar.open(
-            `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào Firebase! Bạn có muốn upload file lên Google Drive không?`, 
-            'Upload lên Google Drive', 
-            {
-              duration: 8000,
-              horizontalPosition: 'right',
-              verticalPosition: 'top'
+        if (duplicateCheck.duplicates.length > 0) {
+          // Show duplicate notification dialog
+          const dialogRef = this.dialog.open(DuplicateDataDialogComponent, {
+            width: '600px',
+            data: {
+              duplicates: duplicateCheck.duplicates,
+              validData: duplicateCheck.validData,
+              duplicateDetails: duplicateCheck.duplicateDetails,
+              totalRecords: registrations.length,
+              allDuplicates: duplicateCheck.allDuplicates
             }
-          );
-          
-          snackBarRef.onAction().subscribe(() => {
-            this.uploadToGoogleDrive(file);
+          });
+
+          // Auto-save valid data while showing dialog
+          if (duplicateCheck.validData.length > 0) {
+            const savedCount = await this.saveRegistrationsToFirebase(duplicateCheck.validData);
+            
+            if (savedCount > 0) {
+              // Refresh data from Firebase
+              await this.loadDataFromFirebase();
+            }
+          }
+
+          dialogRef.afterClosed().subscribe(async (result) => {
+            // Dialog closed - no additional notification needed
+            // The dialog already shows all the necessary information
           });
         } else {
-          this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
-            duration: 3000,
-            horizontalPosition: 'right',
-            verticalPosition: 'top'
-          });
+          // No duplicates, save all data
+          const savedCount = await this.saveRegistrationsToFirebase(registrations);
+          
+          if (savedCount > 0) {
+            // Refresh data from Firebase
+            await this.loadDataFromFirebase();
+            
+            // Show success message
+            const snackBarRef = this.snackBar.open(
+              `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào Firebase!`, 
+              'Upload lên Google Drive', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+            
+            snackBarRef.onAction().subscribe(() => {
+              this.uploadToGoogleDrive(file);
+            });
+          } else {
+            this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
+              duration: 3000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          }
         }
       } else {
-        loadingSnackBar.dismiss();
         this.snackBar.open('Không tìm thấy dữ liệu hợp lệ trong file Excel!', 'Đóng', {
           duration: 3000,
           horizontalPosition: 'right',
@@ -570,6 +602,9 @@ export class DangKyXeComponent implements OnInit {
         horizontalPosition: 'right',
         verticalPosition: 'top'
       });
+    } finally {
+      // Reset loading state
+      this.isImportingExcel = false;
     }
   }
 
@@ -779,7 +814,7 @@ export class DangKyXeComponent implements OnInit {
   /**
    * Convert Registration array to DangKyPhanXe array and save to Firebase
    */
-  private async saveRegistrationsToFirebase(registrations: Registration[]): Promise<number> {
+  private async saveRegistrationsToFirebase(registrations: Registration[], allowOverwrite: boolean = false): Promise<number> {
     let savedCount = 0;
     const duplicateErrors: string[] = [];
     
@@ -813,24 +848,26 @@ export class DangKyXeComponent implements OnInit {
           continue;
         }
 
-        // Check if employee already registered for this date
-        const alreadyRegistered = await this.vehicleDataService.kiemTraDangKyTrongNgay(
-          dangKyPhanXe.MaNhanVien, 
-          dangKyPhanXe.NgayDangKy
-        );
-
-        if (alreadyRegistered) {
-          console.warn(`Employee ${reg.maNhanVien} already registered for ${reg.ngayDangKy}`);
-          duplicateErrors.push(`${reg.hoTen} (${reg.maNhanVien}) - đã đăng ký cho ngày ${reg.ngayDangKy}`);
-          continue;
-        }
-
         // Check for duplicate name and station
         const isDuplicate = await this.checkDuplicateNameAndStation(reg.hoTen, reg.tramXe, reg.ngayDangKy);
-        if (isDuplicate) {
+        
+        if (isDuplicate && !allowOverwrite) {
           console.warn(`Duplicate found: ${reg.hoTen} at ${reg.tramXe} for ${reg.ngayDangKy}`);
           duplicateErrors.push(`${reg.hoTen} - đã đăng ký tại trạm ${reg.tramXe} cho ngày ${reg.ngayDangKy}`);
           continue;
+        }
+
+        if (isDuplicate && allowOverwrite) {
+          // Find and delete existing registration before saving new one
+          const existingId = await this.findFirebaseIdForRegistration(reg);
+          if (existingId) {
+            try {
+              await this.vehicleDataService.huyDangKyPhanXe(existingId);
+              console.log(`Deleted existing registration for ${reg.maNhanVien} to allow overwrite`);
+            } catch (deleteError) {
+              console.error(`Error deleting existing registration for ${reg.maNhanVien}:`, deleteError);
+            }
+          }
         }
 
         // Save to Firebase
@@ -843,8 +880,8 @@ export class DangKyXeComponent implements OnInit {
       }
     }
     
-    // Show duplicate errors if any
-    if (duplicateErrors.length > 0) {
+    // Show duplicate errors if any (only when not allowing overwrite)
+    if (duplicateErrors.length > 0 && !allowOverwrite) {
       this.snackBar.open(
         `Có ${duplicateErrors.length} đăng ký bị trùng lặp và đã bỏ qua:\n${duplicateErrors.join('\n')}`, 
         'Đóng', 
@@ -964,20 +1001,112 @@ export class DangKyXeComponent implements OnInit {
 
   /**
    * Check for duplicate name and station combination
+   * Only checks for today's date
    */
   private async checkDuplicateNameAndStation(hoTen: string, tramXe: string, ngayDangKy: string): Promise<boolean> {
     try {
+      // Get today's date
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      
+      // CHỈ CHECK DUPLICATE CHO NGÀY HÔM NAY
+      // Nếu ngày đăng ký không phải hôm nay, coi như không trùng lặp
+      if (ngayDangKy !== todayString) {
+        return false;
+      }
+      
       const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
       
       return allRegistrations.some(reg => 
-        reg.HoTen === hoTen && 
-        reg.TramXe === tramXe && 
+        reg.HoTen?.toLowerCase().trim() === hoTen?.toLowerCase().trim() && 
+        reg.TramXe?.toLowerCase().trim() === tramXe?.toLowerCase().trim() && 
         reg.NgayDangKy.toISOString().split('T')[0] === ngayDangKy
       );
     } catch (error) {
       console.error('Error checking duplicate name and station:', error);
       return false;
     }
+  }
+
+  /**
+   * Check for duplicates in Excel import data
+   * Only checks for duplicates on the current date
+   */
+  private async checkDuplicatesInImportData(registrations: Registration[]): Promise<{
+    duplicates: Registration[];
+    validData: Registration[];
+    duplicateDetails: string[];
+    allDuplicates: boolean;
+  }> {
+    const duplicates: Registration[] = [];
+    const validData: Registration[] = [];
+    const duplicateDetails: string[] = [];
+    
+    // Get today's date in YYYY-MM-DD format
+    const today = new Date();
+    const todayString = today.toISOString().split('T')[0];
+    
+    // Get existing registrations from Firebase for today only
+    const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+    const existingRegistrations = allRegistrations.filter(reg => 
+      reg.NgayDangKy.toISOString().split('T')[0] === todayString
+    );
+    
+    console.log(`Checking duplicates for today: ${todayString}`);
+    console.log(`Found ${existingRegistrations.length} existing registrations for today`);
+    console.log(`Total import records: ${registrations.length}`);
+    console.log(`Records for today: ${registrations.filter(reg => reg.ngayDangKy === todayString).length}`);
+    
+    for (const reg of registrations) {
+      let isDuplicate = false;
+      const duplicateReasons: string[] = [];
+      
+      // CHỈ CHECK DUPLICATE CHO NGÀY HÔM NAY
+      // Dữ liệu có ngày đăng ký khác hôm nay sẽ được coi là hợp lệ và không cần check duplicate
+      if (reg.ngayDangKy === todayString) {
+        // Check against existing Firebase data for today only
+        const existingDuplicate = existingRegistrations.find(existing => 
+          existing.HoTen?.toLowerCase().trim() === reg.hoTen?.toLowerCase().trim() && 
+          existing.TramXe?.toLowerCase().trim() === reg.tramXe?.toLowerCase().trim()
+        );
+        
+        if (existingDuplicate) {
+          isDuplicate = true;
+          duplicateReasons.push(`Đã tồn tại trong hệ thống (Mã: ${existingDuplicate.MaNhanVien})`);
+        }
+        
+        // Check against other records in the same import batch for today only
+        const batchDuplicate = validData.find(valid => 
+          valid.hoTen?.toLowerCase().trim() === reg.hoTen?.toLowerCase().trim() && 
+          valid.tramXe?.toLowerCase().trim() === reg.tramXe?.toLowerCase().trim() && 
+          valid.ngayDangKy === reg.ngayDangKy
+        );
+        
+        if (batchDuplicate) {
+          isDuplicate = true;
+          duplicateReasons.push(`Trùng lặp trong file import (Dòng: ${registrations.indexOf(reg) + 1})`);
+        }
+      }
+      // Nếu ngày đăng ký không phải hôm nay, reg sẽ được thêm vào validData mà không cần check duplicate
+      
+      if (isDuplicate) {
+        duplicates.push(reg);
+        duplicateDetails.push(`${reg.hoTen} - ${reg.tramXe} (${reg.ngayDangKy}): ${duplicateReasons.join(', ')}`);
+      } else {
+        validData.push(reg);
+      }
+    }
+    
+    // Check if all data for today are duplicates
+    const todayRegistrations = registrations.filter(reg => reg.ngayDangKy === todayString);
+    const allDuplicates = todayRegistrations.length > 0 && duplicates.length === todayRegistrations.length;
+    
+    return {
+      duplicates,
+      validData,
+      duplicateDetails,
+      allDuplicates
+    };
   }
 
   /**
@@ -1012,18 +1141,11 @@ export class DangKyXeComponent implements OnInit {
         return;
       }
 
-      // Show loading message
-      const loadingSnackBar = this.snackBar.open('Đang tạo file PDF...', 'Đóng', {
-        duration: 0,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
+      // Set loading state
+      this.isExportingPDF = true;
 
       // Export to PDF
       await this.pdfExportService.exportToPDF();
-      
-      // Dismiss loading message
-      loadingSnackBar.dismiss();
       
       // Show success message
       this.snackBar.open('File PDF đã được tạo thành công!', 'Đóng', {
@@ -1039,6 +1161,9 @@ export class DangKyXeComponent implements OnInit {
         horizontalPosition: 'right',
         verticalPosition: 'top'
       });
+    } finally {
+      // Reset loading state
+      this.isExportingPDF = false;
     }
   }
 
@@ -1047,18 +1172,11 @@ export class DangKyXeComponent implements OnInit {
    */
   async exportEmployeeStationPDF(): Promise<void> {
     try {
-      // Show loading message
-      const loadingSnackBar = this.snackBar.open('Đang tạo file PDF danh sách nhân viên...', 'Đóng', {
-        duration: 0,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
+      // Set loading state
+      this.isExportingEmployeeStationPDF = true;
 
       // Export to PDF
       await this.pdfExportEmployeeStationService.exportEmployeeStationPDF();
-      
-      // Dismiss loading message
-      loadingSnackBar.dismiss();
       
       // Show success message
       this.snackBar.open('File PDF danh sách nhân viên đã được tạo thành công!', 'Đóng', {
@@ -1074,6 +1192,9 @@ export class DangKyXeComponent implements OnInit {
         horizontalPosition: 'right',
         verticalPosition: 'top'
       });
+    } finally {
+      // Reset loading state
+      this.isExportingEmployeeStationPDF = false;
     }
   }
 }
