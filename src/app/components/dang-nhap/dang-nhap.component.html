@@ -71,7 +71,7 @@
         </div>
         
         <div class="demo-buttons">
-          <button mat-stroked-button 
+          <button mat-stroked-button [disabled]="true"
                   (click)="fillDemoAccount('admin')"
                   class="demo-button admin">
             <mat-icon>admin_panel_settings</mat-icon>
@@ -94,9 +94,9 @@
         </div>
         
         <div class="demo-credentials">
-          <div class="credential-item">
+          <!--><div class="credential-item">
             <strong>Admin:</strong> admin / admin123
-          </div>
+          </div>-->
           <div class="credential-item">
             <strong>Manager:</strong> manager1 / manager123
           </div>

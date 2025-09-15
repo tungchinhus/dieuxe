@@ -567,8 +567,8 @@ export class DangKyXeComponent implements OnInit {
             
             // Show success message
             const snackBarRef = this.snackBar.open(
-              `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào Firebase!`, 
-              'Upload lên Google Drive', 
+              `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào hệ thống!`, 
+              '', 
               {
                 duration: 8000,
                 horizontalPosition: 'right',
@@ -576,9 +576,6 @@ export class DangKyXeComponent implements OnInit {
               }
             );
             
-            snackBarRef.onAction().subscribe(() => {
-              this.uploadToGoogleDrive(file);
-            });
           } else {
             this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
               duration: 3000,
