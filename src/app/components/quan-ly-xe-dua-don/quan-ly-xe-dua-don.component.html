@@ -41,15 +41,6 @@
           <mat-icon>upload_file</mat-icon>
           Import từ Excel
         </button>
-        
-        <button mat-raised-button 
-                color="warn" 
-                [disabled]="getSelectedCount() === 0"
-                (click)="deleteSelected()"
-                class="action-button">
-          <mat-icon>delete</mat-icon>
-          Xóa Đã chọn ({{ getSelectedCount() }})
-        </button>
       </div>
     </div>
 

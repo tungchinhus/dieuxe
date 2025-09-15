@@ -71,11 +71,6 @@ export class RouteDetailDialogComponent implements OnInit {
     
     // Add real-time validation
     this.setupRealTimeValidation();
-    
-    // Test validation after data is loaded
-    setTimeout(() => {
-      this.testValidation();
-    }, 2000);
   }
 
   private createForm(): FormGroup {
@@ -349,30 +344,6 @@ export class RouteDetailDialogComponent implements OnInit {
     });
   }
 
-  /**
-   * Test validation with sample data
-   */
-  public testValidation(): void {
-    console.log('=== TESTING VALIDATION ===');
-    console.log('All route details loaded:', this.allRouteDetails.length);
-    
-    if (this.allRouteDetails.length > 0) {
-      const firstRoute = this.allRouteDetails[0];
-      console.log('Testing with first route:', firstRoute.maTuyenXe, firstRoute.tenDiemDon, firstRoute.thuTu);
-      
-      // Test with exact same data
-      const testData = {
-        maTuyenXe: firstRoute.maTuyenXe,
-        tenDiemDon: firstRoute.tenDiemDon,
-        thuTu: firstRoute.thuTu
-      };
-      
-      console.log('Testing with data:', testData);
-      this.validateDuplicates(testData);
-    } else {
-      console.log('No route details available for testing');
-    }
-  }
 
   /**
    * Mark all form fields as touched to show validation errors
