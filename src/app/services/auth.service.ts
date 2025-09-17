@@ -4,6 +4,9 @@ import { take } from 'rxjs/operators';
 import { Router } from '@angular/router';
 import { User } from '../models/user.model';
 import { UserManagementFirebaseService } from './user-management-firebase.service';
+import { FirebaseService } from './firebase.service';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { reauthenticateWithCredential, EmailAuthProvider, updatePassword } from 'firebase/auth';
 
 @Injectable({
   providedIn: 'root'
@@ -19,16 +22,57 @@ export class AuthService {
 
   constructor(
     private userManagementService: UserManagementFirebaseService,
-    private router: Router
+    private router: Router,
+    private firebaseService: FirebaseService
   ) {
     this.initializeAuth();
   }
 
   private initializeAuth(): void {
-    // Check for stored authentication data
+    // Subscribe Firebase auth state
+    onAuthStateChanged(this.firebaseService.getAuth(), async (fbUser: FirebaseUser | null) => {
+      if (fbUser) {
+        try {
+          const token = await fbUser.getIdToken();
+          this.tokenSubject.next(token);
+          this.isAuthenticatedSubject.next(true);
+
+          // Try to map Firebase user to app user by email
+          const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise();
+          const matchedUser = (users || []).find(u => u.email?.toLowerCase() === (fbUser.email || '').toLowerCase() || u.username?.toLowerCase() === (fbUser.email || '').toLowerCase());
+
+          if (matchedUser) {
+            this.currentUserSubject.next(matchedUser);
+            localStorage.setItem('currentUser', JSON.stringify(matchedUser));
+            localStorage.setItem('authToken', token);
+          } else {
+            // Minimal fallback mapping if no profile found
+            const minimalUser: User = {
+              id: fbUser.uid,
+              username: fbUser.email || fbUser.uid,
+              email: fbUser.email || '',
+              fullName: fbUser.displayName || (fbUser.email || ''),
+              isActive: true,
+              roles: [],
+              createdAt: new Date(),
+              updatedAt: new Date()
+            };
+            this.currentUserSubject.next(minimalUser);
+            localStorage.setItem('currentUser', JSON.stringify(minimalUser));
+            localStorage.setItem('authToken', token);
+          }
+        } catch (err) {
+          console.error('Error handling auth state change:', err);
+          this.clearAuthData();
+        }
+      } else {
+        this.clearAuthData();
+      }
+    });
+
+    // Load from storage for initial paint (will be reconciled by onAuthStateChanged)
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('authToken');
-    
     if (storedUser && storedToken) {
       try {
         const user = JSON.parse(storedUser);
@@ -42,78 +86,89 @@ export class AuthService {
     }
   }
 
-  async login(username: string, password: string): Promise<{ success: boolean; message: string; user?: User }> {
+  async login(usernameOrEmail: string, password: string): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-      // Try Firebase first
-      let users: User[] = [];
-      try {
-        users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
-        console.log('Users from Firebase:', users);
-      } catch (firebaseError) {
-        console.log('Firebase error, trying localStorage:', firebaseError);
-        // Fallback to localStorage
-        const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        users = localUsers.map((u: any) => ({
-          ...u,
-          createdAt: new Date(u.createdAt),
-          updatedAt: new Date(u.updatedAt),
-          lastLogin: u.lastLogin ? new Date(u.lastLogin) : undefined
-        }));
-        console.log('Users from localStorage:', users);
-      }
-      
-      if (!users || users.length === 0) {
-        return { success: false, message: 'Không thể tải danh sách người dùng' };
-      }
+      // Use Firebase Auth (treat username field as email)
+      const credential = await signInWithEmailAndPassword(this.firebaseService.getAuth(), usernameOrEmail, password);
+      const fbUser = credential.user;
+      const token = await fbUser.getIdToken();
 
-      const user = users.find(u => 
-        u.username === username && 
-        u.isActive &&
-        this.validatePassword(username, password)
-      );
+      // Map Firebase user to app user by email/username
+      const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
+      const appUser = users.find(u => u.email?.toLowerCase() === (fbUser.email || '').toLowerCase() || u.username?.toLowerCase() === (fbUser.email || '').toLowerCase());
 
-      if (!user) {
-        return { 
-          success: false, 
-          message: 'Tên đăng nhập hoặc mật khẩu không đúng, hoặc tài khoản đã bị vô hiệu hóa' 
+      if (!appUser) {
+        // Allow login but with minimal user; optional: restrict if no profile
+        const minimalUser: User = {
+          id: fbUser.uid,
+          username: fbUser.email || fbUser.uid,
+          email: fbUser.email || '',
+          fullName: fbUser.displayName || (fbUser.email || ''),
+          isActive: true,
+          roles: [],
+          createdAt: new Date(),
+          updatedAt: new Date()
         };
+        this.setAuthData(minimalUser, token);
+        this.router.navigate(['/dangkyxe']);
+        return { success: true, message: 'Đăng nhập thành công', user: minimalUser };
       }
 
-      // Generate a simple token (in real app, this would come from server)
-      const token = this.generateToken(user);
-      
-      // Update last login (try Firebase first, fallback to localStorage)
+      // Update last login (best-effort)
       try {
-        await this.userManagementService.updateUser(user.id, { 
-          lastLogin: new Date() 
-        }).pipe(take(1)).toPromise();
+        await this.userManagementService.updateUser(appUser.id, { lastLogin: new Date() }).pipe(take(1)).toPromise();
       } catch (updateError) {
-        console.log('Could not update last login in Firebase, updating localStorage');
-        const localUsers = JSON.parse(localStorage.getItem('users') || '[]');
-        const userIndex = localUsers.findIndex((u: any) => u.id === user.id);
-        if (userIndex !== -1) {
-          localUsers[userIndex].lastLogin = new Date();
-          localStorage.setItem('users', JSON.stringify(localUsers));
-        }
+        console.warn('Could not update last login:', updateError);
       }
 
-      // Store authentication data
-      this.setAuthData(user, token);
-      
-      // Navigate to dashboard after successful login
+      this.setAuthData(appUser, token);
       this.router.navigate(['/dangkyxe']);
-      
-      return { success: true, message: 'Đăng nhập thành công', user };
-    } catch (error) {
-      console.error('Login error:', error);
-      return { success: false, message: 'Có lỗi xảy ra khi đăng nhập' };
+      return { success: true, message: 'Đăng nhập thành công', user: appUser };
+    } catch (error: any) {
+      console.error('Firebase login error:', error);
+      const message = this.translateFirebaseError(error?.code) || 'Tên đăng nhập hoặc mật khẩu không đúng';
+      return { success: false, message };
+    }
+  }
+
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ success: boolean; message: string }> {
+    try {
+      const auth = this.firebaseService.getAuth();
+      const fbUser = auth.currentUser;
+      if (!fbUser || !fbUser.email) {
+        return { success: false, message: 'Không xác định được người dùng hiện tại' };
+      }
+
+      const credential = EmailAuthProvider.credential(fbUser.email, currentPassword);
+      await reauthenticateWithCredential(fbUser, credential);
+      await updatePassword(fbUser, newPassword);
+
+      return { success: true, message: 'Đổi mật khẩu thành công' };
+    } catch (error: any) {
+      console.error('Change password error:', error);
+      let message = 'Không thể đổi mật khẩu';
+      switch (error?.code) {
+        case 'auth/weak-password':
+          message = 'Mật khẩu mới quá yếu';
+          break;
+        case 'auth/wrong-password':
+          message = 'Mật khẩu hiện tại không đúng';
+          break;
+        case 'auth/too-many-requests':
+          message = 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau';
+          break;
+        default:
+          break;
+      }
+      return { success: false, message };
     }
   }
 
   logout(): void {
-    this.clearAuthData();
-    // Navigate to login page after logout
-    this.router.navigate(['/dang-nhap']);
+    signOut(this.firebaseService.getAuth()).finally(() => {
+      this.clearAuthData();
+      this.router.navigate(['/dang-nhap']);
+    });
   }
 
   getCurrentUser(): User | null {
@@ -146,93 +201,32 @@ export class AuthService {
 
   hasAnyRole(roleNames: string[]): Observable<boolean> {
     const currentUser = this.getCurrentUser();
-    console.log('hasAnyRole - currentUser:', currentUser);
-    console.log('hasAnyRole - roleNames:', roleNames);
-    
     if (!currentUser || !currentUser.roles) {
-      console.log('hasAnyRole - no current user or roles');
       return of(false);
     }
-    
-    // Check if user has any of the required roles directly from user object
     const hasAnyRole = currentUser.roles.some(userRole => {
       const roleName = typeof userRole === 'string' ? userRole : (userRole as any).name;
       return roleNames.includes(roleName);
     });
-    
-    console.log('hasAnyRole - final result:', hasAnyRole);
     return of(hasAnyRole);
   }
 
-  private validatePassword(username: string, password: string): boolean {
-    // Simple password validation for demo
-    // In a real application, this would be handled by a secure backend
-    const passwordMap: { [key: string]: string } = {
-      'admin': 'admin123',
-      'manager1': 'manager123',
-      'user1': 'user123',
-      'chinhdo': 'chinhdo123'
-    };
-    
-    return passwordMap[username] === password;
-  }
-
-  private generateToken(user: User): string {
-    // Simple token generation for demo
-    // In a real application, this would be a JWT from the server
-    const tokenData = {
-      userId: user.id,
-      username: user.username,
-      roles: user.roles,
-      timestamp: Date.now()
-    };
-    
-    return btoa(JSON.stringify(tokenData));
-  }
-
-  private setAuthData(user: User, token: string): void {
-    this.currentUserSubject.next(user);
-    this.isAuthenticatedSubject.next(true);
-    this.tokenSubject.next(token);
-    
-    // Store in localStorage
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('authToken', token);
-  }
-
-  private clearAuthData(): void {
-    this.currentUserSubject.next(null);
-    this.isAuthenticatedSubject.next(false);
-    this.tokenSubject.next(null);
-    
-    // Clear localStorage
-    localStorage.removeItem('currentUser');
-    localStorage.removeItem('authToken');
-  }
-
-  // Check if token is still valid
+  // Token validity handled by Firebase; keep 24h fallback for stored token
   isTokenValid(): boolean {
     const token = this.getToken();
     if (!token) return false;
-    
     try {
-      const tokenData = JSON.parse(atob(token));
-      const now = Date.now();
-      const tokenAge = now - tokenData.timestamp;
-      
-      // Token expires after 24 hours
-      const maxAge = 24 * 60 * 60 * 1000;
-      return tokenAge < maxAge;
+      const tokenData = JSON.parse(atob(token.split('.')[1] || ''));
+      const nowSeconds = Math.floor(Date.now() / 1000);
+      return tokenData && tokenData.exp && nowSeconds < tokenData.exp;
     } catch (error) {
       return false;
     }
   }
 
-  // Refresh user data
   async refreshUserData(): Promise<void> {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return;
-    
     try {
       const user = await this.userManagementService.getUserById(currentUser.id).toPromise();
       if (user) {
@@ -241,6 +235,38 @@ export class AuthService {
       }
     } catch (error) {
       console.error('Error refreshing user data:', error);
+    }
+  }
+
+  private setAuthData(user: User, token: string): void {
+    this.currentUserSubject.next(user);
+    this.isAuthenticatedSubject.next(true);
+    this.tokenSubject.next(token);
+    localStorage.setItem('currentUser', JSON.stringify(user));
+    localStorage.setItem('authToken', token);
+  }
+
+  private clearAuthData(): void {
+    this.currentUserSubject.next(null);
+    this.isAuthenticatedSubject.next(false);
+    this.tokenSubject.next(null);
+    localStorage.removeItem('currentUser');
+    localStorage.removeItem('authToken');
+  }
+
+  private translateFirebaseError(code?: string): string | null {
+    switch (code) {
+      case 'auth/invalid-email':
+        return 'Email không hợp lệ';
+      case 'auth/user-disabled':
+        return 'Tài khoản đã bị vô hiệu hóa';
+      case 'auth/user-not-found':
+      case 'auth/wrong-password':
+        return 'Tên đăng nhập hoặc mật khẩu không đúng';
+      case 'auth/too-many-requests':
+        return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau';
+      default:
+        return null;
     }
   }
 }

@@ -10,6 +10,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { MatDividerModule } from '@angular/material/divider';
+import { MatDialog, MatDialogModule } from '@angular/material/dialog';
 import { Subject, takeUntil } from 'rxjs';
 import { AuthService } from '../../services/auth.service';
 import { User, PREDEFINED_ROLES } from '../../models/user.model';
@@ -27,7 +28,8 @@ import { User, PREDEFINED_ROLES } from '../../models/user.model';
     MatTooltipModule,
     MatChipsModule,
     MatSnackBarModule,
-    MatDividerModule
+    MatDividerModule,
+    MatDialogModule
   ],
   templateUrl: './app-header.component.html',
   styleUrl: './app-header.component.css'
@@ -39,7 +41,8 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private router: Router,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private dialog: MatDialog
   ) {}
 
   ngOnInit(): void {
@@ -48,6 +51,14 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
       .subscribe(user => {
         this.currentUser = user;
       });
+  }
+
+  openChangePassword(): void {
+    import('../change-password/change-password.dialog').then(m => {
+      this.dialog.open(m.ChangePasswordDialog, {
+        width: '420px'
+      });
+    });
   }
 
   ngOnDestroy(): void {
