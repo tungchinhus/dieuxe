@@ -1,0 +1,85 @@
+<div class="ai-demo-container">
+  <mat-card class="demo-card">
+    <mat-card-header>
+      <mat-card-title>🤖 Firebase AI Logic Demo</mat-card-title>
+      <mat-card-subtitle>Trải nghiệm các chức năng AI trong hệ thống Dieuxe</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <!-- Function Selection -->
+      <div class="function-selection">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Chọn chức năng AI</mat-label>
+          <mat-select [(value)]="selectedFunction" (selectionChange)="onFunctionChange()">
+            <mat-option value="analyzeVehicle">Phân tích dữ liệu xe</mat-option>
+            <mat-option value="optimizeRoute">Tối ưu hóa tuyến đường</mat-option>
+            <mat-option value="predictDemand">Dự đoán nhu cầu</mat-option>
+            <mat-option value="analyzeEmployee">Phân tích nhân viên</mat-option>
+            <mat-option value="generateReport">Tạo báo cáo thông minh</mat-option>
+            <mat-option value="getImprovements">Đề xuất cải thiện hệ thống</mat-option>
+          </mat-select>
+        </mat-form-field>
+        
+        <p class="function-description">{{ getFunctionDescription() }}</p>
+      </div>
+
+      <!-- Input Form -->
+      <form [formGroup]="aiForm" (ngSubmit)="callAiFunction()">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Dữ liệu đầu vào (JSON)</mat-label>
+          <textarea 
+            matInput 
+            formControlName="inputData" 
+            rows="10" 
+            placeholder="Nhập dữ liệu JSON để AI xử lý..."
+            class="json-input">
+          </textarea>
+        </mat-form-field>
+
+        <div class="action-buttons">
+          <button 
+            mat-raised-button 
+            color="primary" 
+            type="submit" 
+            [disabled]="isLoading || aiForm.invalid"
+            class="call-button">
+            <mat-spinner *ngIf="isLoading" diameter="20" class="button-spinner"></mat-spinner>
+            <span *ngIf="!isLoading">🚀 Gọi AI</span>
+            <span *ngIf="isLoading">Đang xử lý...</span>
+          </button>
+        </div>
+      </form>
+
+      <!-- AI Response -->
+      <div *ngIf="aiResponse" class="ai-response">
+        <h3>📊 Kết quả từ AI:</h3>
+        <div class="response-content">
+          <pre>{{ aiResponse | json }}</pre>
+        </div>
+      </div>
+
+      <!-- Loading State -->
+      <div *ngIf="isLoading" class="loading-state">
+        <mat-spinner diameter="50"></mat-spinner>
+        <p>AI đang xử lý dữ liệu của bạn...</p>
+      </div>
+    </mat-card-content>
+  </mat-card>
+
+  <!-- Information Card -->
+  <mat-card class="info-card">
+    <mat-card-header>
+      <mat-card-title>ℹ️ Thông tin về Firebase AI Logic</mat-card-title>
+    </mat-card-header>
+    <mat-card-content>
+      <ul>
+        <li><strong>Phân tích dữ liệu xe:</strong> AI sẽ phân tích hiệu suất, bảo trì và đề xuất cải thiện</li>
+        <li><strong>Tối ưu hóa tuyến đường:</strong> Tìm tuyến đường tối ưu dựa trên giao thông và nhu cầu</li>
+        <li><strong>Dự đoán nhu cầu:</strong> Dự báo số lượng khách và tuyến đường cần thiết</li>
+        <li><strong>Phân tích nhân viên:</strong> Đánh giá hiệu suất và đề xuất đào tạo</li>
+        <li><strong>Báo cáo thông minh:</strong> Tự động tạo báo cáo chi tiết và insights</li>
+        <li><strong>Cải thiện hệ thống:</strong> Đề xuất nâng cấp và tối ưu hóa toàn hệ thống</li>
+      </ul>
+    </mat-card-content>
+  </mat-card>
+</div>
