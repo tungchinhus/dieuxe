@@ -86,6 +86,10 @@ export class AppHeaderComponent implements OnInit, OnDestroy {
     this.router.navigate(['/quan-ly-phan-quyen']);
   }
 
+  goToAiDemo(): void {
+    this.router.navigate(['/ai-demo']);
+  }
+
   getRoleDisplayName(roleName: string): string {
     const roleMap: { [key: string]: string } = {
       [PREDEFINED_ROLES.SUPER_ADMIN]: 'Super Admin',

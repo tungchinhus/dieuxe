@@ -101,21 +101,34 @@ export class PdfExportEmployeeStationService {
     });
 
     // Gom nhóm nhân viên
-    const groupedByRoute = new Map<string, Map<string, NhanVien[]>>();
+    const groupedByRoute = new Map<string, Map<string, { employees: NhanVien[], originalStationName: string }>>();
 
     employees.forEach(employee => {
-      const tuyenXe = employee.MaTuyenXe || 'Chưa phân tuyến';
+      const originalTuyenXe = employee.MaTuyenXe || 'Chưa phân tuyến';
       const tramXe = employee.TramXe || 'Chưa phân trạm';
+      
+      // Áp dụng logic ưu tiên gom HCM routes vào HCM01
+      const tuyenXe = this.applyHCMGroupingPriority(originalTuyenXe, tramXe);
 
       if (!groupedByRoute.has(tuyenXe)) {
         groupedByRoute.set(tuyenXe, new Map());
       }
 
-      if (!groupedByRoute.get(tuyenXe)!.has(tramXe)) {
-        groupedByRoute.get(tuyenXe)!.set(tramXe, []);
+      // Normalize tên trạm để không phân biệt chữ hoa thường khi so sánh
+      const normalizedTramXe = this.normalizeStationName(tramXe);
+
+      if (!groupedByRoute.get(tuyenXe)!.has(normalizedTramXe)) {
+        groupedByRoute.get(tuyenXe)!.set(normalizedTramXe, { 
+          employees: [], 
+          originalStationName: tramXe 
+        });
+      } else {
+        // Nếu đã có nhóm với tên normalize tương tự, giữ tên gốc đầu tiên
+        const existingGroup = groupedByRoute.get(tuyenXe)!.get(normalizedTramXe)!;
+        // Không thay đổi originalStationName, giữ nguyên tên đầu tiên
       }
 
-      groupedByRoute.get(tuyenXe)!.get(tramXe)!.push(employee);
+      groupedByRoute.get(tuyenXe)!.get(normalizedTramXe)!.employees.push(employee);
     });
 
     // Chuyển đổi thành array và sắp xếp
@@ -126,20 +139,20 @@ export class PdfExportEmployeeStationService {
 
       // Kiểm tra xem có nhân viên đặc biệt trong nhóm này không
       let specialEmployeeName = '';
-      stations.forEach((nhanVien) => {
-        if (nhanVien.some(nv => nv.HoTen && nv.HoTen.includes('Lê Ngọc Tạo'))) {
+      stations.forEach((stationData) => {
+        if (stationData.employees.some(nv => nv.HoTen && nv.HoTen.includes('Lê Ngọc Tạo'))) {
           specialEmployeeName = 'Lê Ngọc Tạo';
-        } else if (nhanVien.some(nv => nv.HoTen && nv.HoTen.includes('Lê Thành Châu'))) {
+        } else if (stationData.employees.some(nv => nv.HoTen && nv.HoTen.includes('Lê Thành Châu'))) {
           specialEmployeeName = 'Lê Thành Châu';
         }
       });
 
-      stations.forEach((nhanVien, tramXe) => {
+      stations.forEach((stationData, normalizedTramXe) => {
         stationGroups.push({
           tuyenXe: this.getRouteNameFromCode(tuyenXe, specialEmployeeName || undefined), // Sử dụng tên tuyến thay vì mã tuyến
-          tramXe,
-          nhanVien: nhanVien.sort((a, b) => (a.HoTen || '').localeCompare(b.HoTen || '')),
-          soLuong: nhanVien.length,
+          tramXe: stationData.originalStationName, // Sử dụng tên trạm gốc
+          nhanVien: stationData.employees.sort((a, b) => (a.HoTen || '').localeCompare(b.HoTen || '')),
+          soLuong: stationData.employees.length,
           routeDetails: routeMap.get(tuyenXe)
         });
       });
@@ -169,7 +182,7 @@ export class PdfExportEmployeeStationService {
    * Lấy thứ tự của trạm trong tuyến đường
    */
   private getStationOrder(tramXe: string, routeDetails: RouteDetail[]): number {
-    const route = routeDetails.find(r => r.tenDiemDon === tramXe);
+    const route = routeDetails.find(r => (r.tenDiemDon || '').toLowerCase().trim() === (tramXe || '').toLowerCase().trim());
     return route ? route.thuTu : 999;
   }
 
@@ -380,5 +393,77 @@ export class PdfExportEmployeeStationService {
       hour: '2-digit',
       minute: '2-digit'
     });
+  }
+
+  /**
+   * Áp dụng logic ưu tiên gom HCM và BH routes
+   * Tất cả nhân viên HCM01, HCM02, HCM03 đều được gom vào HCM01 trước
+   * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
+   * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
+   */
+  private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
+    // Kiểm tra nếu là tuyến HCM
+    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
+      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        // Gom tất cả vào HCM01
+        return 'HCM01';
+      } else {
+        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
+        return routeName;
+      }
+    }
+    
+    // Kiểm tra nếu là tuyến BH
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        // Gom tất cả vào BH01
+        return 'BH01';
+      } else {
+        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
+        return routeName;
+      }
+    }
+    
+    // Các tuyến khác không thay đổi
+    return routeName;
+  }
+
+  /**
+   * Kiểm tra xem trạm xe có phải là trạm trước hoặc tại "Hàng xanh" không
+   */
+  private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    // Danh sách các trạm từ KCN Long Đức đến Hàng xanh (theo thứ tự)
+    const stationsBeforeHangXanh = [
+      'kcn long đức',
+      'ngã 3 bến gỗ', 
+      'ngã 3 long bình tân',
+      'ngã 4 thủ đức',
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh'
+    ];
+    
+    // Kiểm tra xem trạm có trong danh sách các trạm trước hoặc tại "Hàng xanh" không
+    return stationsBeforeHangXanh.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
+   * Normalize tên trạm để không phân biệt chữ hoa thường
+   * @param stationName - Tên trạm gốc
+   * @returns Tên trạm đã được normalize
+   */
+  private normalizeStationName(stationName: string): string {
+    if (!stationName) return stationName;
+    
+    // Chuyển về chữ thường và loại bỏ khoảng trắng thừa
+    return stationName.toLowerCase().trim();
   }
 }

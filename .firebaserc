@@ -1,5 +1,8 @@
 {
   "projects": {
-    "default": "skyjoyweb-da255"
-  }
+    "default": "skyjoyweb-da255",
+    "dev-demo": "skyjoyweb-da255"
+  },
+  "targets": {},
+  "etags": {}
 }

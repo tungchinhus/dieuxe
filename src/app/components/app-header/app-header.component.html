@@ -8,6 +8,17 @@
       </div>
     </div>
 
+    <!-- AI Demo Button - Always visible for testing -->
+    <div class="header-right">
+      <button mat-raised-button 
+              color="accent" 
+              (click)="goToAiDemo()"
+              class="ai-demo-button">
+        <mat-icon>psychology</mat-icon>
+        AI Demo
+      </button>
+    </div>
+
     <!-- User Info and Actions -->
     <div class="header-right" *ngIf="currentUser">
       <div class="user-info">
@@ -53,6 +64,11 @@
           <button mat-menu-item (click)="goToSettings()">
             <mat-icon>settings</mat-icon>
             <span>Cài đặt</span>
+          </button>
+          
+          <button mat-menu-item (click)="goToAiDemo()">
+            <mat-icon>psychology</mat-icon>
+            <span>AI Demo</span>
           </button>
           
           <mat-divider></mat-divider>

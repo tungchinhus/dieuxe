@@ -88,14 +88,30 @@ export class AuthService {
 
   async login(usernameOrEmail: string, password: string): Promise<{ success: boolean; message: string; user?: User }> {
     try {
-      // Use Firebase Auth (treat username field as email)
-      const credential = await signInWithEmailAndPassword(this.firebaseService.getAuth(), usernameOrEmail, password);
+      // Allow login by username OR email
+      const input = (usernameOrEmail || '').trim();
+
+      let signInEmail = input;
+      if (!input.includes('@')) {
+        // Treat as username → find corresponding email from user directory
+        const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
+        const matchedByUsername = users.find(u => (u.username || '').toLowerCase().trim() === input.toLowerCase());
+        if (matchedByUsername?.email) {
+          signInEmail = matchedByUsername.email;
+        }
+      }
+
+      // Use Firebase Auth with resolved email
+      const credential = await signInWithEmailAndPassword(this.firebaseService.getAuth(), signInEmail, password);
       const fbUser = credential.user;
       const token = await fbUser.getIdToken();
 
       // Map Firebase user to app user by email/username
       const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
-      const appUser = users.find(u => u.email?.toLowerCase() === (fbUser.email || '').toLowerCase() || u.username?.toLowerCase() === (fbUser.email || '').toLowerCase());
+      const appUser = users.find(u =>
+        (u.email || '').toLowerCase() === (fbUser.email || '').toLowerCase() ||
+        (u.username || '').toLowerCase() === input.toLowerCase()
+      );
 
       if (!appUser) {
         // Allow login but with minimal user; optional: restrict if no profile

@@ -12,10 +12,10 @@
       <form [formGroup]="loginForm" (ngSubmit)="onSubmit()" class="login-form">
         <div class="form-fields">
           <mat-form-field appearance="outline" class="full-width">
-            <mat-label>Tên đăng nhập</mat-label>
+            <mat-label>Tên đăng nhập hoặc Email</mat-label>
             <input matInput 
                    formControlName="username" 
-                   placeholder="Nhập tên đăng nhập"
+                   placeholder="Nhập tên đăng nhập hoặc email"
                    autocomplete="username">
             <mat-icon matSuffix>person</mat-icon>
             <mat-error>{{getErrorMessage('username')}}</mat-error>
@@ -61,50 +61,6 @@
           </button>
         </div>
       </form>
-
-      <!-- Demo Accounts Section -->
-      <div class="demo-accounts">
-        <mat-divider></mat-divider>
-        <div class="demo-header">
-          <h4>Tài khoản demo</h4>
-          <p>Chọn tài khoản để đăng nhập nhanh</p>
-        </div>
-        
-        <div class="demo-buttons">
-          <button mat-stroked-button [disabled]="true"
-                  (click)="fillDemoAccount('admin')"
-                  class="demo-button admin">
-            <mat-icon>admin_panel_settings</mat-icon>
-            Admin
-          </button>
-          
-          <button mat-stroked-button 
-                  (click)="fillDemoAccount('manager')"
-                  class="demo-button manager">
-            <mat-icon>supervisor_account</mat-icon>
-            Manager
-          </button>
-          
-          <button mat-stroked-button 
-                  (click)="fillDemoAccount('user')"
-                  class="demo-button user">
-            <mat-icon>person</mat-icon>
-            User
-          </button>
-        </div>
-        
-        <div class="demo-credentials">
-          <!--><div class="credential-item">
-            <strong>Admin:</strong> admin / admin123
-          </div>-->
-          <div class="credential-item">
-            <strong>Manager:</strong> manager1 / manager123
-          </div>
-          <div class="credential-item">
-            <strong>User:</strong> user1 / user123
-          </div>
-        </div>
-      </div>
     </div>
   </div>
 </div>

@@ -57,4 +57,13 @@ export const routes: Routes = [
     path: 'debug-admin',
     loadComponent: () => import('./debug-admin.component').then(m => m.DebugAdminComponent)
   },
+  {
+    path: 'ai-demo',
+    loadComponent: () => import('./components/ai-demo/ai-demo.component').then(m => m.AiDemoComponent),
+    canActivate: [AuthGuard]
+  },
+  {
+    path: 'ai-test',
+    loadComponent: () => import('./components/ai-test/ai-test.component').then(m => m.AiTestComponent)
+  },
 ];

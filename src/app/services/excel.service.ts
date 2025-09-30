@@ -131,9 +131,9 @@ export class ExcelService {
           dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại
           phongBan: '', // Default empty for now
           ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
-          loaiCa: this.extractShiftFromTime(this.getStringValue(row[7])) || 'PT-cc', // Cột H: Ca (extract from time)
-          thoiGianBatDau: this.getStringValue(row[8]) || '', // Cột H: Thời gian làm việc (Từ...)
-          thoiGianKetThuc: this.getStringValue(row[9]) || '', // Cột I: Thời gian làm việc (Đến...)
+          loaiCa: this.extractShiftFromTime(this.getStringValue(row[6])) || 'PT-cc', // Cột H: Ca (extract from time)
+          thoiGianBatDau: this.getStringValue(row[7]) || '', // Cột H: Thời gian làm việc (Từ...)
+          thoiGianKetThuc: this.getStringValue(row[8]) || '', // Cột I: Thời gian làm việc (Đến...)
           maTuyenXe: maTuyenXe, // Derived from database lookup
           tramXe: tramXe, // Cột D: Trạm xe
           noiDungCongViec: this.getStringValue(row[5]) || '', // Cột F: Nội dung công việc

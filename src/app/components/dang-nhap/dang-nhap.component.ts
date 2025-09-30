@@ -133,8 +133,8 @@ export class DangNhapComponent implements OnInit {
   fillDemoAccount(accountType: 'admin' | 'manager' | 'user'): void {
     const accounts = {
       admin: { username: 'admin', password: 'admin123' },
-      manager: { username: 'manager1', password: 'manager123' },
-      user: { username: 'user1', password: 'user123' }
+      manager: { username: 'manager1@thibidi.com', password: 'manager123' },
+      user: { username: 'user1@thibidi.com', password: 'user123' }
     };
     
     const account = accounts[accountType];

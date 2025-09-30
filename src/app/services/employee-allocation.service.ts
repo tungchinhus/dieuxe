@@ -55,20 +55,35 @@ export class EmployeeAllocationService {
    */
   private groupEmployeesByRouteAndStation(employees: NhanVien[]): { [key: string]: { [key: string]: NhanVien[] } } {
     const grouped: { [key: string]: { [key: string]: NhanVien[] } } = {};
+    const stationNameMap = new Map<string, string>(); // Map từ normalized name đến original name
     
     employees.forEach(employee => {
-      const tuyenXe = employee.MaTuyenXe || 'Chưa phân tuyến';
+      const originalTuyenXe = employee.MaTuyenXe || 'Chưa phân tuyến';
       const tramXe = employee.TramXe || 'Chưa phân trạm';
+      
+      // Áp dụng logic ưu tiên gom HCM routes vào HCM01
+      const tuyenXe = this.applyHCMGroupingPriority(originalTuyenXe, tramXe);
       
       if (!grouped[tuyenXe]) {
         grouped[tuyenXe] = {};
       }
       
-      if (!grouped[tuyenXe][tramXe]) {
-        grouped[tuyenXe][tramXe] = [];
+      // Normalize tên trạm để không phân biệt chữ hoa thường khi so sánh
+      const normalizedTramXe = this.normalizeStationName(tramXe);
+      
+      // Lưu mapping từ normalized name đến original name (chỉ lưu lần đầu)
+      if (!stationNameMap.has(normalizedTramXe)) {
+        stationNameMap.set(normalizedTramXe, tramXe);
       }
       
-      grouped[tuyenXe][tramXe].push(employee);
+      // Sử dụng original name làm key để hiển thị đúng
+      const displayStationName = stationNameMap.get(normalizedTramXe)!;
+      
+      if (!grouped[tuyenXe][displayStationName]) {
+        grouped[tuyenXe][displayStationName] = [];
+      }
+      
+      grouped[tuyenXe][displayStationName].push(employee);
     });
     
     return grouped;
@@ -186,5 +201,77 @@ export class EmployeeAllocationService {
         tongXeTuyen: groupedByRoute[tuyenXe].reduce((sum, station) => sum + station.soXeCan, 0)
       }))
     };
+  }
+
+  /**
+   * Áp dụng logic ưu tiên gom HCM và BH routes
+   * Tất cả nhân viên HCM01, HCM02, HCM03 đều được gom vào HCM01 trước
+   * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
+   * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
+   */
+  private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
+    // Kiểm tra nếu là tuyến HCM
+    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
+      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        // Gom tất cả vào HCM01
+        return 'HCM01';
+      } else {
+        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
+        return routeName;
+      }
+    }
+    
+    // Kiểm tra nếu là tuyến BH
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        // Gom tất cả vào BH01
+        return 'BH01';
+      } else {
+        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
+        return routeName;
+      }
+    }
+    
+    // Các tuyến khác không thay đổi
+    return routeName;
+  }
+
+  /**
+   * Kiểm tra xem trạm xe có phải là trạm trước hoặc tại "Hàng xanh" không
+   */
+  private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    // Danh sách các trạm từ KCN Long Đức đến Hàng xanh (theo thứ tự)
+    const stationsBeforeHangXanh = [
+      'kcn long đức',
+      'ngã 3 bến gỗ', 
+      'ngã 3 long bình tân',
+      'ngã 4 thủ đức',
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh'
+    ];
+    
+    // Kiểm tra xem trạm có trong danh sách các trạm trước hoặc tại "Hàng xanh" không
+    return stationsBeforeHangXanh.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
+   * Normalize tên trạm để không phân biệt chữ hoa thường
+   * @param stationName - Tên trạm gốc
+   * @returns Tên trạm đã được normalize
+   */
+  private normalizeStationName(stationName: string): string {
+    if (!stationName) return stationName;
+    
+    // Chuyển về chữ thường và loại bỏ khoảng trắng thừa
+    return stationName.toLowerCase().trim();
   }
 }
