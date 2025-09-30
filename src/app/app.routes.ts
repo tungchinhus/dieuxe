@@ -54,8 +54,9 @@ export const routes: Routes = [
     }
   },
   {
-    path: 'debug-admin',
-    loadComponent: () => import('./debug-admin.component').then(m => m.DebugAdminComponent)
+    path: 'role-test',
+    loadComponent: () => import('./components/role-test/role-test.component').then(m => m.RoleTestComponent),
+    canActivate: [AuthGuard]
   },
   {
     path: 'ai-demo',

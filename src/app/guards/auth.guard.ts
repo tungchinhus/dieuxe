@@ -34,6 +34,9 @@ export class AuthGuard implements CanActivate {
       return of(false);
     }
 
+    // Ensure user has roles before checking
+    this.authService.ensureUserRoles();
+
     // Check for required roles first
     const requiredRoles = route.data['roles'] as string[];
     const requiredPermissions = route.data['permissions'] as string[];
@@ -94,11 +97,8 @@ export class AuthGuard implements CanActivate {
       return of(false);
     }
 
-    // Check if user has any of the required roles
-    const hasRequiredRole = currentUser.roles.some(userRole => {
-      const roleName = typeof userRole === 'string' ? userRole : (userRole as any).name;
-      return roles.includes(roleName);
-    });
+    // Use the new synchronous method for role checking
+    const hasRequiredRole = this.authService.hasAnyRoleSync(roles);
 
     console.log('Has required role:', hasRequiredRole);
     

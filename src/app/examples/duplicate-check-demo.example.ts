@@ -18,7 +18,7 @@ import { Registration } from '../models/registration.model';
 export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
   // Dữ liệu hợp lệ - không trùng lặp
   {
-    id: 1,
+    id: '1',
     maNhanVien: 'NV001',
     hoTen: 'Nguyễn Văn An',
     dienThoai: '0901234567',
@@ -33,7 +33,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 2,
+    id: '2',
     maNhanVien: 'NV002',
     hoTen: 'Trần Thị Bình',
     dienThoai: '0901234568',
@@ -50,7 +50,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
 
   // Dữ liệu trùng lặp - cùng tên, cùng trạm, cùng ngày
   {
-    id: 3,
+    id: '3',
     maNhanVien: 'NV003',
     hoTen: 'Lê Văn Cường',
     dienThoai: '0901234569',
@@ -65,7 +65,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 4,
+    id: '4',
     maNhanVien: 'NV004',
     hoTen: 'Lê Văn Cường', // Trùng tên
     dienThoai: '0901234570',
@@ -82,7 +82,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
 
   // Dữ liệu trùng lặp - khác ngày (không trùng lặp)
   {
-    id: 5,
+    id: '5',
     maNhanVien: 'NV005',
     hoTen: 'Phạm Thị Dung',
     dienThoai: '0901234571',
@@ -97,7 +97,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 6,
+    id: '6',
     maNhanVien: 'NV006',
     hoTen: 'Phạm Thị Dung', // Trùng tên
     dienThoai: '0901234572',
@@ -114,7 +114,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
 
   // Dữ liệu trùng lặp - khác trạm (không trùng lặp)
   {
-    id: 7,
+    id: '7',
     maNhanVien: 'NV007',
     hoTen: 'Hoàng Văn Em',
     dienThoai: '0901234573',
@@ -129,7 +129,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 8,
+    id: '8',
     maNhanVien: 'NV008',
     hoTen: 'Hoàng Văn Em', // Trùng tên
     dienThoai: '0901234574',
@@ -146,7 +146,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
 
   // Dữ liệu trùng lặp - case sensitivity test
   {
-    id: 9,
+    id: '9',
     maNhanVien: 'NV009',
     hoTen: 'Võ Thị Phương',
     dienThoai: '0901234575',
@@ -161,7 +161,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 10,
+    id: '10',
     maNhanVien: 'NV010',
     hoTen: 'võ thị phương', // Trùng tên (khác case)
     dienThoai: '0901234576',
@@ -178,7 +178,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
 
   // Dữ liệu trùng lặp - có khoảng trắng thừa
   {
-    id: 11,
+    id: '11',
     maNhanVien: 'NV011',
     hoTen: 'Đặng Văn Giang',
     dienThoai: '0901234577',
@@ -193,7 +193,7 @@ export const DUPLICATE_CHECK_DEMO_DATA: Registration[] = [
     dangKyCom: true
   },
   {
-    id: 12,
+    id: '12',
     maNhanVien: 'NV012',
     hoTen: '  Đặng Văn Giang  ', // Trùng tên (có khoảng trắng)
     dienThoai: '0901234578',

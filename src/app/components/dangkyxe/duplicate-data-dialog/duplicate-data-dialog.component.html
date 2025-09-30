@@ -4,8 +4,7 @@
     <h2 mat-dialog-title>
       <mat-icon class="warning-icon" *ngIf="!data.allDuplicates">warning</mat-icon>
       <mat-icon class="error-icon" *ngIf="data.allDuplicates">error</mat-icon>
-      <span *ngIf="!data.allDuplicates">Phát hiện dữ liệu trùng lặp</span>
-      <span *ngIf="data.allDuplicates">Tất cả dữ liệu đều trùng lặp</span>
+      <span>{{ getDialogTitle() }}</span>
     </h2>
   </div>
 
@@ -15,7 +14,7 @@
   <div class="duplicate-section">
     <h3 class="section-title">
       <mat-icon>list</mat-icon>
-      Danh sách dữ liệu trùng lặp
+      {{ getSectionTitle() }}
     </h3>
     
     <div class="duplicate-list">
@@ -47,7 +46,7 @@
   <div class="dialog-actions">
     <button mat-button (click)="cancelImport()" class="close-button">
       <mat-icon>close</mat-icon>
-      Đóng
+      {{ isAddMode() ? 'Đóng' : 'Đóng' }}
     </button>
   </div>
 </div>

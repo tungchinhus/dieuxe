@@ -1,6 +1,6 @@
 import { Component, Inject, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { FormsModule, ReactiveFormsModule, FormBuilder, FormGroup, Validators, AbstractControl, ValidationErrors } from '@angular/forms';
 import { MatDialogRef, MAT_DIALOG_DATA, MatDialogModule } from '@angular/material/dialog';
 import { MatButtonModule } from '@angular/material/button';
 import { MatIconModule } from '@angular/material/icon';
@@ -14,6 +14,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { NhanVien, NhanVienFormData } from '../../../models/employee.model';
 import { RouteDetail } from '../../../models/route-detail.model';
 import { RouteDetailService } from '../../../services/route-detail.service';
+import { FirestoreService } from '../../../services/firestore.service';
 
 export interface NhanVienFormDialogData {
   nhanVien?: NhanVien;
@@ -54,7 +55,8 @@ export class NhanVienFormDialogComponent implements OnInit {
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<NhanVienFormDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: NhanVienFormDialogData,
-    private routeDetailService: RouteDetailService
+    private routeDetailService: RouteDetailService,
+    private firestoreService: FirestoreService
   ) {
     this.nhanVienForm = this.createForm();
   }
@@ -72,8 +74,8 @@ export class NhanVienFormDialogComponent implements OnInit {
 
   private createForm(): FormGroup {
     return this.fb.group({
-      HoTen: ['', [Validators.required, Validators.maxLength(100)]],
-      DienThoai: ['', [Validators.pattern(/^[0-9+\-\s()]+$/), Validators.maxLength(20)]],
+      HoTen: ['', [Validators.required, Validators.maxLength(100)], [this.duplicateNameValidator.bind(this)]],
+      DienThoai: ['', [Validators.pattern(/^[0-9+\-\s()]+$/), Validators.maxLength(20)], [this.duplicatePhoneValidator.bind(this)]],
       MaTuyenXe: ['', [Validators.maxLength(50)]],
       TramXe: ['', [Validators.maxLength(100)]]
     });
@@ -137,7 +139,7 @@ export class NhanVienFormDialogComponent implements OnInit {
 
   getFieldError(fieldName: string): string {
     const control = this.nhanVienForm.get(fieldName);
-    if (control?.errors && control.touched) {
+    if (control?.errors && (control.touched || control.dirty)) {
       if (control.errors['required']) {
         return `${this.getFieldLabel(fieldName)} là bắt buộc`;
       }
@@ -146,6 +148,12 @@ export class NhanVienFormDialogComponent implements OnInit {
       }
       if (control.errors['pattern']) {
         return `${this.getFieldLabel(fieldName)} không đúng định dạng`;
+      }
+      if (control.errors['duplicateName']) {
+        return control.errors['duplicateName'].message;
+      }
+      if (control.errors['duplicatePhone']) {
+        return control.errors['duplicatePhone'].message;
       }
     }
     return '';
@@ -163,7 +171,7 @@ export class NhanVienFormDialogComponent implements OnInit {
 
   hasFieldError(fieldName: string): boolean {
     const control = this.nhanVienForm.get(fieldName);
-    return !!(control?.errors && control.touched);
+    return !!(control?.errors && control.touched) || !!(control?.errors && control.dirty);
   }
 
   // ==================== ROUTE AND STATION METHODS ====================
@@ -285,6 +293,76 @@ export class NhanVienFormDialogComponent implements OnInit {
    */
   trackByStation(index: number, station: RouteDetail): string {
     return station.id || station.tenDiemDon;
+  }
+
+  // ==================== DUPLICATE VALIDATION ====================
+  
+  /**
+   * Custom validator to check duplicate employee names
+   */
+  private duplicateNameValidator(control: AbstractControl): Promise<ValidationErrors | null> {
+    return new Promise((resolve) => {
+      if (!control.value) {
+        resolve(null);
+        return;
+      }
+
+      this.firestoreService.getAllNhanVien().then(allNhanVien => {
+        const duplicate = allNhanVien.find(nv => {
+          // In edit mode, exclude current employee
+          if (this.isEditMode && this.data.nhanVien && nv.NhanVienID === this.data.nhanVien.NhanVienID) {
+            return false;
+          }
+          return nv.HoTen && nv.HoTen.toLowerCase().trim() === control.value.toLowerCase().trim();
+        });
+
+        if (duplicate) {
+          resolve({ 
+            duplicateName: { 
+              message: `Đã tồn tại nhân viên với tên "${control.value}"` 
+            } 
+          });
+        } else {
+          resolve(null);
+        }
+      }).catch(() => {
+        resolve(null); // Don't block on database errors
+      });
+    });
+  }
+
+  /**
+   * Custom validator to check duplicate phone numbers
+   */
+  private duplicatePhoneValidator(control: AbstractControl): Promise<ValidationErrors | null> {
+    return new Promise((resolve) => {
+      if (!control.value) {
+        resolve(null);
+        return;
+      }
+
+      this.firestoreService.getAllNhanVien().then(allNhanVien => {
+        const duplicate = allNhanVien.find(nv => {
+          // In edit mode, exclude current employee
+          if (this.isEditMode && this.data.nhanVien && nv.NhanVienID === this.data.nhanVien.NhanVienID) {
+            return false;
+          }
+          return nv.DienThoai && nv.DienThoai.replace(/\s+/g, '') === control.value.replace(/\s+/g, '');
+        });
+
+        if (duplicate) {
+          resolve({ 
+            duplicatePhone: { 
+              message: `Đã tồn tại nhân viên với số điện thoại "${control.value}"` 
+            } 
+          });
+        } else {
+          resolve(null);
+        }
+      }).catch(() => {
+        resolve(null); // Don't block on database errors
+      });
+    });
   }
 
 }

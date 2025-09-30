@@ -109,17 +109,7 @@ export class App implements OnInit, OnDestroy {
   }
 
   hasAdminRole(): boolean {
-    const user = this.authService.getCurrentUser();
-    if (!user) return false;
-    
-    // Ensure roles is an array
-    const roles = Array.isArray(user.roles) ? user.roles : [];
-    if (roles.length === 0) return false;
-    
-    return roles.some(role => {
-      const roleName = typeof role === 'string' ? role : (role as any).name;
-      return roleName === 'admin' || roleName === 'super_admin';
-    });
+    return this.authService.hasAnyRoleSync(['admin', 'super_admin']);
   }
 
   logout(): void {

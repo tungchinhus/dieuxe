@@ -264,6 +264,9 @@ export class FirestoreService {
   async createNhanVien(nhanVienData: NhanVienFormData): Promise<number> {
     const now = new Date();
     
+    // Check for duplicates before creating
+    await this.checkDuplicateNhanVien(nhanVienData);
+    
     // Generate unique employee code
     const maNhanVien = await this.generateNextMaNhanVien();
     
@@ -324,6 +327,9 @@ export class FirestoreService {
     const querySnapshot = await getDocs(q);
     
     if (!querySnapshot.empty) {
+      // Check for duplicates before updating (excluding current employee)
+      await this.checkDuplicateNhanVienForUpdate(id, data);
+      
       const docRef = querySnapshot.docs[0].ref;
       const updateData = {
         ...data,
@@ -419,6 +425,101 @@ export class FirestoreService {
       CreatedAt: data?.['createdAt']?.toDate() || new Date(),
       UpdatedAt: data?.['updatedAt']?.toDate() || new Date()
     };
+  }
+
+  /**
+   * Check for duplicate employee before creating
+   * @param nhanVienData - Employee data to check
+   * @throws Error if duplicate found
+   */
+  private async checkDuplicateNhanVien(nhanVienData: NhanVienFormData): Promise<void> {
+    const { HoTen, DienThoai } = nhanVienData;
+    
+    if (!HoTen && !DienThoai) {
+      return; // No data to check
+    }
+    
+    try {
+      const allNhanVien = await this.getAllNhanVien();
+      
+      // Check for duplicate by name (case-insensitive)
+      if (HoTen) {
+        const duplicateByName = allNhanVien.find(nv => 
+          nv.HoTen && nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim()
+        );
+        
+        if (duplicateByName) {
+          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}"`);
+        }
+      }
+      
+      // Check for duplicate by phone number
+      if (DienThoai) {
+        const duplicateByPhone = allNhanVien.find(nv => 
+          nv.DienThoai && nv.DienThoai.replace(/\s+/g, '') === DienThoai.replace(/\s+/g, '')
+        );
+        
+        if (duplicateByPhone) {
+          throw new Error(`Đã tồn tại nhân viên với số điện thoại "${DienThoai}"`);
+        }
+      }
+      
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Đã tồn tại nhân viên')) {
+        throw error; // Re-throw duplicate errors
+      }
+      console.error('Error checking duplicate nhan vien:', error);
+      // Don't throw error for database issues, just log them
+    }
+  }
+
+  /**
+   * Check for duplicate employee before updating (excluding current employee)
+   * @param currentId - Current employee ID to exclude from check
+   * @param updateData - Employee data to check
+   * @throws Error if duplicate found
+   */
+  private async checkDuplicateNhanVienForUpdate(currentId: number, updateData: Partial<NhanVienFormData>): Promise<void> {
+    const { HoTen, DienThoai } = updateData;
+    
+    if (!HoTen && !DienThoai) {
+      return; // No data to check
+    }
+    
+    try {
+      const allNhanVien = await this.getAllNhanVien();
+      
+      // Check for duplicate by name (case-insensitive, excluding current employee)
+      if (HoTen) {
+        const duplicateByName = allNhanVien.find(nv => 
+          nv.NhanVienID !== currentId &&
+          nv.HoTen && nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim()
+        );
+        
+        if (duplicateByName) {
+          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}"`);
+        }
+      }
+      
+      // Check for duplicate by phone number (excluding current employee)
+      if (DienThoai) {
+        const duplicateByPhone = allNhanVien.find(nv => 
+          nv.NhanVienID !== currentId &&
+          nv.DienThoai && nv.DienThoai.replace(/\s+/g, '') === DienThoai.replace(/\s+/g, '')
+        );
+        
+        if (duplicateByPhone) {
+          throw new Error(`Đã tồn tại nhân viên với số điện thoại "${DienThoai}"`);
+        }
+      }
+      
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('Đã tồn tại nhân viên')) {
+        throw error; // Re-throw duplicate errors
+      }
+      console.error('Error checking duplicate nhan vien for update:', error);
+      // Don't throw error for database issues, just log them
+    }
   }
 
   /**

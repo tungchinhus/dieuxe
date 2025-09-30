@@ -81,13 +81,60 @@
       </div>
     </div>
 
+    <!-- Time Filter Section -->
+    <div class="time-filter-section" *ngIf="hasAdminRole()">
+      <div class="time-filter-card">
+        <div class="time-filter-header">
+          <mat-icon>schedule</mat-icon>
+          <span>Tìm kiếm theo thời gian đăng ký</span>
+        </div>
+        
+        <div class="time-filter-controls">
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Từ ngày</mat-label>
+            <input matInput 
+                   [matDatepicker]="startPicker"
+                   [(ngModel)]="startDate"
+                   (dateChange)="applyFilter()"
+                   placeholder="Chọn ngày bắt đầu">
+            <mat-datepicker-toggle matSuffix [for]="startPicker"></mat-datepicker-toggle>
+            <mat-datepicker #startPicker></mat-datepicker>
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="date-field">
+            <mat-label>Đến ngày</mat-label>
+            <input matInput 
+                   [matDatepicker]="endPicker"
+                   [(ngModel)]="endDate"
+                   (dateChange)="applyFilter()"
+                   placeholder="Chọn ngày kết thúc">
+            <mat-datepicker-toggle matSuffix [for]="endPicker"></mat-datepicker-toggle>
+            <mat-datepicker #endPicker></mat-datepicker>
+          </mat-form-field>
+
+          <button mat-icon-button 
+                  color="warn" 
+                  (click)="clearAllFilters()"
+                  matTooltip="Xóa tất cả bộ lọc"
+                  class="clear-filter-button">
+            <mat-icon>clear_all</mat-icon>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Data Display Section -->
     <div class="table-section">
       <div class="table-header">
         <h3 class="table-title">Danh sách đăng ký xe</h3>
-        <div class="search-results-info" *ngIf="getFilteredCount() !== getTotalCount()">
+        <div class="search-results-info" *ngIf="getFilteredCount() !== getTotalCount() || startDate || endDate">
           <mat-icon>search</mat-icon>
           <span>Hiển thị {{ getFilteredCount() }} / {{ getTotalCount() }} kết quả</span>
+          <span *ngIf="startDate || endDate" class="filter-info">
+            • Lọc theo thời gian
+            <span *ngIf="startDate">từ {{ startDate | date:'dd/MM/yyyy' }}</span>
+            <span *ngIf="endDate">đến {{ endDate | date:'dd/MM/yyyy' }}</span>
+          </span>
         </div>
       </div>
       <div class="table-wrapper">

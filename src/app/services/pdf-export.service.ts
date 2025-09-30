@@ -148,7 +148,7 @@ export class PdfExportService {
 
     // Map DangKyPhanXe -> Registration
     return registrations.map(reg => ({
-      id: parseInt(reg.ID || '0') || 0,
+      id: reg.ID || '0',
       maNhanVien: reg.MaNhanVien,
       hoTen: reg.HoTen,
       dienThoai: reg.DienThoai,

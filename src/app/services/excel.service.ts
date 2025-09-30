@@ -125,7 +125,7 @@ export class ExcelService {
         const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen, quanLyNhanVien);
         
         const registration: Registration = {
-          id: i, // Temporary ID
+          id: `excel_${i}`, // Temporary ID for Excel import
           maNhanVien: this.getStringValue(row[1]) || `NV${i.toString().padStart(3, '0')}`, // Cột B: Mã nhân viên
           hoTen: hoTen, // Cột C: Họ và tên
           dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại

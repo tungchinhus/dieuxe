@@ -24,11 +24,14 @@ import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
-import { PdfExportEmployeeStationService } from '../../services/pdf-export-employee-station.service';
+import { AuthService } from '../../services/auth.service';
 import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
 import { MatTooltipModule } from '@angular/material/tooltip';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { FormsModule } from '@angular/forms';
 
 @Component({
   selector: 'app-dangkyxe',
@@ -51,7 +54,10 @@ import { MatTooltipModule } from '@angular/material/tooltip';
     MatProgressSpinnerModule,
     MatSidenavModule,
     MatListModule,
-    MatTooltipModule
+    MatTooltipModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    FormsModule
   ],
   templateUrl: './dangkyxe.component.html',
   styleUrl: './dangkyxe.component.css'
@@ -73,7 +79,7 @@ export class DangKyXeComponent implements OnInit {
     'actions'
   ];
   
-  selectedRegistrations = new Set<number>();
+  selectedRegistrations = new Set<string>();
   buildInfo = '';
   isCollapsed = false;
   
@@ -81,6 +87,10 @@ export class DangKyXeComponent implements OnInit {
   isImportingExcel = false;
   isExportingPDF = false;
   isExportingEmployeeStationPDF = false;
+  
+  // Time filter properties
+  startDate: Date | null = null;
+  endDate: Date | null = null;
 
   constructor(
     private sidenavService: SidenavService,
@@ -92,7 +102,8 @@ export class DangKyXeComponent implements OnInit {
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
-    private pdfExportEmployeeStationService: PdfExportEmployeeStationService
+    // private pdfExportEmployeeStationService: PdfExportEmployeeStationService,
+    private authService: AuthService
   ) {}
 
   toggleSidenav(): void {
@@ -115,29 +126,23 @@ export class DangKyXeComponent implements OnInit {
    * Apply filter to the data source for quick search
    * @param filterValue - The search term
    */
-  applyFilter(filterValue: string): void {
+  applyFilter(filterValue: string = ''): void {
     // Remove extra spaces and convert to lowercase
     const searchTerm = filterValue.trim().toLowerCase();
     
     // Set up custom filter predicate for searching in hoTen and tramXe
     this.dataSource.filterPredicate = (data: Registration, filter: string) => {
-      if (!filter) return true;
+      // Text search
+      const textMatch = !filter || 
+        (data.hoTen?.toLowerCase().includes(filter) || false) ||
+        (data.tramXe?.toLowerCase().includes(filter) || false) ||
+        (data.maNhanVien?.toLowerCase().includes(filter) || false) ||
+        (data.dienThoai?.toLowerCase().includes(filter) || false);
       
-      const searchData = filter.toLowerCase();
+      // Time filter
+      const timeMatch = this.isDateInRange(data.ngayDangKy);
       
-      // Search in hoTen (employee name)
-      const hoTenMatch = data.hoTen?.toLowerCase().includes(searchData) || false;
-      
-      // Search in tramXe (station)
-      const tramXeMatch = data.tramXe?.toLowerCase().includes(searchData) || false;
-      
-      // Search in maNhanVien (employee code) for additional functionality
-      const maNhanVienMatch = data.maNhanVien?.toLowerCase().includes(searchData) || false;
-      
-      // Search in dienThoai (phone) for additional functionality
-      const dienThoaiMatch = data.dienThoai?.toLowerCase().includes(searchData) || false;
-      
-      return hoTenMatch || tramXeMatch || maNhanVienMatch || dienThoaiMatch;
+      return textMatch && timeMatch;
     };
     
     // Apply the filter
@@ -155,12 +160,57 @@ export class DangKyXeComponent implements OnInit {
    */
   clearSearch(searchInput: HTMLInputElement): void {
     searchInput.value = '';
-    this.dataSource.filter = '';
-    
-    // Reset to first page
-    if (this.dataSource.paginator) {
-      this.dataSource.paginator.firstPage();
+    this.applyFilter('');
+  }
+
+  /**
+   * Check if date is within the selected range
+   */
+  private isDateInRange(dateString: string): boolean {
+    if (!this.startDate && !this.endDate) {
+      return true; // No date filter applied
     }
+    
+    if (!dateString) {
+      return false; // No date in data
+    }
+    
+    const targetDate = new Date(dateString);
+    
+    if (this.startDate && this.endDate) {
+      // Both dates selected - check if date is within range
+      const start = new Date(this.startDate);
+      const end = new Date(this.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return targetDate >= start && targetDate <= end;
+    } else if (this.startDate) {
+      // Only start date selected
+      const start = new Date(this.startDate);
+      start.setHours(0, 0, 0, 0);
+      return targetDate >= start;
+    } else if (this.endDate) {
+      // Only end date selected
+      const end = new Date(this.endDate);
+      end.setHours(23, 59, 59, 999);
+      return targetDate <= end;
+    }
+    
+    return true;
+  }
+
+  /**
+   * Clear all filters
+   */
+  clearAllFilters(): void {
+    this.startDate = null;
+    this.endDate = null;
+    // Also clear text search if there's an input element
+    const searchInput = document.querySelector('input[placeholder*="Tìm kiếm nhanh"]') as HTMLInputElement;
+    if (searchInput) {
+      searchInput.value = '';
+    }
+    this.applyFilter('');
   }
 
   /**
@@ -212,7 +262,7 @@ export class DangKyXeComponent implements OnInit {
       const timeMatch = workShift.label.match(/(\d{2}:\d{2})\s*-\s*(\d{2}:\d{2})/);
       
       data.push({
-        id: i,
+        id: `test_${i}`,
         maNhanVien: `NV${i.toString().padStart(3, '0')}`,
         hoTen: names[Math.floor(Math.random() * names.length)],
         dienThoai: `090${Math.floor(Math.random() * 9000000) + 1000000}`,
@@ -245,18 +295,11 @@ export class DangKyXeComponent implements OnInit {
     dialogRef.afterClosed().subscribe(async result => {
       if (result) {
         // Check for duplicate before adding
-        const isDuplicate = await this.checkDuplicateNameAndStation(result.hoTen, result.tramXe, result.ngayDangKy);
+        const duplicateData = await this.checkDuplicateNameAndStationForAdd(result.hoTen, result.tramXe, result.ngayDangKy);
         
-        if (isDuplicate) {
-          this.snackBar.open(
-            `Không thể thêm: ${result.hoTen} đã đăng ký tại trạm ${result.tramXe} cho ngày ${result.ngayDangKy}`, 
-            'Đóng', 
-            {
-              duration: 5000,
-              horizontalPosition: 'right',
-              verticalPosition: 'top'
-            }
-          );
+        if (duplicateData.length > 0) {
+          // Show duplicate popup instead of snackbar
+          this.showDuplicateDialogForAdd(result, duplicateData);
           return;
         }
 
@@ -675,13 +718,12 @@ export class DangKyXeComponent implements OnInit {
 
       for (const registration of registrations) {
         try {
-          // Find the Firebase ID for this registration
-          const firebaseId = await this.findFirebaseIdForRegistration(registration);
-          if (firebaseId) {
-            await this.vehicleDataService.huyDangKyPhanXe(firebaseId);
+          // Use the document ID directly from registration.id
+          if (registration.id && !registration.id.startsWith('temp_')) {
+            await this.vehicleDataService.huyDangKyPhanXe(registration.id);
             deletedCount++;
           } else {
-            errors.push(`Không tìm thấy ID Firebase cho đăng ký ${registration.maNhanVien}`);
+            errors.push(`Không có ID hợp lệ cho đăng ký ${registration.maNhanVien}`);
           }
         } catch (error) {
           console.error(`Error deleting registration ${registration.maNhanVien}:`, error);
@@ -932,7 +974,7 @@ export class DangKyXeComponent implements OnInit {
         });
         
         return {
-          id: parseInt(dangKy.ID || (index + 1).toString()),
+          id: dangKy.ID || `temp_${index}`, // Use Firebase document ID
           maNhanVien: dangKy.MaNhanVien || '',
           hoTen: dangKy.HoTen || '',
           dienThoai: dangKy.DienThoai || '',
@@ -1023,6 +1065,73 @@ export class DangKyXeComponent implements OnInit {
       console.error('Error checking duplicate name and station:', error);
       return false;
     }
+  }
+
+  /**
+   * Check for duplicates when adding new registration - returns duplicate data
+   */
+  private async checkDuplicateNameAndStationForAdd(hoTen: string, tramXe: string, ngayDangKy: string): Promise<Registration[]> {
+    try {
+      // Get today's date
+      const today = new Date();
+      const todayString = today.toISOString().split('T')[0];
+      
+      // CHỈ CHECK DUPLICATE CHO NGÀY HÔM NAY
+      // Nếu ngày đăng ký không phải hôm nay, coi như không trùng lặp
+      if (ngayDangKy !== todayString) {
+        return [];
+      }
+      
+      const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      
+      const duplicates = allRegistrations.filter(reg => 
+        reg.HoTen?.toLowerCase().trim() === hoTen?.toLowerCase().trim() && 
+        reg.TramXe?.toLowerCase().trim() === tramXe?.toLowerCase().trim() && 
+        reg.NgayDangKy.toISOString().split('T')[0] === ngayDangKy
+      );
+
+      // Convert to Registration format for display
+      return duplicates.map(reg => ({
+        id: reg.ID || '',
+        maNhanVien: reg.MaNhanVien || '',
+        hoTen: reg.HoTen || '',
+        dienThoai: reg.DienThoai || '',
+        phongBan: reg.PhongBan || '',
+        ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+        loaiCa: reg.LoaiCa || '',
+        thoiGianBatDau: reg.ThoiGianBatDau || '',
+        thoiGianKetThuc: reg.ThoiGianKetThuc || '',
+        maTuyenXe: reg.MaTuyenXe || '',
+        tramXe: reg.TramXe || '',
+        noiDungCongViec: reg.NoiDungCongViec || '',
+        dangKyCom: reg.DangKyCom || false
+      }));
+    } catch (error) {
+      console.error('Error checking duplicate name and station for add:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Show duplicate dialog for add registration
+   */
+  private showDuplicateDialogForAdd(newRegistration: any, duplicates: Registration[]): void {
+    const dialogRef = this.dialog.open(DuplicateDataDialogComponent, {
+      width: '600px',
+      data: {
+        duplicates: duplicates,
+        validData: [],
+        duplicateDetails: [],
+        totalRecords: 1,
+        allDuplicates: duplicates.length > 0,
+        mode: 'add',
+        newRegistration: newRegistration
+      }
+    });
+
+    dialogRef.afterClosed().subscribe(result => {
+      // Dialog closed, no action needed for add mode
+    });
   }
 
   /**
@@ -1168,6 +1277,9 @@ export class DangKyXeComponent implements OnInit {
    * Export employee station PDF
    */
   async exportEmployeeStationPDF(): Promise<void> {
+    // TODO: Fix PdfExportEmployeeStationService import issue
+    console.log('Export employee station PDF - temporarily disabled');
+    /*
     try {
       // Set loading state
       this.isExportingEmployeeStationPDF = true;
@@ -1193,5 +1305,13 @@ export class DangKyXeComponent implements OnInit {
       // Reset loading state
       this.isExportingEmployeeStationPDF = false;
     }
+    */
+  }
+
+  /**
+   * Check if current user has admin or super_admin role
+   */
+  hasAdminRole(): boolean {
+    return this.authService.hasAnyRoleSync(['admin', 'super_admin']);
   }
 }

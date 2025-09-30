@@ -17,6 +17,8 @@ export interface DuplicateDataDialogData {
   duplicateDetails: string[];
   totalRecords: number;
   allDuplicates?: boolean;
+  mode?: 'import' | 'add'; // Thêm mode để phân biệt import và add
+  newRegistration?: Registration; // Dữ liệu đăng ký mới khi mode = 'add'
 }
 
 @Component({
@@ -67,5 +69,32 @@ export class DuplicateDataDialogComponent implements OnInit {
     this.dialogRef.close({
       action: 'cancel'
     });
+  }
+
+  /**
+   * Get dialog title based on mode
+   */
+  getDialogTitle(): string {
+    if (this.data.mode === 'add') {
+      return this.data.allDuplicates ? 'Không thể thêm đăng ký mới' : 'Phát hiện đăng ký trùng lặp';
+    }
+    return this.data.allDuplicates ? 'Tất cả dữ liệu đều trùng lặp' : 'Phát hiện dữ liệu trùng lặp';
+  }
+
+  /**
+   * Get section title based on mode
+   */
+  getSectionTitle(): string {
+    if (this.data.mode === 'add') {
+      return 'Đăng ký trùng lặp';
+    }
+    return 'Danh sách dữ liệu trùng lặp';
+  }
+
+  /**
+   * Check if this is add mode
+   */
+  isAddMode(): boolean {
+    return this.data.mode === 'add';
   }
 }

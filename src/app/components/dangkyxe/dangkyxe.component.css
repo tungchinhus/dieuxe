@@ -366,3 +366,73 @@
     padding: 6px 4px;
   }
 }
+
+/* ===== Time Filter Styles ===== */
+.time-filter-section {
+  margin: 16px 0;
+}
+
+.time-filter-card {
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  padding: 16px;
+  border: 1px solid #e0e0e0;
+}
+
+.time-filter-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+  font-weight: 500;
+  color: #1976d2;
+  font-size: 14px;
+}
+
+.time-filter-header .mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.time-filter-controls {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.date-field {
+  min-width: 150px;
+  max-width: 200px;
+}
+
+.clear-filter-button {
+  color: #f44336;
+  transition: all 0.2s ease;
+}
+
+.clear-filter-button:hover {
+  background-color: #ffebee;
+  color: #d32f2f;
+}
+
+.filter-info {
+  color: #666;
+  font-size: 12px;
+  margin-left: 8px;
+}
+
+/* Responsive design for time filter */
+@media (max-width: 768px) {
+  .time-filter-controls {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  
+  .date-field {
+    max-width: none;
+    min-width: auto;
+  }
+}

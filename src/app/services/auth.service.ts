@@ -29,6 +29,21 @@ export class AuthService {
   }
 
   private initializeAuth(): void {
+    // Load from storage for initial paint (will be reconciled by onAuthStateChanged)
+    const storedUser = localStorage.getItem('currentUser');
+    const storedToken = localStorage.getItem('authToken');
+    if (storedUser && storedToken) {
+      try {
+        const user = JSON.parse(storedUser);
+        this.currentUserSubject.next(user);
+        this.isAuthenticatedSubject.next(true);
+        this.tokenSubject.next(storedToken);
+      } catch (error) {
+        console.error('Error parsing stored user data:', error);
+        this.clearAuthData();
+      }
+    }
+
     // Subscribe Firebase auth state
     onAuthStateChanged(this.firebaseService.getAuth(), async (fbUser: FirebaseUser | null) => {
       if (fbUser) {
@@ -46,20 +61,65 @@ export class AuthService {
             localStorage.setItem('currentUser', JSON.stringify(matchedUser));
             localStorage.setItem('authToken', token);
           } else {
-            // Minimal fallback mapping if no profile found
-            const minimalUser: User = {
-              id: fbUser.uid,
-              username: fbUser.email || fbUser.uid,
-              email: fbUser.email || '',
-              fullName: fbUser.displayName || (fbUser.email || ''),
-              isActive: true,
-              roles: [],
-              createdAt: new Date(),
-              updatedAt: new Date()
-            };
-            this.currentUserSubject.next(minimalUser);
-            localStorage.setItem('currentUser', JSON.stringify(minimalUser));
-            localStorage.setItem('authToken', token);
+            // Check if we have a stored user with roles - preserve them
+            const storedUser = localStorage.getItem('currentUser');
+            if (storedUser) {
+              try {
+                const parsedStoredUser = JSON.parse(storedUser);
+                // Only create minimal user if stored user doesn't have roles or is different user
+                if (parsedStoredUser.email?.toLowerCase() !== (fbUser.email || '').toLowerCase() || 
+                    !parsedStoredUser.roles || parsedStoredUser.roles.length === 0) {
+                  // Minimal fallback mapping if no profile found
+                  const minimalUser: User = {
+                    id: fbUser.uid,
+                    username: fbUser.email || fbUser.uid,
+                    email: fbUser.email || '',
+                    fullName: fbUser.displayName || (fbUser.email || ''),
+                    isActive: true,
+                    roles: [],
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                  };
+                  this.currentUserSubject.next(minimalUser);
+                  localStorage.setItem('currentUser', JSON.stringify(minimalUser));
+                  localStorage.setItem('authToken', token);
+                } else {
+                  // Keep the stored user with roles, just update token
+                  localStorage.setItem('authToken', token);
+                }
+              } catch (parseError) {
+                console.error('Error parsing stored user:', parseError);
+                // Minimal fallback mapping if no profile found
+                const minimalUser: User = {
+                  id: fbUser.uid,
+                  username: fbUser.email || fbUser.uid,
+                  email: fbUser.email || '',
+                  fullName: fbUser.displayName || (fbUser.email || ''),
+                  isActive: true,
+                  roles: [],
+                  createdAt: new Date(),
+                  updatedAt: new Date()
+                };
+                this.currentUserSubject.next(minimalUser);
+                localStorage.setItem('currentUser', JSON.stringify(minimalUser));
+                localStorage.setItem('authToken', token);
+              }
+            } else {
+              // Minimal fallback mapping if no profile found
+              const minimalUser: User = {
+                id: fbUser.uid,
+                username: fbUser.email || fbUser.uid,
+                email: fbUser.email || '',
+                fullName: fbUser.displayName || (fbUser.email || ''),
+                isActive: true,
+                roles: [],
+                createdAt: new Date(),
+                updatedAt: new Date()
+              };
+              this.currentUserSubject.next(minimalUser);
+              localStorage.setItem('currentUser', JSON.stringify(minimalUser));
+              localStorage.setItem('authToken', token);
+            }
           }
         } catch (err) {
           console.error('Error handling auth state change:', err);
@@ -69,21 +129,6 @@ export class AuthService {
         this.clearAuthData();
       }
     });
-
-    // Load from storage for initial paint (will be reconciled by onAuthStateChanged)
-    const storedUser = localStorage.getItem('currentUser');
-    const storedToken = localStorage.getItem('authToken');
-    if (storedUser && storedToken) {
-      try {
-        const user = JSON.parse(storedUser);
-        this.currentUserSubject.next(user);
-        this.isAuthenticatedSubject.next(true);
-        this.tokenSubject.next(storedToken);
-      } catch (error) {
-        console.error('Error parsing stored user data:', error);
-        this.clearAuthData();
-      }
-    }
   }
 
   async login(usernameOrEmail: string, password: string): Promise<{ success: boolean; message: string; user?: User }> {
@@ -215,16 +260,29 @@ export class AuthService {
     return this.userManagementService.hasRole(currentUser.id, roleName);
   }
 
-  hasAnyRole(roleNames: string[]): Observable<boolean> {
+  /**
+   * Ensure user has valid roles, refresh from Firebase if needed
+   */
+  async ensureUserRoles(): Promise<void> {
+    const currentUser = this.getCurrentUser();
+    if (!currentUser || !currentUser.roles || currentUser.roles.length === 0) {
+      console.log('User has no roles, attempting to refresh from Firebase...');
+      await this.refreshUserData();
+    }
+  }
+
+  /**
+   * Check if current user has any of the specified roles
+   */
+  hasAnyRoleSync(roleNames: string[]): boolean {
     const currentUser = this.getCurrentUser();
     if (!currentUser || !currentUser.roles) {
-      return of(false);
+      return false;
     }
-    const hasAnyRole = currentUser.roles.some(userRole => {
+    return currentUser.roles.some(userRole => {
       const roleName = typeof userRole === 'string' ? userRole : (userRole as any).name;
       return roleNames.includes(roleName);
     });
-    return of(hasAnyRole);
   }
 
   // Token validity handled by Firebase; keep 24h fallback for stored token
@@ -243,14 +301,23 @@ export class AuthService {
   async refreshUserData(): Promise<void> {
     const currentUser = this.getCurrentUser();
     if (!currentUser) return;
+    
     try {
-      const user = await this.userManagementService.getUserById(currentUser.id).toPromise();
-      if (user) {
-        this.currentUserSubject.next(user);
-        localStorage.setItem('currentUser', JSON.stringify(user));
+      // Try to get fresh user data from Firebase
+      const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise();
+      const freshUser = (users || []).find(u => u.id === currentUser.id || u.email?.toLowerCase() === currentUser.email?.toLowerCase());
+      
+      if (freshUser) {
+        // Update with fresh data from Firebase
+        this.currentUserSubject.next(freshUser);
+        localStorage.setItem('currentUser', JSON.stringify(freshUser));
+      } else {
+        // If not found in Firebase, keep current user data (preserve roles)
+        console.warn('User not found in Firebase, keeping current data');
       }
     } catch (error) {
       console.error('Error refreshing user data:', error);
+      // Keep current user data on error
     }
   }
 

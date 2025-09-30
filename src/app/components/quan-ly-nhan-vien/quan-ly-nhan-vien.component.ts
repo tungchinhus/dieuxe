@@ -17,8 +17,12 @@ import { MatMenuModule } from '@angular/material/menu';
 import { MatSelectModule } from '@angular/material/select';
 import { MatOptionModule } from '@angular/material/core';
 import { MatChipsModule } from '@angular/material/chips';
+import { MatDatepickerModule } from '@angular/material/datepicker';
+import { MatNativeDateModule } from '@angular/material/core';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { SelectionModel } from '@angular/cdk/collections';
 import { FirestoreService } from '../../services/firestore.service';
+import { AuthService } from '../../services/auth.service';
 import { NhanVien, NhanVienFormData } from '../../models/employee.model';
 import { NhanVienFormDialogComponent } from './nhan-vien-form-dialog/nhan-vien-form-dialog.component';
 
@@ -41,7 +45,10 @@ import { NhanVienFormDialogComponent } from './nhan-vien-form-dialog/nhan-vien-f
     MatSortModule,
     MatCheckboxModule,
     MatMenuModule,
-    MatChipsModule
+    MatChipsModule,
+    MatDatepickerModule,
+    MatNativeDateModule,
+    MatTooltipModule
   ],
   templateUrl: './quan-ly-nhan-vien.component.html',
   styleUrl: './quan-ly-nhan-vien.component.css'
@@ -54,7 +61,6 @@ export class QuanLyNhanVienComponent implements OnInit {
   dataSource = new MatTableDataSource<NhanVien>([]);
   selection = new SelectionModel<NhanVien>(true, []);
   displayedColumns: string[] = [
-    'select',
     'MaNhanVien',
     'HoTen', 
     'DienThoai', 
@@ -64,15 +70,19 @@ export class QuanLyNhanVienComponent implements OnInit {
   ];
   
   searchTerm = '';
+  startDate: Date | null = null;
+  endDate: Date | null = null;
 
   constructor(
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private firestoreService: FirestoreService,
+    private authService: AuthService,
   ) {}
 
   ngOnInit(): void {
     console.log('QuanLyNhanVienComponent initialized successfully!');
+    this.updateDisplayedColumns();
     this.loadDataFromFirebase();
   }
 
@@ -130,6 +140,15 @@ export class QuanLyNhanVienComponent implements OnInit {
   }
 
   openFileUploadDialog(): void {
+    if (!this.hasSuperAdminRole()) {
+      this.snackBar.open('Bạn không có quyền import từ Excel!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls';
@@ -218,6 +237,15 @@ export class QuanLyNhanVienComponent implements OnInit {
    * Delete nhan vien
    */
   deleteNhanVien(nhanVien: NhanVien): void {
+    if (!this.hasSuperAdminRole()) {
+      this.snackBar.open('Bạn không có quyền xóa nhân viên!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     if (confirm(`Bạn có chắc chắn muốn xóa nhân viên ${nhanVien.HoTen}?`)) {
       this.performDeleteNhanVien(nhanVien.NhanVienID);
     }
@@ -275,7 +303,52 @@ export class QuanLyNhanVienComponent implements OnInit {
    * Apply search filter
    */
   applyFilter(): void {
+    this.dataSource.filterPredicate = (data: NhanVien, filter: string) => {
+      // Text search
+      const textMatch = !filter || 
+        (data.MaNhanVien?.toLowerCase().includes(filter) ?? false) ||
+        (data.HoTen?.toLowerCase().includes(filter) ?? false) ||
+        (data.DienThoai?.toLowerCase().includes(filter) ?? false);
+      
+      // Time filter
+      const timeMatch = this.isDateInRange(data.CreatedAt);
+      
+      return textMatch && timeMatch;
+    };
+    
     this.dataSource.filter = this.searchTerm.trim().toLowerCase();
+  }
+
+  /**
+   * Check if date is within the selected range
+   */
+  private isDateInRange(date: Date): boolean {
+    if (!this.startDate && !this.endDate) {
+      return true; // No date filter applied
+    }
+    
+    const targetDate = new Date(date);
+    
+    if (this.startDate && this.endDate) {
+      // Both dates selected - check if date is within range
+      const start = new Date(this.startDate);
+      const end = new Date(this.endDate);
+      start.setHours(0, 0, 0, 0);
+      end.setHours(23, 59, 59, 999);
+      return targetDate >= start && targetDate <= end;
+    } else if (this.startDate) {
+      // Only start date selected
+      const start = new Date(this.startDate);
+      start.setHours(0, 0, 0, 0);
+      return targetDate >= start;
+    } else if (this.endDate) {
+      // Only end date selected
+      const end = new Date(this.endDate);
+      end.setHours(23, 59, 59, 999);
+      return targetDate <= end;
+    }
+    
+    return true;
   }
 
   /**
@@ -283,6 +356,8 @@ export class QuanLyNhanVienComponent implements OnInit {
    */
   clearFilters(): void {
     this.searchTerm = '';
+    this.startDate = null;
+    this.endDate = null;
     this.dataSource.filter = '';
     this.dataSource.filterPredicate = (data: NhanVien, filter: string) => {
       return (data.MaNhanVien?.toLowerCase().includes(filter) ?? false) ||
@@ -292,9 +367,32 @@ export class QuanLyNhanVienComponent implements OnInit {
   }
 
   /**
+   * Get filtered data count
+   */
+  getFilteredCount(): number {
+    return this.dataSource.filteredData.length;
+  }
+
+  /**
+   * Get total data count
+   */
+  getTotalCount(): number {
+    return this.dataSource.data.length;
+  }
+
+  /**
    * Delete selected nhan vien
    */
   deleteSelected(): void {
+    if (!this.hasSuperAdminRole()) {
+      this.snackBar.open('Bạn không có quyền xóa nhân viên!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     if (this.selection.selected.length === 0) {
       this.snackBar.open('Vui lòng chọn nhân viên cần xóa!', 'Đóng', {
         duration: 3000,
@@ -342,4 +440,44 @@ export class QuanLyNhanVienComponent implements OnInit {
   }
 
   // ==================== HELPER METHODS ====================
+  
+  /**
+   * Update displayed columns based on user role
+   */
+  updateDisplayedColumns(): void {
+    if (this.hasSuperAdminRole()) {
+      this.displayedColumns = [
+        'select',
+        'MaNhanVien',
+        'HoTen', 
+        'DienThoai', 
+        'MaTuyenXe',
+        'TramXe',
+        'actions'
+      ];
+    } else {
+      this.displayedColumns = [
+        'MaNhanVien',
+        'HoTen', 
+        'DienThoai', 
+        'MaTuyenXe',
+        'TramXe',
+        'actions'
+      ];
+    }
+  }
+
+  /**
+   * Check if current user has admin or super_admin role
+   */
+  hasAdminRole(): boolean {
+    return this.authService.hasAnyRoleSync(['admin', 'super_admin']);
+  }
+
+  /**
+   * Check if current user has super_admin role
+   */
+  hasSuperAdminRole(): boolean {
+    return this.authService.hasAnyRoleSync(['super_admin']);
+  }
 }
