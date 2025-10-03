@@ -433,7 +433,7 @@ export class FirestoreService {
    * @throws Error if duplicate found
    */
   private async checkDuplicateNhanVien(nhanVienData: NhanVienFormData): Promise<void> {
-    const { HoTen, DienThoai } = nhanVienData;
+    const { HoTen, DienThoai, MaTuyenXe, TramXe } = nhanVienData;
     
     if (!HoTen && !DienThoai) {
       return; // No data to check
@@ -442,18 +442,7 @@ export class FirestoreService {
     try {
       const allNhanVien = await this.getAllNhanVien();
       
-      // Check for duplicate by name (case-insensitive)
-      if (HoTen) {
-        const duplicateByName = allNhanVien.find(nv => 
-          nv.HoTen && nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim()
-        );
-        
-        if (duplicateByName) {
-          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}"`);
-        }
-      }
-      
-      // Check for duplicate by phone number
+      // Check for duplicate by phone number (phone must be unique)
       if (DienThoai) {
         const duplicateByPhone = allNhanVien.find(nv => 
           nv.DienThoai && nv.DienThoai.replace(/\s+/g, '') === DienThoai.replace(/\s+/g, '')
@@ -461,6 +450,20 @@ export class FirestoreService {
         
         if (duplicateByPhone) {
           throw new Error(`Đã tồn tại nhân viên với số điện thoại "${DienThoai}"`);
+        }
+      }
+
+      // Check for complete duplicate: name + route + station all match
+      if (HoTen && MaTuyenXe && TramXe) {
+        const completeDuplicate = allNhanVien.find(nv =>
+          nv.HoTen && nv.MaTuyenXe && nv.TramXe &&
+          nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim() &&
+          nv.MaTuyenXe.toLowerCase().trim() === MaTuyenXe.toLowerCase().trim() &&
+          nv.TramXe.toLowerCase().trim() === TramXe.toLowerCase().trim()
+        );
+
+        if (completeDuplicate) {
+          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}" tại tuyến "${MaTuyenXe}" và trạm "${TramXe}"`);
         }
       }
       
@@ -480,7 +483,7 @@ export class FirestoreService {
    * @throws Error if duplicate found
    */
   private async checkDuplicateNhanVienForUpdate(currentId: number, updateData: Partial<NhanVienFormData>): Promise<void> {
-    const { HoTen, DienThoai } = updateData;
+    const { HoTen, DienThoai, MaTuyenXe, TramXe } = updateData;
     
     if (!HoTen && !DienThoai) {
       return; // No data to check
@@ -488,18 +491,6 @@ export class FirestoreService {
     
     try {
       const allNhanVien = await this.getAllNhanVien();
-      
-      // Check for duplicate by name (case-insensitive, excluding current employee)
-      if (HoTen) {
-        const duplicateByName = allNhanVien.find(nv => 
-          nv.NhanVienID !== currentId &&
-          nv.HoTen && nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim()
-        );
-        
-        if (duplicateByName) {
-          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}"`);
-        }
-      }
       
       // Check for duplicate by phone number (excluding current employee)
       if (DienThoai) {
@@ -510,6 +501,21 @@ export class FirestoreService {
         
         if (duplicateByPhone) {
           throw new Error(`Đã tồn tại nhân viên với số điện thoại "${DienThoai}"`);
+        }
+      }
+
+      // Check for complete duplicate: name + route + station all match (excluding current employee)
+      if (HoTen && MaTuyenXe && TramXe) {
+        const completeDuplicate = allNhanVien.find(nv =>
+          nv.NhanVienID !== currentId &&
+          nv.HoTen && nv.MaTuyenXe && nv.TramXe &&
+          nv.HoTen.toLowerCase().trim() === HoTen.toLowerCase().trim() &&
+          nv.MaTuyenXe.toLowerCase().trim() === MaTuyenXe.toLowerCase().trim() &&
+          nv.TramXe.toLowerCase().trim() === TramXe.toLowerCase().trim()
+        );
+
+        if (completeDuplicate) {
+          throw new Error(`Đã tồn tại nhân viên với tên "${HoTen}" tại tuyến "${MaTuyenXe}" và trạm "${TramXe}"`);
         }
       }
       

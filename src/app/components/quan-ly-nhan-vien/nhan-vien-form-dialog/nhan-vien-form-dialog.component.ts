@@ -73,12 +73,14 @@ export class NhanVienFormDialogComponent implements OnInit {
   }
 
   private createForm(): FormGroup {
-    return this.fb.group({
-      HoTen: ['', [Validators.required, Validators.maxLength(100)], [this.duplicateNameValidator.bind(this)]],
+    const form = this.fb.group({
+      HoTen: ['', [Validators.required, Validators.maxLength(100)]],
       DienThoai: ['', [Validators.pattern(/^[0-9+\-\s()]+$/), Validators.maxLength(20)], [this.duplicatePhoneValidator.bind(this)]],
       MaTuyenXe: ['', [Validators.maxLength(50)]],
       TramXe: ['', [Validators.maxLength(100)]]
     });
+
+    return form;
   }
 
   private populateForm(nhanVien: NhanVien): void {
@@ -117,7 +119,33 @@ export class NhanVienFormDialogComponent implements OnInit {
     console.log('=== FORM POPULATION COMPLETED ===');
   }
 
-  onSubmit(): void {
+  async onSubmit(): Promise<void> {
+    console.log('=== SUBMIT CLICKED ===');
+    console.log('Form values:', this.nhanVienForm.value);
+    
+    // Clear any previous duplicate errors
+    this.clearDuplicateErrors();
+    
+    // Check for duplicate only when all 3 fields (name + route + station) are filled
+    const duplicateError = await this.checkCompleteDuplicate();
+    console.log('Duplicate check result:', duplicateError);
+    
+    if (duplicateError) {
+      console.log('Setting duplicate error:', duplicateError);
+      // Set the error on the HoTen field
+      const hoTenControl = this.nhanVienForm.get('HoTen');
+      hoTenControl?.setErrors({
+        ...(hoTenControl.errors || {}),
+        completeDuplicate: {
+          message: duplicateError
+        }
+      });
+      hoTenControl?.markAsTouched();
+      this.markFormGroupTouched();
+      console.log('HoTen control errors after setting:', hoTenControl?.errors);
+      return;
+    }
+    
     if (this.nhanVienForm.valid) {
       const formData: NhanVienFormData = this.nhanVienForm.value;
       this.dialogRef.close(formData);
@@ -139,6 +167,13 @@ export class NhanVienFormDialogComponent implements OnInit {
 
   getFieldError(fieldName: string): string {
     const control = this.nhanVienForm.get(fieldName);
+    console.log(`Getting error for ${fieldName}:`, {
+      hasErrors: !!control?.errors,
+      errors: control?.errors,
+      touched: control?.touched,
+      dirty: control?.dirty
+    });
+    
     if (control?.errors && (control.touched || control.dirty)) {
       if (control.errors['required']) {
         return `${this.getFieldLabel(fieldName)} là bắt buộc`;
@@ -149,11 +184,12 @@ export class NhanVienFormDialogComponent implements OnInit {
       if (control.errors['pattern']) {
         return `${this.getFieldLabel(fieldName)} không đúng định dạng`;
       }
-      if (control.errors['duplicateName']) {
-        return control.errors['duplicateName'].message;
-      }
       if (control.errors['duplicatePhone']) {
         return control.errors['duplicatePhone'].message;
+      }
+      if (control.errors['completeDuplicate']) {
+        console.log('Returning completeDuplicate error:', control.errors['completeDuplicate'].message);
+        return control.errors['completeDuplicate'].message;
       }
     }
     return '';
@@ -298,37 +334,73 @@ export class NhanVienFormDialogComponent implements OnInit {
   // ==================== DUPLICATE VALIDATION ====================
   
   /**
-   * Custom validator to check duplicate employee names
+   * Clear all duplicate-related errors from form controls
    */
-  private duplicateNameValidator(control: AbstractControl): Promise<ValidationErrors | null> {
-    return new Promise((resolve) => {
-      if (!control.value) {
-        resolve(null);
-        return;
-      }
+  private clearDuplicateErrors(): void {
+    const hoTenControl = this.nhanVienForm.get('HoTen');
+    if (hoTenControl?.errors) {
+      const errors = { ...hoTenControl.errors };
+      delete errors['completeDuplicate'];
+      delete errors['duplicateNameAndStation'];
+      hoTenControl.setErrors(Object.keys(errors).length ? errors : null);
+    }
+  }
 
-      this.firestoreService.getAllNhanVien().then(allNhanVien => {
-        const duplicate = allNhanVien.find(nv => {
-          // In edit mode, exclude current employee
-          if (this.isEditMode && this.data.nhanVien && nv.NhanVienID === this.data.nhanVien.NhanVienID) {
-            return false;
-          }
-          return nv.HoTen && nv.HoTen.toLowerCase().trim() === control.value.toLowerCase().trim();
-        });
+  /**
+   * Check for complete duplicate: name + route + station all match
+   */
+  private async checkCompleteDuplicate(): Promise<string | null> {
+    const hoTen = (this.nhanVienForm.get('HoTen')?.value || '').toString().trim();
+    const maTuyenXe = (this.nhanVienForm.get('MaTuyenXe')?.value || '').toString().trim();
+    const tramXe = (this.nhanVienForm.get('TramXe')?.value || '').toString().trim();
 
-        if (duplicate) {
-          resolve({ 
-            duplicateName: { 
-              message: `Đã tồn tại nhân viên với tên "${control.value}"` 
-            } 
-          });
-        } else {
-          resolve(null);
+    console.log('=== CHECKING COMPLETE DUPLICATE ===');
+    console.log('Input values:', { hoTen, maTuyenXe, tramXe });
+
+    // Only check if all 3 fields are filled
+    if (!hoTen || !maTuyenXe || !tramXe) {
+      console.log('Missing required fields, skipping duplicate check');
+      return null;
+    }
+
+    try {
+      const allNhanVien = await this.firestoreService.getAllNhanVien();
+      console.log('Total employees in database:', allNhanVien.length);
+      
+      const duplicate = allNhanVien.find(nv => {
+        // In edit mode, exclude current employee
+        if (this.isEditMode && this.data.nhanVien && nv.NhanVienID === this.data.nhanVien.NhanVienID) {
+          console.log('Skipping current employee in edit mode:', nv.NhanVienID);
+          return false;
         }
-      }).catch(() => {
-        resolve(null); // Don't block on database errors
+        
+        const sameName = (nv.HoTen || '').toLowerCase().trim() === hoTen.toLowerCase();
+        const sameRoute = (nv.MaTuyenXe || '').toLowerCase().trim() === maTuyenXe.toLowerCase();
+        const sameStation = (nv.TramXe || '').toLowerCase().trim() === tramXe.toLowerCase();
+        
+        console.log(`Checking employee ${nv.HoTen}:`, {
+          sameName,
+          sameRoute,
+          sameStation,
+          employeeData: { HoTen: nv.HoTen, MaTuyenXe: nv.MaTuyenXe, TramXe: nv.TramXe }
+        });
+        
+        return sameName && sameRoute && sameStation;
       });
-    });
+
+      if (duplicate) {
+        const errorMessage = `Đã tồn tại nhân viên với tên "${hoTen}" tại tuyến "${maTuyenXe}" và trạm "${tramXe}"`;
+        console.log('DUPLICATE FOUND:', duplicate);
+        console.log('Error message:', errorMessage);
+        return errorMessage;
+      }
+      
+      console.log('No duplicate found');
+      return null;
+    } catch (error) {
+      console.error('Error checking complete duplicate:', error);
+      return null;
+    }
   }
 
   /**
@@ -363,6 +435,49 @@ export class NhanVienFormDialogComponent implements OnInit {
         resolve(null); // Don't block on database errors
       });
     });
+  }
+
+
+  /**
+   * Debug method to check current form validation status
+   */
+  debugValidationStatus(): void {
+    console.log('=== FORM VALIDATION DEBUG ===');
+    console.log('Form valid:', this.nhanVienForm.valid);
+    console.log('Form errors:', this.nhanVienForm.errors);
+    
+    Object.keys(this.nhanVienForm.controls).forEach(key => {
+      const control = this.nhanVienForm.get(key);
+      console.log(`${key}:`, {
+        value: control?.value,
+        valid: control?.valid,
+        errors: control?.errors,
+        touched: control?.touched,
+        dirty: control?.dirty
+      });
+    });
+    console.log('=== END DEBUG ===');
+  }
+
+  /**
+   * Test method to manually trigger duplicate check
+   */
+  async testDuplicateCheck(): Promise<void> {
+    console.log('=== MANUAL DUPLICATE CHECK TEST ===');
+    const result = await this.checkCompleteDuplicate();
+    console.log('Test result:', result);
+    
+    if (result) {
+      const hoTenControl = this.nhanVienForm.get('HoTen');
+      hoTenControl?.setErrors({
+        ...(hoTenControl.errors || {}),
+        completeDuplicate: {
+          message: result
+        }
+      });
+      hoTenControl?.markAsTouched();
+      console.log('Error set on HoTen control');
+    }
   }
 
 }
