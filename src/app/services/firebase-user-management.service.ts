@@ -48,12 +48,27 @@ export class FirebaseUserManagementService {
 
   private async initializeData(): Promise<void> {
     try {
+      console.log('Initializing Firebase data...');
+      console.log('Firestore instance:', this.firestore);
+      
+      // Test Firestore connectivity first
+      const testQuery = collection(this.firestore, 'test');
+      console.log('Testing Firestore connectivity...');
+      
       // Load data from Firebase
       await this.loadUsers();
       await this.loadRoles();
       await this.loadPermissions();
+      
+      console.log('Firebase data initialization completed successfully');
     } catch (error) {
-      console.error('Error initializing data:', error);
+      console.error('Error initializing Firebase data:', error);
+      console.error('Error details:', {
+        code: (error as any).code,
+        message: (error as any).message,
+        stack: (error as any).stack
+      });
+      
       // Initialize with default data if Firebase fails
       this.initializeDefaultData();
     }
@@ -73,7 +88,10 @@ export class FirebaseUserManagementService {
       console.log('Firestore instance:', this.firestore);
       console.log('Collection name:', this.COLLECTIONS.USERS);
       
-      const querySnapshot = await getDocs(collection(this.firestore, this.COLLECTIONS.USERS));
+      const usersCollection = collection(this.firestore, this.COLLECTIONS.USERS);
+      console.log('Users collection reference:', usersCollection);
+      
+      const querySnapshot = await getDocs(usersCollection);
       console.log('Query snapshot:', querySnapshot);
       console.log('Number of docs:', querySnapshot.docs.length);
       
@@ -86,6 +104,17 @@ export class FirebaseUserManagementService {
       this.usersSubject.next(users);
     } catch (error) {
       console.error('Error loading users:', error);
+      console.error('Error details:', {
+        code: (error as any).code,
+        message: (error as any).message,
+        stack: (error as any).stack
+      });
+      
+      // Check if it's a network connectivity issue
+      if ((error as any).code === 'unavailable' || (error as any).message?.includes('Could not reach Cloud Firestore backend')) {
+        console.warn('Firestore backend is unavailable, operating in offline mode');
+      }
+      
       this.usersSubject.next([]);
     }
   }

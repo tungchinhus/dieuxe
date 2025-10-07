@@ -139,15 +139,27 @@ export class AuthService {
       let signInEmail = input;
       if (!input.includes('@')) {
         // Treat as username → find corresponding email from user directory
-        const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
-        const matchedByUsername = users.find(u => (u.username || '').toLowerCase().trim() === input.toLowerCase());
-        if (matchedByUsername?.email) {
-          signInEmail = matchedByUsername.email;
+        try {
+          const users = await this.userManagementService.getUsers().pipe(take(1)).toPromise() || [];
+          const matchedByUsername = users.find(u => (u.username || '').toLowerCase().trim() === input.toLowerCase());
+          if (matchedByUsername?.email) {
+            signInEmail = matchedByUsername.email;
+          }
+        } catch (userLookupError) {
+          console.warn('Could not lookup user by username, proceeding with original input:', userLookupError);
+          // If we can't lookup users, try the input as email anyway
         }
       }
 
+      // Check if auth instance is available
+      const auth = this.firebaseService.getAuth();
+      if (!auth) {
+        throw new Error('Firebase Auth not initialized');
+      }
+
       // Use Firebase Auth with resolved email
-      const credential = await signInWithEmailAndPassword(this.firebaseService.getAuth(), signInEmail, password);
+      console.log('Attempting login with email:', signInEmail);
+      const credential = await signInWithEmailAndPassword(auth, signInEmail, password);
       const fbUser = credential.user;
       const token = await fbUser.getIdToken();
 
@@ -187,8 +199,23 @@ export class AuthService {
       return { success: true, message: 'Đăng nhập thành công', user: appUser };
     } catch (error: any) {
       console.error('Firebase login error:', error);
-      const message = this.translateFirebaseError(error?.code) || 'Tên đăng nhập hoặc mật khẩu không đúng';
-      return { success: false, message };
+      console.error('Error code:', error?.code);
+      console.error('Error message:', error?.message);
+      
+      let message = this.translateFirebaseError(error?.code);
+      
+      // Handle network-request-failed specifically
+      if (error?.code === 'auth/network-request-failed') {
+        message = 'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.';
+        console.error('Network request failed - possible causes:');
+        console.error('1. No internet connection');
+        console.error('2. Firebase API keys blocked');
+        console.error('3. App Check blocking requests');
+        console.error('4. CORS issues');
+        console.error('5. Firebase project configuration issues');
+      }
+      
+      return { success: false, message: message || 'Tên đăng nhập hoặc mật khẩu không đúng' };
     }
   }
 
@@ -348,6 +375,12 @@ export class AuthService {
         return 'Tên đăng nhập hoặc mật khẩu không đúng';
       case 'auth/too-many-requests':
         return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau';
+      case 'auth/network-request-failed':
+        return 'Lỗi kết nối mạng. Vui lòng kiểm tra kết nối internet và thử lại.';
+      case 'auth/invalid-api-key':
+        return 'API key không hợp lệ. Vui lòng liên hệ quản trị viên.';
+      case 'auth/app-not-authorized':
+        return 'Ứng dụng chưa được ủy quyền. Vui lòng liên hệ quản trị viên.';
       default:
         return null;
     }

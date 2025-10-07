@@ -67,4 +67,8 @@ export const routes: Routes = [
     path: 'ai-test',
     loadComponent: () => import('./components/ai-test/ai-test.component').then(m => m.AiTestComponent)
   },
+  {
+    path: 'firebase-test',
+    loadComponent: () => import('./components/firebase-test/firebase-test.component').then(m => m.FirebaseTestComponent)
+  },
 ];
