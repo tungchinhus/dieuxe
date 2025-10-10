@@ -4,6 +4,7 @@ export interface XeDuaDon {
   TenTaiXe: string;
   SoDienThoaiTaiXe: string;
   LoaiXe: string;
+  MaNhaXe?: string; // Thêm trường liên kết với nhà xe
   GhiChu?: string;
   createdAt?: Date;
   updatedAt?: Date;

@@ -60,6 +60,22 @@
           <mat-icon matSuffix>directions_bus</mat-icon>
           <mat-hint>Chọn loại xe phù hợp</mat-hint>
         </mat-form-field>
+
+        <!-- Nha Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Nhà xe</mat-label>
+          <mat-select [(ngModel)]="formData.MaNhaXe">
+            <mat-option value="">-- Chọn nhà xe --</mat-option>
+            <mat-option *ngFor="let option of nhaXeOptions" [value]="option.value">
+              <div class="nha-xe-option">
+                <mat-icon class="option-icon">business</mat-icon>
+                <span>{{ option.label }}</span>
+              </div>
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>business</mat-icon>
+          <mat-hint>Chọn nhà xe quản lý (tùy chọn)</mat-hint>
+        </mat-form-field>
       </div>
       
       <!-- Ghi Chu - Full width row -->

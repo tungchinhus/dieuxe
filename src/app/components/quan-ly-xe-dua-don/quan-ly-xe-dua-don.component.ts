@@ -22,6 +22,7 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { SidenavService } from '../../services/sidenav.service';
 import { FirestoreService } from '../../services/firestore.service';
 import { XeDuaDon, LoaiXe } from '../../models/vehicle.model';
+import { NhaXe } from '../../models/garage.model';
 import { XeDuaDonFormDialogComponent } from './xe-dua-don-form-dialog/xe-dua-don-form-dialog.component';
 
 @Component({
@@ -82,6 +83,9 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     { value: LoaiXe.XE_TAXI_7_CHO, label: 'Xe taxi 7 chỗ' }
   ];
 
+  // NhaXe options
+  nhaXeOptions: { value: string; label: string }[] = [];
+
   constructor(
     private sidenavService: SidenavService,
     private dialog: MatDialog,
@@ -97,6 +101,7 @@ export class QuanLyXeDuaDonComponent implements OnInit {
   ngOnInit(): void {
     console.log('QuanLyXeDuaDonComponent initialized successfully!');
     this.loadDataFromFirebase();
+    this.loadNhaXeOptions();
   }
 
   ngAfterViewInit(): void {
@@ -106,6 +111,23 @@ export class QuanLyXeDuaDonComponent implements OnInit {
 
   // ==================== FIREBASE INTEGRATION ====================
   
+  /**
+   * Load nha xe options from Firebase
+   */
+  private async loadNhaXeOptions(): Promise<void> {
+    try {
+      const nhaXeList = await this.firestoreService.getAllNhaXe();
+      this.nhaXeOptions = nhaXeList.map(nhaXe => ({
+        value: nhaXe.MaNhaXe,
+        label: nhaXe.TenNhaXe
+      }));
+      console.log('Loaded nha xe options:', this.nhaXeOptions);
+    } catch (error) {
+      console.error('Error loading nha xe options:', error);
+      this.nhaXeOptions = [];
+    }
+  }
+
   /**
    * Load data from Firebase and update the table
    */
@@ -143,7 +165,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     const dialogRef = this.dialog.open(XeDuaDonFormDialogComponent, {
       width: '1000px',
       data: {
-        loaiXeOptions: this.loaiXeOptions
+        loaiXeOptions: this.loaiXeOptions,
+        nhaXeOptions: this.nhaXeOptions
       }
     });
 
@@ -204,7 +227,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
       width: '800px',
       data: {
         xeDuaDon: xeDuaDon,
-        loaiXeOptions: this.loaiXeOptions
+        loaiXeOptions: this.loaiXeOptions,
+        nhaXeOptions: this.nhaXeOptions
       }
     });
 

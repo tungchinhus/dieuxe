@@ -9,10 +9,12 @@ import { MatSelectModule } from '@angular/material/select';
 import { MatIconModule } from '@angular/material/icon';
 import { MatCardModule } from '@angular/material/card';
 import { XeDuaDon, LoaiXe } from '../../../models/vehicle.model';
+import { NhaXe } from '../../../models/garage.model';
 
 export interface XeDuaDonFormData {
   xeDuaDon?: XeDuaDon;
   loaiXeOptions: { value: LoaiXe; label: string }[];
+  nhaXeOptions: { value: string; label: string }[];
 }
 
 @Component({
@@ -36,12 +38,14 @@ export class XeDuaDonFormDialogComponent implements OnInit {
   formData: Partial<XeDuaDon> = {};
   isEditMode = false;
   loaiXeOptions: { value: LoaiXe; label: string }[] = [];
+  nhaXeOptions: { value: string; label: string }[] = [];
 
   constructor(
     public dialogRef: MatDialogRef<XeDuaDonFormDialogComponent>,
     @Inject(MAT_DIALOG_DATA) public data: XeDuaDonFormData
   ) {
     this.loaiXeOptions = data.loaiXeOptions;
+    this.nhaXeOptions = data.nhaXeOptions;
   }
 
   ngOnInit(): void {
@@ -59,6 +63,7 @@ export class XeDuaDonFormDialogComponent implements OnInit {
       TenTaiXe: '',
       SoDienThoaiTaiXe: '',
       LoaiXe: LoaiXe.XE_16_CHO,
+      MaNhaXe: '',
       GhiChu: ''
     };
   }
