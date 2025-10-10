@@ -37,6 +37,11 @@ service cloud.firestore {
       allow read, write: if true; // Tạm thời cho phép tất cả để test
     }
     
+    // Rules cho collection nhaXe
+    match /nhaXe/{document} {
+      allow read, write: if true; // Tạm thời cho phép tất cả để test
+    }
+    
     // Rules cho collection users (quản lý người dùng)
     match /users/{document} {
       allow read, write: if true; // Tạm thời cho phép tất cả để test

@@ -176,12 +176,12 @@
   background-color: #e3f2fd !important;
 }
 
-.bien-so-cell {
+.ten-nha-xe-cell {
   display: flex;
   align-items: center;
 }
 
-.car-icon {
+.company-icon {
   color: #2196f3;
   margin-right: 8px;
   font-size: 18px;
@@ -189,26 +189,29 @@
   height: 18px;
 }
 
-.bien-so-text {
+.ten-nha-xe-text {
   font-weight: 500;
-  font-family: 'Courier New', monospace;
-  background-color: #e3f2fd;
-  padding: 2px 6px;
-  border-radius: 4px;
-  font-size: 0.85rem;
+  color: #333;
 }
 
-.driver-cell {
+.dia-chi-cell {
   display: flex;
   align-items: center;
 }
 
-.driver-icon {
-  color: #4caf50;
+.location-icon {
+  color: #ff9800;
   margin-right: 8px;
   font-size: 18px;
   width: 18px;
   height: 18px;
+}
+
+.dia-chi-text {
+  max-width: 200px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .phone-cell {
@@ -217,7 +220,7 @@
 }
 
 .phone-icon {
-  color: #ff9800;
+  color: #4caf50;
   margin-right: 8px;
   font-size: 18px;
   width: 18px;
@@ -234,59 +237,45 @@
   text-decoration: underline;
 }
 
-.loai-xe-badge {
+.nguoi-dai-dien-cell {
+  display: flex;
+  align-items: center;
+}
+
+.person-icon {
+  color: #9c27b0;
+  margin-right: 8px;
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+}
+
+.trang-thai-badge {
   display: inline-block;
   padding: 4px 8px;
   border-radius: 12px;
   font-size: 0.8rem;
   font-weight: 500;
   text-align: center;
-  min-width: 60px;
+  min-width: 80px;
 }
 
-.loai-xe-4-cho {
+.trang-thai-hoat-dong {
   background-color: #e8f5e8;
   color: #2e7d32;
   border: 1px solid #c8e6c9;
 }
 
-.loai-xe-7-cho {
-  background-color: #e3f2fd;
-  color: #1565c0;
-  border: 1px solid #bbdefb;
-}
-
-.loai-xe-16-cho {
+.trang-thai-tam-dung {
   background-color: #fff3e0;
   color: #ef6c00;
   border: 1px solid #ffcc02;
 }
 
-.loai-xe-29-cho {
-  background-color: #f3e5f5;
-  color: #7b1fa2;
-  border: 1px solid #e1bee7;
-}
-
-.loai-xe-45-cho {
+.trang-thai-ngung-hoat-dong {
   background-color: #ffebee;
   color: #c62828;
   border: 1px solid #ffcdd2;
-}
-
-.loai-xe-taxi-7-cho {
-  background-color: #e8f5e8;
-  color: #1b5e20;
-  border: 1px solid #c8e6c9;
-}
-
-.ghi-chu-text {
-  max-width: 200px;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: #666;
-  font-style: italic;
 }
 
 .action-button {
@@ -384,13 +373,13 @@
     padding: 8px 6px;
   }
   
-  .bien-so-text {
-    font-size: 0.75rem;
+  .ten-nha-xe-text {
+    font-size: 0.85rem;
   }
   
-  .loai-xe-badge {
+  .trang-thai-badge {
     font-size: 0.7rem;
-    min-width: 50px;
+    min-width: 60px;
   }
 }
 

@@ -134,7 +134,8 @@ export class XeDuaDonFormDialogComponent implements OnInit {
       [LoaiXe.XE_7_CHO]: 'local_taxi',
       [LoaiXe.XE_16_CHO]: 'airport_shuttle',
       [LoaiXe.XE_29_CHO]: 'directions_bus',
-      [LoaiXe.XE_45_CHO]: 'directions_bus'
+      [LoaiXe.XE_45_CHO]: 'directions_bus',
+      [LoaiXe.XE_TAXI_7_CHO]: 'local_taxi'
     };
     
     return iconMap[loaiXe] || 'directions_car';

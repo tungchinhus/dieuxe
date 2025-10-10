@@ -1,0 +1,181 @@
+<div class="container">
+  <!-- Main Content Area -->
+  <div class="main-content">
+    <!-- Top Header Bar -->
+    <div class="top-header">
+      <div class="header-content">
+        <h1 class="header-title">Quản lý Nhà Xe</h1>
+        <p class="header-subtitle">Quản lý thông tin các nhà xe và công ty vận tải</p>
+      </div>
+    </div>
+
+    
+    <!-- Content Wrapper -->
+    <div class="content-wrapper">
+      <!-- Search and Action Bar -->
+      <div class="search-action-bar">
+      <div class="search-container">
+        <mat-form-field appearance="outline" class="search-field">
+          <mat-label>Tìm kiếm theo tên nhà xe, địa chỉ, số điện thoại...</mat-label>
+          <input matInput 
+                 [(ngModel)]="searchTerm" 
+                 (input)="applyFilter()"
+                 placeholder="Tìm kiếm theo tên nhà xe, địa chỉ, số điện thoại...">
+          <mat-icon matSuffix>search</mat-icon>
+        </mat-form-field>
+      </div>
+      
+      <div class="button-container">
+        <button mat-raised-button 
+                color="primary" 
+                (click)="openAddNhaXeDialog()"
+                class="action-button">
+          <mat-icon>add</mat-icon>
+          Thêm Nhà Xe
+        </button>
+        
+        <button mat-raised-button 
+                color="warn" 
+                (click)="deleteSelected()"
+                [disabled]="selectedNhaXe.size === 0"
+                class="action-button">
+          <mat-icon>delete</mat-icon>
+          Xóa Đã Chọn ({{ getSelectedCount() }})
+        </button>
+      </div>
+    </div>
+
+    <!-- Data Table Section -->
+    <div class="table-section">
+      
+      <div class="table-wrapper">
+        <table mat-table [dataSource]="dataSource" matSort class="data-table">
+            <!-- Select Column -->
+            <ng-container matColumnDef="select">
+              <th mat-header-cell *matHeaderCellDef>
+                <mat-checkbox
+                  (change)="$event ? masterToggle() : null"
+                  [checked]="isAllSelected()"
+                  [indeterminate]="isIndeterminate()"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </th>
+              <td mat-cell *matCellDef="let row">
+                <mat-checkbox
+                  (click)="$event.stopPropagation()"
+                  (change)="$event ? toggleSelection(row) : null"
+                  [checked]="isSelected(row)"
+                  [aria-label]="checkboxLabel()">
+                </mat-checkbox>
+              </td>
+            </ng-container>
+
+            <!-- TenNhaXe Column -->
+            <ng-container matColumnDef="TenNhaXe">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Tên Nhà Xe</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="ten-nha-xe-cell">
+                  <mat-icon class="company-icon">business</mat-icon>
+                  <span class="ten-nha-xe-text">{{ row.TenNhaXe }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- DiaChi Column -->
+            <ng-container matColumnDef="DiaChi">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Địa Chỉ</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="dia-chi-cell">
+                  <mat-icon class="location-icon">location_on</mat-icon>
+                  <span class="dia-chi-text" [title]="row.DiaChi">
+                    {{ row.DiaChi }}
+                  </span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- SoDienThoai Column -->
+            <ng-container matColumnDef="SoDienThoai">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Số Điện Thoại</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="phone-cell">
+                  <mat-icon class="phone-icon">phone</mat-icon>
+                  <a [href]="'tel:' + row.SoDienThoai" class="phone-link">
+                    {{ row.SoDienThoai }}
+                  </a>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- NguoiDaiDien Column -->
+            <ng-container matColumnDef="NguoiDaiDien">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Người Đại Diện</th>
+              <td mat-cell *matCellDef="let row">
+                <div class="nguoi-dai-dien-cell">
+                  <mat-icon class="person-icon">person</mat-icon>
+                  <span>{{ row.NguoiDaiDien }}</span>
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- TrangThai Column -->
+            <ng-container matColumnDef="TrangThai">
+              <th mat-header-cell *matHeaderCellDef mat-sort-header>Trạng Thái</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="trang-thai-badge" [ngClass]="getTrangThaiClass(row.TrangThai)">
+                  {{ getTrangThaiText(row.TrangThai) }}
+                </span>
+              </td>
+            </ng-container>
+
+            <!-- Actions Column -->
+            <ng-container matColumnDef="actions">
+              <th mat-header-cell *matHeaderCellDef></th>
+              <td mat-cell *matCellDef="let row">
+                <button mat-icon-button [matMenuTriggerFor]="actionMenu" class="action-button">
+                  <mat-icon>more_vert</mat-icon>
+                </button>
+                <mat-menu #actionMenu="matMenu">
+                  <button mat-menu-item (click)="editNhaXe(row)">
+                    <mat-icon>edit</mat-icon>
+                    <span>Chỉnh sửa</span>
+                  </button>
+                  <button mat-menu-item (click)="deleteNhaXe(row)" class="delete-action">
+                    <mat-icon>delete</mat-icon>
+                    <span>Xóa</span>
+                  </button>
+                </mat-menu>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let row; columns: displayedColumns;" 
+                [class.selected-row]="isSelected(row)"
+                (click)="toggleSelection(row)"></tr>
+          </table>
+
+          <!-- No Data Message -->
+          @if (dataSource.data.length === 0) {
+            <div class="no-data">
+              <mat-icon class="no-data-icon">business</mat-icon>
+              <h3>Chưa có nhà xe nào</h3>
+              <p>Nhấn "Thêm nhà xe" để bắt đầu quản lý</p>
+              <button mat-raised-button color="primary" (click)="openAddNhaXeDialog()">
+                <mat-icon>add</mat-icon>
+                Thêm nhà xe đầu tiên
+              </button>
+            </div>
+          }
+
+          <!-- Paginator -->
+          <mat-paginator 
+            [pageSizeOptions]="[10, 25, 50, 100]" 
+            [pageSize]="10"
+            showFirstLastButtons
+            class="paginator">
+          </mat-paginator>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>

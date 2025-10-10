@@ -26,6 +26,11 @@ export const routes: Routes = [
     canActivate: [AuthGuard]
   },
   {
+    path: 'quan-ly-nha-xe',
+    loadComponent: () => import('./components/quan-ly-nha-xe/quan-ly-nha-xe.component').then(m => m.QuanLyNhaXeComponent),
+    canActivate: [AuthGuard]
+  },
+  {
     path: 'quan-ly-xe-dua-don',
     loadComponent: () => import('./components/quan-ly-xe-dua-don/quan-ly-xe-dua-don.component').then(m => m.QuanLyXeDuaDonComponent),
     canActivate: [AuthGuard]

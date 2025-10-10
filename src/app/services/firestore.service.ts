@@ -22,6 +22,7 @@ import {
 import { FirebaseService } from './firebase.service';
 import { XeDuaDon, LichTrinhXe, ChiTietTuyenDuong, DangKyPhanXe } from '../models/vehicle.model';
 import { NhanVien, NhanVienFormData } from '../models/employee.model';
+import { NhaXe } from '../models/garage.model';
 
 @Injectable({
   providedIn: 'root'
@@ -35,7 +36,8 @@ export class FirestoreService {
     LICH_TRINH_XE: 'lichTrinhXe',
     CHI_TIET_TUYEN_DUONG: 'chiTietTuyenDuong',
     DANG_KY_PHAN_XE: 'dangKyPhanXe',
-    NHAN_VIEN: 'nhanVien'
+    NHAN_VIEN: 'nhanVien',
+    NHA_XE: 'nhaXe'
   };
 
   constructor(private firebaseService: FirebaseService) {
@@ -542,6 +544,107 @@ export class FirestoreService {
       console.error('Error generating next MaNhanVien:', error);
       // Fallback to simple timestamp
       return `NV${Date.now().toString().slice(-6)}`;
+    }
+  }
+
+  // ==================== NHA XE ====================
+  async createNhaXe(nhaXe: Omit<NhaXe, 'MaNhaXe' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const now = new Date();
+    const data = {
+      ...nhaXe,
+      createdAt: Timestamp.fromDate(now),
+      updatedAt: Timestamp.fromDate(now)
+    };
+
+    const docRef = await addDoc(collection(this.firestore, this.COLLECTIONS.NHA_XE), data);
+    return docRef.id;
+  }
+
+  async getAllNhaXe(): Promise<NhaXe[]> {
+    try {
+      const q = query(
+        collection(this.firestore, this.COLLECTIONS.NHA_XE),
+        orderBy('createdAt', 'desc')
+      );
+      
+      const querySnapshot = await getDocs(q);
+      const nhaXeList: NhaXe[] = [];
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        nhaXeList.push({
+          MaNhaXe: doc.id,
+          TenNhaXe: data['TenNhaXe'] || '',
+          DiaChi: data['DiaChi'] || '',
+          SoDienThoai: data['SoDienThoai'] || '',
+          Email: data['Email'] || '',
+          NguoiDaiDien: data['NguoiDaiDien'] || '',
+          SoDienThoaiNguoiDaiDien: data['SoDienThoaiNguoiDaiDien'] || '',
+          GhiChu: data['GhiChu'] || '',
+          TrangThai: data['TrangThai'] || 'hoat_dong',
+          createdAt: data['createdAt']?.toDate(),
+          updatedAt: data['updatedAt']?.toDate()
+        });
+      });
+
+      return nhaXeList;
+    } catch (error) {
+      console.error('Error getting all nha xe:', error);
+      throw error;
+    }
+  }
+
+  async getNhaXeById(maNhaXe: string): Promise<NhaXe | null> {
+    try {
+      const docRef = doc(this.firestore, this.COLLECTIONS.NHA_XE, maNhaXe);
+      const docSnap = await getDoc(docRef);
+
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        return {
+          MaNhaXe: docSnap.id,
+          TenNhaXe: data['TenNhaXe'] || '',
+          DiaChi: data['DiaChi'] || '',
+          SoDienThoai: data['SoDienThoai'] || '',
+          Email: data['Email'] || '',
+          NguoiDaiDien: data['NguoiDaiDien'] || '',
+          SoDienThoaiNguoiDaiDien: data['SoDienThoaiNguoiDaiDien'] || '',
+          GhiChu: data['GhiChu'] || '',
+          TrangThai: data['TrangThai'] || 'hoat_dong',
+          createdAt: data['createdAt']?.toDate(),
+          updatedAt: data['updatedAt']?.toDate()
+        };
+      } else {
+        return null;
+      }
+    } catch (error) {
+      console.error('Error getting nha xe by ID:', error);
+      throw error;
+    }
+  }
+
+  async updateNhaXe(maNhaXe: string, updateData: Partial<Omit<NhaXe, 'MaNhaXe' | 'createdAt'>>): Promise<void> {
+    try {
+      const docRef = doc(this.firestore, this.COLLECTIONS.NHA_XE, maNhaXe);
+      const data = {
+        ...updateData,
+        updatedAt: Timestamp.fromDate(new Date())
+      };
+
+      await updateDoc(docRef, data);
+    } catch (error) {
+      console.error('Error updating nha xe:', error);
+      throw error;
+    }
+  }
+
+  async deleteNhaXe(maNhaXe: string): Promise<void> {
+    try {
+      const docRef = doc(this.firestore, this.COLLECTIONS.NHA_XE, maNhaXe);
+      await deleteDoc(docRef);
+    } catch (error) {
+      console.error('Error deleting nha xe:', error);
+      throw error;
     }
   }
 }

@@ -1,0 +1,124 @@
+<div class="dialog-container">
+  <h2 mat-dialog-title class="dialog-title">
+    <mat-icon class="title-icon">{{ isEditMode ? 'edit' : 'add' }}</mat-icon>
+    {{ getTitle() }}
+  </h2>
+
+  <mat-dialog-content class="dialog-content">
+    <mat-card class="form-card">
+      <div class="form-grid">
+        <!-- Ten Nha Xe -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tên nhà xe *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.TenNhaXe" 
+                 placeholder="VD: Công ty TNHH Vận tải ABC"
+                 maxlength="100"
+                 required>
+          <mat-icon matSuffix>business</mat-icon>          
+        </mat-form-field>
+
+        <!-- Dia Chi -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Địa chỉ *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.DiaChi" 
+                 placeholder="VD: 123 Đường ABC, Quận XYZ, TP.HCM"
+                 maxlength="200"
+                 required>
+          <mat-icon matSuffix>location_on</mat-icon>
+        </mat-form-field>
+
+        <!-- So Dien Thoai -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Số điện thoại nhà xe *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.SoDienThoai" 
+                 (input)="formatPhoneNumber($event, 'SoDienThoai')"
+                 placeholder="VD: 0901234567"
+                 maxlength="11"
+                 type="tel"
+                 required>
+          <mat-icon matSuffix>phone</mat-icon>
+        </mat-form-field>
+
+        <!-- Email -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Email</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.Email" 
+                 (input)="formatEmail($event)"
+                 placeholder="VD: contact@nha-xe-abc.com"
+                 maxlength="100"
+                 type="email">
+          <mat-icon matSuffix>email</mat-icon>
+        </mat-form-field>
+
+        <!-- Nguoi Dai Dien -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Tên người đại diện *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.NguoiDaiDien" 
+                 placeholder="VD: Nguyễn Văn A"
+                 maxlength="50"
+                 required>
+          <mat-icon matSuffix>person</mat-icon>
+        </mat-form-field>
+
+        <!-- So Dien Thoai Nguoi Dai Dien -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Số điện thoại người đại diện *</mat-label>
+          <input matInput 
+                 [(ngModel)]="formData.SoDienThoaiNguoiDaiDien" 
+                 (input)="formatPhoneNumber($event, 'SoDienThoaiNguoiDaiDien')"
+                 placeholder="VD: 0901234567"
+                 maxlength="11"
+                 type="tel"
+                 required>
+          <mat-icon matSuffix>phone</mat-icon>
+        </mat-form-field>
+
+        <!-- Trang Thai -->
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Trạng thái *</mat-label>
+          <mat-select [(ngModel)]="formData.TrangThai" required>
+            <mat-option *ngFor="let option of trangThaiOptions" [value]="option.value">
+              <div class="trang-thai-option">
+                <mat-icon class="option-icon">{{ getTrangThaiIcon(option.value) }}</mat-icon>
+                <span>{{ option.label }}</span>
+              </div>
+            </mat-option>
+          </mat-select>
+          <mat-icon matSuffix>info</mat-icon>
+        </mat-form-field>
+      </div>
+      
+      <!-- Ghi Chu - Full width row -->
+      <div class="ghi-chu-row">
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Ghi chú</mat-label>
+          <textarea matInput 
+                    [(ngModel)]="formData.GhiChu" placeholder="Nhập ghi chú về nhà xe"
+                    rows="3"
+                    maxlength="500"></textarea>
+          <mat-icon matSuffix>note</mat-icon>
+        </mat-form-field>
+      </div>
+    </mat-card>
+  </mat-dialog-content>
+
+  <mat-dialog-actions class="dialog-actions">
+    <button mat-button (click)="onCancel()" class="cancel-button">
+      <mat-icon>close</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onSave()" 
+            class="save-button"
+            [disabled]="!formData.TenNhaXe || !formData.DiaChi || !formData.SoDienThoai || !formData.NguoiDaiDien || !formData.SoDienThoaiNguoiDaiDien || !formData.TrangThai">
+      <mat-icon>{{ isEditMode ? 'save' : 'add' }}</mat-icon>
+      {{ getSaveButtonText() }}
+    </button>
+  </mat-dialog-actions>
+</div>

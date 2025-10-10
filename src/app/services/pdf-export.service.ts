@@ -9,7 +9,7 @@ import { DangKyPhanXe } from '../models/vehicle.model';
 
 export interface RouteInfo {
   routeName: string;
-  vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi';
+  vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi' | 'Taxi 7 chỗ';
   registrations?: Registration[];
   driverInfo?: {
     name: string;
@@ -18,7 +18,7 @@ export interface RouteInfo {
   };
   totalEmployees?: number;
   vehicleAllocation?: {
-    vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi';
+    vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi' | 'Taxi 7 chỗ';
     vehicleCount: number;
     reason: string;
   };
@@ -419,7 +419,7 @@ export class PdfExportService {
    * Tính toán loại xe dựa trên số lượng nhân viên
    */
   private calculateVehicleTypeByEmployeeCount(employeeCount: number): {
-    vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi';
+    vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi' | 'Taxi 7 chỗ';
     vehicleCount: number;
     reason: string;
   } {
@@ -433,9 +433,9 @@ export class PdfExportService {
     
     if (employeeCount < 7) {
       return {
-        vehicleType: 'Taxi',
-        vehicleCount: Math.ceil(employeeCount / 4), // Giả sử 1 taxi chở 4 người
-        reason: `Dưới 7 người (${employeeCount} người) - sử dụng taxi`
+        vehicleType: 'Taxi 7 chỗ',
+        vehicleCount: Math.ceil(employeeCount / 7), // 1 xe taxi 7 chỗ chở tối đa 7 người
+        reason: `Dưới 7 người (${employeeCount} người) - sử dụng xe taxi 7 chỗ`
       };
     }
     

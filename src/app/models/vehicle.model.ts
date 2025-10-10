@@ -52,7 +52,8 @@ export enum LoaiXe {
   XE_7_CHO = 'Xe 7 chỗ',
   XE_16_CHO = 'Xe 16 chỗ',
   XE_29_CHO = 'Xe 29 chỗ',
-  XE_45_CHO = 'Xe 45 chỗ'
+  XE_45_CHO = 'Xe 45 chỗ',
+  XE_TAXI_7_CHO = 'Xe taxi 7 chỗ'
 }
 
 export enum LoaiCa {

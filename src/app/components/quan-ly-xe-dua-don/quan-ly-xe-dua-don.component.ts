@@ -77,7 +77,9 @@ export class QuanLyXeDuaDonComponent implements OnInit {
   // LoaiXe options
   loaiXeOptions = [
     { value: LoaiXe.XE_16_CHO, label: 'Xe 16 chỗ' },
-    { value: LoaiXe.XE_29_CHO, label: 'Xe 29 chỗ' }
+    { value: LoaiXe.XE_29_CHO, label: 'Xe 29 chỗ' },
+    { value: LoaiXe.XE_45_CHO, label: 'Xe 45 chỗ' },
+    { value: LoaiXe.XE_TAXI_7_CHO, label: 'Xe taxi 7 chỗ' }
   ];
 
   constructor(
@@ -413,7 +415,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
       [LoaiXe.XE_7_CHO]: 'loai-xe-7-cho',
       [LoaiXe.XE_16_CHO]: 'loai-xe-16-cho',
       [LoaiXe.XE_29_CHO]: 'loai-xe-29-cho',
-      [LoaiXe.XE_45_CHO]: 'loai-xe-45-cho'
+      [LoaiXe.XE_45_CHO]: 'loai-xe-45-cho',
+      [LoaiXe.XE_TAXI_7_CHO]: 'loai-xe-taxi-7-cho'
     };
     
     return classMap[loaiXe] || 'loai-xe-default';
@@ -428,7 +431,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
       [LoaiXe.XE_7_CHO]: 'local_taxi',
       [LoaiXe.XE_16_CHO]: 'airport_shuttle',
       [LoaiXe.XE_29_CHO]: 'directions_bus',
-      [LoaiXe.XE_45_CHO]: 'directions_bus'
+      [LoaiXe.XE_45_CHO]: 'directions_bus',
+      [LoaiXe.XE_TAXI_7_CHO]: 'local_taxi'
     };
     
     return iconMap[loaiXe] || 'directions_car';

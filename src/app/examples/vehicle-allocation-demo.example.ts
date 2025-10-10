@@ -21,14 +21,14 @@ export const VEHICLE_ALLOCATION_DEMO = {
     ]
   },
 
-  // Tuyến HCM02 - 5 nhân viên (sẽ dùng taxi)
+  // Tuyến HCM02 - 5 nhân viên (sẽ dùng xe taxi 7 chỗ)
   hcm02: {
     routeName: 'HCM02', 
     totalEmployees: 5,
     vehicleAllocation: {
-      vehicleType: 'Taxi',
-      vehicleCount: 2,
-      reason: 'Dưới 7 người (5 người) - sử dụng taxi'
+      vehicleType: 'Taxi 7 chỗ',
+      vehicleCount: 1,
+      reason: 'Dưới 7 người (5 người) - sử dụng xe taxi 7 chỗ'
     },
     employees: [
       { name: 'Hoàng Văn E', station: 'Bà Chiểu' },
@@ -130,11 +130,11 @@ export const PDF_DISPLAY_RESULT = {
  * Quy tắc phân loại xe chi tiết
  */
 export const VEHICLE_ALLOCATION_RULES = {
-  taxi: {
+  'taxi-7-cho': {
     condition: 'employeeCount < 7',
-    vehicleType: 'Taxi',
-    capacity: 4,
-    example: '5 người → 2 taxi (Math.ceil(5/4))'
+    vehicleType: 'Taxi 7 chỗ',
+    capacity: 7,
+    example: '5 người → 1 xe taxi 7 chỗ (Math.ceil(5/7))'
   },
   
   '16chỗ': {
