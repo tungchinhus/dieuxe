@@ -1,0 +1,157 @@
+<div class="station-assignment-dialog">
+  <mat-toolbar color="primary" class="dialog-header">
+    <mat-icon>assignment</mat-icon>
+    <span class="dialog-title">Phân công tài xế và xe cho các trạm</span>
+    <span class="spacer"></span>
+    <button mat-icon-button (click)="onCancel()" matTooltip="Đóng">
+      <mat-icon>close</mat-icon>
+    </button>
+  </mat-toolbar>
+
+  <div class="dialog-content">
+    <!-- Summary Card -->
+    <mat-card class="summary-card">
+      <mat-card-header>
+        <mat-card-title>
+          <mat-icon>info</mat-icon>
+          Tổng quan phân công
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="summary-stats">
+          <div class="stat-item">
+            <mat-icon>location_on</mat-icon>
+            <span class="stat-label">Tổng số trạm:</span>
+            <span class="stat-value">{{ stationAssignments.length }}</span>
+          </div>
+          <div class="stat-item">
+            <mat-icon>people</mat-icon>
+            <span class="stat-label">Tổng số nhân viên:</span>
+            <span class="stat-value">{{ getTotalEmployees() }}</span>
+          </div>
+          <div class="stat-item">
+            <mat-icon>check_circle</mat-icon>
+            <span class="stat-label">Đã phân công:</span>
+            <span class="stat-value">{{ stationAssignments.length - getIncompleteAssignmentsCount() }}/{{ stationAssignments.length }}</span>
+          </div>
+        </div>
+      </mat-card-content>
+    </mat-card>
+
+    <!-- Station Assignments -->
+    <div class="assignments-container">
+      <div *ngFor="let assignment of stationAssignments; let i = index" 
+           class="assignment-card" 
+           [class.complete]="isAssignmentComplete(i)"
+           [class.incomplete]="!isAssignmentComplete(i)">
+        
+        <mat-card>
+          <mat-card-header>
+            <mat-card-title>
+              <mat-icon>location_on</mat-icon>
+              {{ assignment.stationName }}
+            </mat-card-title>
+            <mat-card-subtitle>
+              Tuyến: {{ assignment.routeCode }} - {{ assignment.routeName }} | 
+              Nhân viên: {{ assignment.employeeCount }} người
+            </mat-card-subtitle>
+            <div class="status-indicator">
+              <mat-icon *ngIf="isAssignmentComplete(i)" class="status-icon complete">check_circle</mat-icon>
+              <mat-icon *ngIf="!isAssignmentComplete(i)" class="status-icon incomplete">warning</mat-icon>
+            </div>
+          </mat-card-header>
+
+          <mat-card-content>
+            <div class="assignment-form">
+              <!-- Driver Assignment -->
+              <div class="form-section">
+                <h4>
+                  <mat-icon>person</mat-icon>
+                  Phân công tài xế
+                </h4>
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Chọn tài xế</mat-label>
+                  <mat-select 
+                    [value]="assignment.assignedDriver.driverId"
+                    (selectionChange)="onDriverChange(i, $event.value)">
+                    <mat-option value="">-- Chọn tài xế --</mat-option>
+                    <mat-option *ngFor="let driver of getDriverOptions()" [value]="driver.driverId">
+                      {{ driver.driverName }} - {{ driver.phoneNumber }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+                
+                <div *ngIf="assignment.assignedDriver.driverId" class="selected-info">
+                  <mat-chip-set>
+                    <mat-chip>
+                      <mat-icon>person</mat-icon>
+                      {{ assignment.assignedDriver.driverName }}
+                    </mat-chip>
+                    <mat-chip>
+                      <mat-icon>phone</mat-icon>
+                      {{ assignment.assignedDriver.phoneNumber }}
+                    </mat-chip>
+                  </mat-chip-set>
+                </div>
+              </div>
+
+              <mat-divider></mat-divider>
+
+              <!-- Vehicle Assignment -->
+              <div class="form-section">
+                <h4>
+                  <mat-icon>directions_car</mat-icon>
+                  Phân công xe
+                </h4>
+                <mat-form-field appearance="outline" class="full-width">
+                  <mat-label>Chọn xe</mat-label>
+                  <mat-select 
+                    [value]="assignment.assignedVehicle.vehicleId"
+                    (selectionChange)="onVehicleChange(i, $event.value)">
+                    <mat-option value="">-- Chọn xe --</mat-option>
+                    <mat-option *ngFor="let vehicle of getVehicleOptions()" [value]="vehicle.MaXe">
+                      {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
+                    </mat-option>
+                  </mat-select>
+                </mat-form-field>
+                
+                <div *ngIf="assignment.assignedVehicle.vehicleId" class="selected-info">
+                  <mat-chip-set>
+                    <mat-chip>
+                      <mat-icon [innerHTML]="getVehicleTypeIcon(assignment.assignedVehicle.vehicleType)"></mat-icon>
+                      {{ assignment.assignedVehicle.licensePlate }}
+                    </mat-chip>
+                    <mat-chip>
+                      <mat-icon>event_seat</mat-icon>
+                      {{ assignment.assignedVehicle.capacity }} chỗ
+                    </mat-chip>
+                    <mat-chip>
+                      <mat-icon>category</mat-icon>
+                      {{ assignment.assignedVehicle.vehicleType }}
+                    </mat-chip>
+                  </mat-chip-set>
+                </div>
+              </div>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Actions -->
+  <div class="dialog-actions">
+    <button mat-button (click)="onCancel()" [disabled]="isExporting">
+      <mat-icon>cancel</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onExportPDF()" 
+            [disabled]="!canExport() || isExporting">
+      <mat-icon *ngIf="!isExporting">picture_as_pdf</mat-icon>
+      <mat-spinner *ngIf="isExporting" diameter="20"></mat-spinner>
+      {{ isExporting ? 'Đang xuất PDF...' : 'Xuất PDF' }}
+    </button>
+  </div>
+</div>

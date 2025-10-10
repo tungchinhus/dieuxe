@@ -34,6 +34,15 @@
           Thêm Xe Đưa Đón
         </button>
         
+        <button mat-raised-button 
+                color="accent" 
+                (click)="openStationAssignmentDialog()"
+                class="action-button"
+                matTooltip="Phân công tài xế và xe cho các trạm, sau đó xuất PDF">
+          <mat-icon>assignment</mat-icon>
+          Phân công & Xuất PDF
+        </button>
+        
         <button mat-raised-button [disabled]="true"
                 color="primary" 
                 (click)="openFileUploadDialog()"

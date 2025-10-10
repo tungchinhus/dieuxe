@@ -73,6 +73,10 @@
             <mat-icon>description</mat-icon>
             <span>Phiếu báo làm thêm giờ</span>
           </button>
+          <button mat-menu-item (click)="openStationAssignmentDialog()">
+            <mat-icon>assignment</mat-icon>
+            <span>Phân công tài xế và xe</span>
+          </button>
           <button mat-menu-item (click)="exportEmployeeStationPDF()" [disabled]="true">
             <mat-icon>people</mat-icon>
             <span>Danh sách nhân viên theo trạm</span>

@@ -125,6 +125,20 @@
   margin-right: 8px;
 }
 
+/* PDF Export Button Special Styling */
+.action-button[color="accent"] {
+  background: linear-gradient(135deg, #ff9800 0%, #f57c00 100%);
+  color: white;
+  box-shadow: 0 2px 8px rgba(255, 152, 0, 0.3);
+  transition: all 0.3s ease;
+}
+
+.action-button[color="accent"]:hover {
+  background: linear-gradient(135deg, #f57c00 0%, #ef6c00 100%);
+  box-shadow: 0 4px 12px rgba(255, 152, 0, 0.4);
+  transform: translateY(-1px);
+}
+
 /* ===== Table Section ===== */
 .table-section {
   background: white;

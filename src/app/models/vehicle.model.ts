@@ -72,3 +72,39 @@ export enum PhongBan {
   SALES = 'Kinh doanh',
   OPERATIONS = 'Vận hành'
 }
+
+// Station Assignment Models for PDF Export
+export interface StationAssignment {
+  stationId: string;
+  stationName: string;
+  routeCode: string;
+  routeName: string;
+  assignedDriver: DriverInfo;
+  assignedVehicle: VehicleInfo;
+  employeeCount: number;
+  assignedAt: Date;
+}
+
+export interface DriverInfo {
+  driverId: string;
+  driverName: string;
+  phoneNumber: string;
+  licenseNumber?: string;
+}
+
+export interface VehicleInfo {
+  vehicleId: string;
+  licensePlate: string;
+  vehicleType: string;
+  capacity: number;
+  garageId?: string;
+  garageName?: string;
+}
+
+export interface PDFExportData {
+  exportDate: Date;
+  stationAssignments: StationAssignment[];
+  totalEmployees: number;
+  totalVehicles: number;
+  totalStations: number;
+}

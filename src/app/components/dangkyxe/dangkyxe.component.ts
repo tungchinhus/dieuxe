@@ -24,8 +24,10 @@ import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
+import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
+import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
-import { DangKyPhanXe, LoaiCa, PhongBan } from '../../models/vehicle.model';
+import { DangKyPhanXe, LoaiCa, PhongBan, DriverInfo, StationAssignment, PDFExportData } from '../../models/vehicle.model';
 import { MatSidenavModule } from '@angular/material/sidenav';
 import { MatListModule } from '@angular/material/list';
 import { MatTooltipModule } from '@angular/material/tooltip';
@@ -102,6 +104,7 @@ export class DangKyXeComponent implements OnInit {
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
+    private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
     // private pdfExportEmployeeStationService: PdfExportEmployeeStationService,
     private authService: AuthService
   ) {}
@@ -1313,5 +1316,137 @@ export class DangKyXeComponent implements OnInit {
    */
   hasAdminRole(): boolean {
     return this.authService.hasAnyRoleSync(['admin', 'super_admin']);
+  }
+
+  // ==================== STATION ASSIGNMENT PDF EXPORT METHODS ====================
+
+  /**
+   * Open station assignment dialog for PDF export
+   */
+  async openStationAssignmentDialog(): Promise<void> {
+    try {
+      // Generate mock data for demonstration
+      // In real implementation, you would fetch this from Firebase
+      const mockStations = this.stationAssignmentPdfExportService.generateMockStations();
+      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
+      
+      // Get vehicles from Firebase or use mock data
+      const vehicles = await this.getVehiclesForAssignment();
+
+      if (vehicles.length === 0) {
+        this.snackBar.open('Không có dữ liệu xe để phân công!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      const dialogRef = this.dialog.open(StationAssignmentDialogComponent, {
+        width: '1200px',
+        maxWidth: '95vw',
+        height: '90vh',
+        data: {
+          stations: mockStations,
+          vehicles: vehicles,
+          drivers: mockDrivers
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result && result.stationAssignments) {
+          await this.exportStationAssignmentsToPDF(result);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error opening station assignment dialog:', error);
+      this.snackBar.open('Có lỗi xảy ra khi mở dialog phân công!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
+   * Get vehicles for assignment (mock data for now)
+   */
+  private async getVehiclesForAssignment(): Promise<any[]> {
+    // For now, return mock vehicles
+    // In real implementation, fetch from Firebase
+    return [
+      {
+        MaXe: 'VEH001',
+        BienSoXe: '51A-12345',
+        TenTaiXe: 'Nguyễn Văn A',
+        SoDienThoaiTaiXe: '0901234567',
+        LoaiXe: 'Xe 16 chỗ',
+        MaNhaXe: 'NX001'
+      },
+      {
+        MaXe: 'VEH002',
+        BienSoXe: '51B-67890',
+        TenTaiXe: 'Trần Thị B',
+        SoDienThoaiTaiXe: '0901234568',
+        LoaiXe: 'Xe 29 chỗ',
+        MaNhaXe: 'NX001'
+      },
+      {
+        MaXe: 'VEH003',
+        BienSoXe: '51C-11111',
+        TenTaiXe: 'Lê Văn C',
+        SoDienThoaiTaiXe: '0901234569',
+        LoaiXe: 'Xe 45 chỗ',
+        MaNhaXe: 'NX002'
+      },
+      {
+        MaXe: 'VEH004',
+        BienSoXe: '51D-22222',
+        TenTaiXe: 'Phạm Thị D',
+        SoDienThoaiTaiXe: '0901234570',
+        LoaiXe: 'Xe taxi 7 chỗ',
+        MaNhaXe: 'NX002'
+      },
+      {
+        MaXe: 'VEH005',
+        BienSoXe: '51E-33333',
+        TenTaiXe: 'Hoàng Văn E',
+        SoDienThoaiTaiXe: '0901234571',
+        LoaiXe: 'Xe 16 chỗ',
+        MaNhaXe: 'NX003'
+      }
+    ];
+  }
+
+  /**
+   * Export station assignments to PDF
+   */
+  private async exportStationAssignmentsToPDF(result: any): Promise<void> {
+    try {
+      const exportData: PDFExportData = {
+        exportDate: result.exportDate,
+        stationAssignments: result.stationAssignments,
+        totalEmployees: result.stationAssignments.reduce((sum: number, s: StationAssignment) => sum + s.employeeCount, 0),
+        totalVehicles: result.stationAssignments.length,
+        totalStations: result.stationAssignments.length
+      };
+
+      await this.stationAssignmentPdfExportService.exportStationAssignmentsToPDF(exportData);
+
+      this.snackBar.open('File PDF phân công tài xế và xe đã được tạo thành công!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
 }

@@ -24,6 +24,9 @@ import { FirestoreService } from '../../services/firestore.service';
 import { XeDuaDon, LoaiXe } from '../../models/vehicle.model';
 import { NhaXe } from '../../models/garage.model';
 import { XeDuaDonFormDialogComponent } from './xe-dua-don-form-dialog/xe-dua-don-form-dialog.component';
+import { StationAssignmentDialogComponent } from './station-assignment-dialog/station-assignment-dialog.component';
+import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
+import { DriverInfo, StationAssignment, PDFExportData } from '../../models/vehicle.model';
 
 @Component({
   selector: 'app-quan-ly-xe-dua-don',
@@ -90,7 +93,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     private sidenavService: SidenavService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private firestoreService: FirestoreService
+    private firestoreService: FirestoreService,
+    private stationAssignmentPdfExportService: StationAssignmentPdfExportService
   ) {}
 
   toggleSidenav(): void {
@@ -460,5 +464,85 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     };
     
     return iconMap[loaiXe] || 'directions_car';
+  }
+
+  // ==================== PDF EXPORT METHODS ====================
+
+  /**
+   * Open station assignment dialog for PDF export
+   */
+  async openStationAssignmentDialog(): Promise<void> {
+    try {
+      // Generate mock data for demonstration
+      // In real implementation, you would fetch this from Firebase
+      const mockStations = this.stationAssignmentPdfExportService.generateMockStations();
+      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
+      const vehicles = this.dataSource.data;
+
+      if (vehicles.length === 0) {
+        this.snackBar.open('Không có dữ liệu xe để phân công!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      const dialogRef = this.dialog.open(StationAssignmentDialogComponent, {
+        width: '1200px',
+        maxWidth: '95vw',
+        height: '90vh',
+        data: {
+          stations: mockStations,
+          vehicles: vehicles,
+          drivers: mockDrivers
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result && result.stationAssignments) {
+          await this.exportStationAssignmentsToPDF(result);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error opening station assignment dialog:', error);
+      this.snackBar.open('Có lỗi xảy ra khi mở dialog phân công!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
+   * Export station assignments to PDF
+   */
+  private async exportStationAssignmentsToPDF(result: any): Promise<void> {
+    try {
+      const exportData: PDFExportData = {
+        exportDate: result.exportDate,
+        stationAssignments: result.stationAssignments,
+        totalEmployees: result.stationAssignments.reduce((sum: number, s: StationAssignment) => sum + s.employeeCount, 0),
+        totalVehicles: result.stationAssignments.length,
+        totalStations: result.stationAssignments.length
+      };
+
+      await this.stationAssignmentPdfExportService.exportStationAssignmentsToPDF(exportData);
+
+      this.snackBar.open('File PDF đã được tạo thành công!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting PDF:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
   }
 }
