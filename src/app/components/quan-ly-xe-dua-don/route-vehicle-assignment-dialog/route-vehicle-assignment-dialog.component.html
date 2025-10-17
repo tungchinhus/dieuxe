@@ -1,0 +1,50 @@
+<div class="route-vehicle-assignment-dialog">
+  <mat-toolbar color="primary" class="dialog-header">
+    <mat-icon>assignment</mat-icon>
+    <span class="dialog-title">Chọn xe cho các tuyến</span>
+    <span class="spacer"></span>
+    <button mat-icon-button (click)="onCancel()" matTooltip="Đóng">
+      <mat-icon>close</mat-icon>
+    </button>
+  </mat-toolbar>
+
+  <div class="dialog-content">
+    <!-- Simple Route List -->
+    <div class="routes-container">
+      <div *ngFor="let assignment of routeAssignments" class="route-item">
+        <div class="route-info">
+          <span class="route-name">Tuyến - {{ assignment.routeCode }}</span>
+          <span class="employee-count">({{ assignment.employeeCount }} nhân viên)</span>
+        </div>
+        
+        <mat-form-field appearance="outline" class="vehicle-select">
+          <mat-label>Chọn xe</mat-label>
+          <mat-select 
+            [value]="assignment.assignedVehicle.vehicleId"
+            (selectionChange)="onVehicleChange(assignment.routeId, $event.value)">
+            <mat-option value="">-- Chọn xe --</mat-option>
+            <mat-option *ngFor="let vehicle of getVehicleOptions()" [value]="vehicle.MaXe">
+              {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
+            </mat-option>
+          </mat-select>
+        </mat-form-field>
+      </div>
+    </div>
+  </div>
+
+  <!-- Dialog Actions -->
+  <div class="dialog-actions">
+    <button mat-button (click)="onCancel()" [disabled]="isExporting">
+      <mat-icon>cancel</mat-icon>
+      Hủy
+    </button>
+    <button mat-raised-button 
+            color="primary" 
+            (click)="onExportPDF()" 
+            [disabled]="!canExport() || isExporting">
+      <mat-icon *ngIf="!isExporting">picture_as_pdf</mat-icon>
+      <mat-spinner *ngIf="isExporting" diameter="20"></mat-spinner>
+      {{ isExporting ? 'Đang xuất PDF...' : 'Xuất PDF' }}
+    </button>
+  </div>
+</div>

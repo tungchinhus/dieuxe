@@ -14,26 +14,31 @@ import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { StationAssignment, DriverInfo, VehicleInfo, XeDuaDon, LoaiXe } from '../../../models/vehicle.model';
-import { RouteDetail } from '../../../models/route-detail.model';
-import { FirestoreService } from '../../../services/firestore.service';
-import { RouteDetailService } from '../../../services/route-detail.service';
 
-export interface StationAssignmentDialogData {
-  stations: StationData[];
+export interface RouteVehicleAssignmentDialogData {
+  routes: RouteData[];
   vehicles: XeDuaDon[];
   drivers: DriverInfo[];
 }
 
-export interface StationData {
-  stationId: string;
-  stationName: string;
-  routeCode: string;
+export interface RouteData {
+  routeId: string;
   routeName: string;
+  routeCode: string;
   employeeCount: number;
 }
 
+export interface RouteVehicleAssignment {
+  routeId: string;
+  routeName: string;
+  routeCode: string;
+  employeeCount: number;
+  assignedVehicle: VehicleInfo;
+  assignedAt: Date;
+}
+
 @Component({
-  selector: 'app-station-assignment-dialog',
+  selector: 'app-route-vehicle-assignment-dialog',
   standalone: true,
   imports: [
     CommonModule,
@@ -51,20 +56,18 @@ export interface StationData {
     MatProgressSpinnerModule,
     MatSnackBarModule
   ],
-  templateUrl: './station-assignment-dialog.component.html',
-  styleUrl: './station-assignment-dialog.component.css'
+  templateUrl: './route-vehicle-assignment-dialog.component.html',
+  styleUrl: './route-vehicle-assignment-dialog.component.css'
 })
-export class StationAssignmentDialogComponent implements OnInit {
-  stationAssignments: StationAssignment[] = [];
+export class RouteVehicleAssignmentDialogComponent implements OnInit {
+  routeAssignments: RouteVehicleAssignment[] = [];
   isLoading = false;
   isExporting = false;
 
   constructor(
-    public dialogRef: MatDialogRef<StationAssignmentDialogComponent>,
-    @Inject(MAT_DIALOG_DATA) public data: StationAssignmentDialogData,
-    private snackBar: MatSnackBar,
-    private firestoreService: FirestoreService,
-    private routeDetailService: RouteDetailService
+    public dialogRef: MatDialogRef<RouteVehicleAssignmentDialogComponent>,
+    @Inject(MAT_DIALOG_DATA) public data: RouteVehicleAssignmentDialogData,
+    private snackBar: MatSnackBar
   ) {}
 
   ngOnInit(): void {
@@ -73,18 +76,11 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   private initializeAssignments(): void {
-    this.stationAssignments = this.data.stations.map(station => ({
-      stationId: station.stationId,
-      stationName: station.stationName,
-      routeCode: station.routeCode,
-      routeName: station.routeName,
-      employeeCount: station.employeeCount,
-      assignedDriver: {
-        driverId: '',
-        driverName: '',
-        phoneNumber: '',
-        licenseNumber: ''
-      },
+    this.routeAssignments = this.data.routes.map(route => ({
+      routeId: route.routeId,
+      routeName: route.routeName,
+      routeCode: route.routeCode,
+      employeeCount: route.employeeCount,
       assignedVehicle: {
         vehicleId: '',
         licensePlate: '',
@@ -97,10 +93,10 @@ export class StationAssignmentDialogComponent implements OnInit {
     }));
   }
 
-  onVehicleChange(stationId: string, vehicleId: string): void {
+  onVehicleChange(routeId: string, vehicleId: string): void {
     const selectedVehicle = this.data.vehicles.find(v => v.MaXe === vehicleId);
     if (selectedVehicle) {
-      const assignment = this.stationAssignments.find(a => a.stationId === stationId);
+      const assignment = this.routeAssignments.find(a => a.routeId === routeId);
       if (assignment) {
         assignment.assignedVehicle = {
           vehicleId: selectedVehicle.MaXe,
@@ -126,13 +122,13 @@ export class StationAssignmentDialogComponent implements OnInit {
     return capacityMap[vehicleType] || 0;
   }
 
-  isAssignmentComplete(stationId: string): boolean {
-    const assignment = this.stationAssignments.find(a => a.stationId === stationId);
+  isAssignmentComplete(routeId: string): boolean {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
     return assignment ? !!assignment.assignedVehicle.vehicleId : false;
   }
 
   getIncompleteAssignmentsCount(): number {
-    return this.stationAssignments.filter(assignment => !this.isAssignmentComplete(assignment.stationId)).length;
+    return this.routeAssignments.filter(assignment => !this.isAssignmentComplete(assignment.routeId)).length;
   }
 
   canExport(): boolean {
@@ -141,7 +137,7 @@ export class StationAssignmentDialogComponent implements OnInit {
 
   onExportPDF(): void {
     if (!this.canExport()) {
-      this.snackBar.open('Vui lòng hoàn thành việc phân công cho tất cả các trạm!', 'Đóng', {
+      this.snackBar.open('Vui lòng hoàn thành việc phân công xe cho tất cả các tuyến!', 'Đóng', {
         duration: 3000,
         horizontalPosition: 'right',
         verticalPosition: 'top'
@@ -153,7 +149,7 @@ export class StationAssignmentDialogComponent implements OnInit {
     
     // Close dialog and return assignment data for PDF export
     this.dialogRef.close({
-      stationAssignments: this.stationAssignments,
+      routeAssignments: this.routeAssignments,
       exportDate: new Date()
     });
   }
@@ -174,29 +170,25 @@ export class StationAssignmentDialogComponent implements OnInit {
     return iconMap[vehicleType] || 'directions_car';
   }
 
-  getDriverOptions(): DriverInfo[] {
-    return this.data.drivers;
-  }
-
   getVehicleOptions(): XeDuaDon[] {
     return this.data.vehicles;
   }
 
   getTotalEmployees(): number {
-    return this.stationAssignments.reduce((sum, s) => sum + s.employeeCount, 0);
+    return this.routeAssignments.reduce((sum, r) => sum + r.employeeCount, 0);
   }
 
-  getAssignedStationsCount(): number {
-    return this.stationAssignments.filter(a => a.assignedVehicle.vehicleId).length;
+  getAssignedRoutesCount(): number {
+    return this.routeAssignments.filter(a => a.assignedVehicle.vehicleId).length;
   }
 
   /**
    * Kiểm tra xem phân bổ nhân viên có đồng đều không
    */
   isEmployeeDistributionBalanced(): boolean {
-    if (this.stationAssignments.length < 2) return true;
+    if (this.routeAssignments.length < 2) return true;
     
-    const employeeCounts = this.stationAssignments.map(s => s.employeeCount);
+    const employeeCounts = this.routeAssignments.map(r => r.employeeCount);
     const min = Math.min(...employeeCounts);
     const max = Math.max(...employeeCounts);
     
@@ -208,7 +200,7 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Tính tỷ lệ phần trăm nhân viên của trạm
+   * Tính tỷ lệ phần trăm nhân viên của tuyến
    */
   getEmployeePercentage(employeeCount: number): number {
     const total = this.getTotalEmployees();
@@ -233,7 +225,7 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Tự động phân bổ xe đồng đều cho các trạm
+   * Tự động phân bổ xe đồng đều cho các tuyến
    */
   private autoAssignVehicles(): void {
     const availableVehicles = this.data.vehicles.filter(vehicle => 
@@ -248,7 +240,7 @@ export class StationAssignmentDialogComponent implements OnInit {
     // Sắp xếp xe theo loại và sức chứa
     const sortedVehicles = this.sortVehiclesByCapacity(availableVehicles);
     
-    // Phân bổ xe đồng đều cho các trạm
+    // Phân bổ xe đồng đều cho các tuyến
     this.distributeVehiclesEvenly(sortedVehicles);
   }
 
@@ -264,24 +256,33 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Phân bổ xe đồng đều cho các trạm
+   * Phân bổ xe đồng đều cho các tuyến dựa trên số nhân viên
    */
   private distributeVehiclesEvenly(vehicles: XeDuaDon[]): void {
-    const stations = this.stationAssignments;
-    const totalStations = stations.length;
+    const routes = this.routeAssignments;
+    const totalRoutes = routes.length;
     
-    if (totalStations === 0) return;
+    if (totalRoutes === 0) return;
 
-    // Đặc biệt xử lý cho 3 trạm để đảm bảo phân bổ đồng đều
-    if (totalStations === 3) {
-      this.distributeVehiclesForThreeStations(vehicles, stations);
-    } else {
-      this.distributeVehiclesGeneral(vehicles, stations);
-    }
+    // Tính tổng số nhân viên
+    const totalEmployees = routes.reduce((sum, route) => sum + route.employeeCount, 0);
+    
+    // Phân bổ xe dựa trên tỷ lệ nhân viên của từng tuyến
+    const vehicleAssignments = this.calculateVehicleAssignmentByEmployeeRatio(routes, vehicles, totalEmployees);
+    
+    // Thực hiện phân bổ xe
+    vehicleAssignments.forEach((assignment, index) => {
+      const route = routes[index];
+      const selectedVehicle = this.selectBestVehicleForRoute(assignment.availableVehicles, route);
+      
+      if (selectedVehicle) {
+        this.assignVehicleToRoute(route.routeId, selectedVehicle);
+      }
+    });
 
     // Hiển thị thông báo thành công
     this.snackBar.open(
-      `Đã tự động phân bổ ${vehicles.length} xe cho ${totalStations} trạm!`, 
+      `Đã tự động phân bổ ${vehicles.length} xe cho ${totalRoutes} tuyến!`, 
       'Đóng', 
       {
         duration: 3000,
@@ -292,34 +293,10 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Phân bổ xe đặc biệt cho 3 trạm để đảm bảo đồng đều dựa trên số nhân viên
-   */
-  private distributeVehiclesForThreeStations(vehicles: XeDuaDon[], stations: StationAssignment[]): void {
-    // Sắp xếp xe theo sức chứa từ lớn đến nhỏ
-    const sortedVehicles = this.sortVehiclesByCapacity(vehicles);
-    
-    // Tính tổng số nhân viên
-    const totalEmployees = stations.reduce((sum, station) => sum + station.employeeCount, 0);
-    
-    // Phân bổ xe dựa trên tỷ lệ nhân viên của từng trạm
-    const vehicleAssignments = this.calculateVehicleAssignmentByEmployeeRatio(stations, sortedVehicles, totalEmployees);
-    
-    // Thực hiện phân bổ xe
-    vehicleAssignments.forEach((assignment, index) => {
-      const station = stations[index];
-      const selectedVehicle = this.selectBestVehicleForStation(assignment.availableVehicles, station);
-      
-      if (selectedVehicle) {
-        this.assignVehicleToStation(station.stationId, selectedVehicle);
-      }
-    });
-  }
-
-  /**
    * Tính toán phân bổ xe dựa trên tỷ lệ nhân viên
    */
   private calculateVehicleAssignmentByEmployeeRatio(
-    stations: StationAssignment[], 
+    routes: RouteVehicleAssignment[], 
     vehicles: XeDuaDon[], 
     totalEmployees: number
   ): { availableVehicles: XeDuaDon[] }[] {
@@ -327,17 +304,17 @@ export class StationAssignmentDialogComponent implements OnInit {
     const assignments: { availableVehicles: XeDuaDon[] }[] = [];
     let vehicleIndex = 0;
     
-    // Sắp xếp trạm theo số nhân viên từ cao đến thấp
-    const sortedStations = [...stations].sort((a, b) => b.employeeCount - a.employeeCount);
+    // Sắp xếp tuyến theo số nhân viên từ cao đến thấp
+    const sortedRoutes = [...routes].sort((a, b) => b.employeeCount - a.employeeCount);
     
-    sortedStations.forEach((station, index) => {
-      // Tính tỷ lệ nhân viên của trạm này
-      const employeeRatio = station.employeeCount / totalEmployees;
+    sortedRoutes.forEach((route, index) => {
+      // Tính tỷ lệ nhân viên của tuyến này
+      const employeeRatio = route.employeeCount / totalEmployees;
       
       // Tính số xe cần thiết dựa trên tỷ lệ nhân viên
       let vehiclesNeeded = Math.ceil(vehicles.length * employeeRatio);
       
-      // Đảm bảo mỗi trạm có ít nhất 1 xe nếu có xe khả dụng
+      // Đảm bảo mỗi tuyến có ít nhất 1 xe nếu có xe khả dụng
       if (vehiclesNeeded === 0 && vehicles.length > 0) {
         vehiclesNeeded = 1;
       }
@@ -346,7 +323,7 @@ export class StationAssignmentDialogComponent implements OnInit {
       const remainingVehicles = vehicles.length - vehicleIndex;
       vehiclesNeeded = Math.min(vehiclesNeeded, remainingVehicles);
       
-      // Lấy xe cho trạm này
+      // Lấy xe cho tuyến này
       const assignedVehicles = vehicles.slice(vehicleIndex, vehicleIndex + vehiclesNeeded);
       
       assignments.push({
@@ -360,48 +337,12 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Phân bổ xe cho trường hợp tổng quát
+   * Chọn xe phù hợp nhất cho tuyến dựa trên số nhân viên
    */
-  private distributeVehiclesGeneral(vehicles: XeDuaDon[], stations: StationAssignment[]): void {
-    const totalStations = stations.length;
-    
-    // Tính toán số xe cần thiết cho mỗi trạm
-    const vehiclesPerStation = Math.floor(vehicles.length / totalStations);
-    const remainingVehicles = vehicles.length % totalStations;
-
-    let vehicleIndex = 0;
-
-    // Phân bổ xe cho từng trạm
-    stations.forEach((station, index) => {
-      // Tính số xe cho trạm này
-      let vehiclesForThisStation = vehiclesPerStation;
-      
-      // Phân bổ xe thừa cho các trạm đầu tiên
-      if (index < remainingVehicles) {
-        vehiclesForThisStation += 1;
-      }
-
-      // Chọn xe phù hợp nhất cho trạm này
-      const selectedVehicle = this.selectBestVehicleForStation(
-        vehicles.slice(vehicleIndex, vehicleIndex + vehiclesForThisStation),
-        station
-      );
-
-      if (selectedVehicle) {
-        this.assignVehicleToStation(station.stationId, selectedVehicle);
-      }
-
-      vehicleIndex += vehiclesForThisStation;
-    });
-  }
-
-  /**
-   * Chọn xe phù hợp nhất cho trạm dựa trên số nhân viên
-   */
-  private selectBestVehicleForStation(availableVehicles: XeDuaDon[], station: StationAssignment): XeDuaDon | null {
+  private selectBestVehicleForRoute(availableVehicles: XeDuaDon[], route: RouteVehicleAssignment): XeDuaDon | null {
     if (availableVehicles.length === 0) return null;
 
-    const employeeCount = station.employeeCount;
+    const employeeCount = route.employeeCount;
     
     // Sắp xếp xe theo độ phù hợp với số nhân viên
     const sortedVehicles = availableVehicles.sort((a, b) => {
@@ -434,10 +375,10 @@ export class StationAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Gán xe cho trạm
+   * Gán xe cho tuyến
    */
-  private assignVehicleToStation(stationId: string, vehicle: XeDuaDon): void {
-    const assignment = this.stationAssignments.find(a => a.stationId === stationId);
+  private assignVehicleToRoute(routeId: string, vehicle: XeDuaDon): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
     if (assignment) {
       assignment.assignedVehicle = {
         vehicleId: vehicle.MaXe,
@@ -455,13 +396,13 @@ export class StationAssignmentDialogComponent implements OnInit {
    */
   onRedistributeVehicles(): void {
     // Lấy danh sách xe đã được phân bổ
-    const assignedVehicles = this.stationAssignments
+    const assignedVehicles = this.routeAssignments
       .filter(assignment => assignment.assignedVehicle.vehicleId)
       .map(assignment => this.data.vehicles.find(v => v.MaXe === assignment.assignedVehicle.vehicleId))
       .filter(vehicle => vehicle !== undefined) as XeDuaDon[];
 
     // Reset tất cả phân bổ
-    this.stationAssignments.forEach(assignment => {
+    this.routeAssignments.forEach(assignment => {
       assignment.assignedVehicle = {
         vehicleId: '',
         licensePlate: '',

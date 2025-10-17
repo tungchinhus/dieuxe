@@ -24,8 +24,10 @@ import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
+import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
 import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
+import { RouteVehicleAssignmentDialogComponent } from '../quan-ly-xe-dua-don/route-vehicle-assignment-dialog/route-vehicle-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
 import { DangKyPhanXe, LoaiCa, PhongBan, DriverInfo, StationAssignment, PDFExportData } from '../../models/vehicle.model';
 import { MatSidenavModule } from '@angular/material/sidenav';
@@ -104,6 +106,7 @@ export class DangKyXeComponent implements OnInit {
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
+    private firestoreService: FirestoreService,
     private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
     // private pdfExportEmployeeStationService: PdfExportEmployeeStationService,
     private authService: AuthService
@@ -1237,7 +1240,7 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
-   * Export registrations to PDF
+   * Export registrations to PDF with vehicle assignment dialog
    */
   async exportToPDF(): Promise<void> {
     try {
@@ -1253,15 +1256,8 @@ export class DangKyXeComponent implements OnInit {
       // Set loading state
       this.isExportingPDF = true;
 
-      // Export to PDF
-      await this.pdfExportService.exportToPDF();
-      
-      // Show success message
-      this.snackBar.open('File PDF đã được tạo thành công!', 'Đóng', {
-        duration: 3000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
+      // Open vehicle assignment dialog first
+      await this.openRouteVehicleAssignmentDialog();
 
     } catch (error) {
       console.error('Error exporting PDF:', error);
@@ -1273,6 +1269,248 @@ export class DangKyXeComponent implements OnInit {
     } finally {
       // Reset loading state
       this.isExportingPDF = false;
+    }
+  }
+
+  /**
+   * Open route vehicle assignment dialog for PDF export
+   */
+  async openRouteVehicleAssignmentDialog(): Promise<void> {
+    try {
+      // Get real data from today's registrations
+      const todayRegistrations = await this.getTodayRegistrations();
+      
+      if (todayRegistrations.length === 0) {
+        this.snackBar.open('Không có dữ liệu đăng ký cho ngày hôm nay!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      // Group registrations by route using the same logic as PDF generation
+      const routeGroups = await this.groupRegistrationsByRouteForDialog(todayRegistrations);
+      
+      // Convert to route data format for dialog
+      const realRoutes = routeGroups.map((route, index) => ({
+        routeId: route.routeName,
+        routeName: route.routeName,
+        routeCode: route.routeName,
+        employeeCount: route.registrations?.length || 0
+      }));
+      
+      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
+      
+      // Load real vehicles from Firebase
+      const vehicles = await this.firestoreService.getAllXeDuaDon();
+
+      if (vehicles.length === 0) {
+        this.snackBar.open('Không có dữ liệu xe để phân công!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      console.log('Loaded vehicles from Firebase:', vehicles);
+      console.log('Real route groups:', realRoutes);
+
+      const dialogRef = this.dialog.open(RouteVehicleAssignmentDialogComponent, {
+        width: '1200px',
+        maxWidth: '95vw',
+        height: '90vh',
+        data: {
+          routes: realRoutes,
+          vehicles: vehicles,
+          drivers: mockDrivers
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result && result.routeAssignments) {
+          // Export to PDF after vehicle assignment
+          await this.exportOvertimeReportPDFWithVehicleAssignment(result);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error opening route vehicle assignment dialog:', error);
+      this.snackBar.open('Có lỗi xảy ra khi mở dialog phân công xe!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
+   * Get today's registrations from Firebase
+   */
+  private async getTodayRegistrations(): Promise<Registration[]> {
+    try {
+      const today = new Date();
+      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+
+      const registrations = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
+
+      // Map DangKyPhanXe -> Registration
+      return registrations.map(reg => ({
+        id: reg.ID || '0',
+        maNhanVien: reg.MaNhanVien,
+        hoTen: reg.HoTen,
+        dienThoai: reg.DienThoai,
+        phongBan: reg.PhongBan,
+        ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+        loaiCa: reg.LoaiCa,
+        thoiGianBatDau: reg.ThoiGianBatDau,
+        thoiGianKetThuc: reg.ThoiGianKetThuc,
+        maTuyenXe: reg.MaTuyenXe,
+        tramXe: reg.TramXe,
+        noiDungCongViec: reg.NoiDungCongViec,
+        dangKyCom: reg.DangKyCom
+      }));
+    } catch (error) {
+      console.error('Error getting today registrations:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Group registrations by route using the same logic as PDF generation
+   */
+  private async groupRegistrationsByRouteForDialog(registrations: Registration[]): Promise<any[]> {
+    const routeMap = new Map<string, any>();
+
+    for (const registration of registrations) {
+      const maTuyenXe = registration.maTuyenXe || 'Chưa phân tuyến';
+      
+      // Apply HCM grouping priority logic (same as PDF generation)
+      const finalRouteName = this.applyHCMGroupingPriority(maTuyenXe, registration.tramXe);
+      
+      if (!routeMap.has(finalRouteName)) {
+        routeMap.set(finalRouteName, {
+          routeName: finalRouteName,
+          registrations: []
+        });
+      }
+
+      routeMap.get(finalRouteName)!.registrations.push(registration);
+    }
+
+    // Convert to array and filter out routes with no employees and self-transport routes
+    const routes = Array.from(routeMap.values()).filter(route => 
+      route.registrations && 
+      route.registrations.length > 0 &&
+      route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
+    );
+
+    return routes;
+  }
+
+  /**
+   * Apply HCM grouping priority logic - distribute evenly among 3 HCM routes
+   */
+  private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
+    // Check if it's a self-transport case
+    if (this.isSelfTransportStation(tramXe)) {
+      return 'TỰ TÚC';
+    }
+    
+    // Check if it's HCM route - distribute evenly among 3 routes
+    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
+      // Keep original route assignment for even distribution
+      return routeName;
+    }
+    
+    // Check if it's BH route
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+      // Check if station is before or at "Hàng xanh"
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        // Group all into BH01
+        return 'BH01';
+      } else {
+        // Stations after "Hàng xanh" keep original route
+        return routeName;
+      }
+    }
+    
+    // Other routes don't change
+    return routeName;
+  }
+
+  /**
+   * Check if station is before or at "Hàng xanh" (same logic as PDF service)
+   */
+  private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    // Danh sách các trạm từ KCN Long Đức đến Hàng xanh (theo thứ tự)
+    const stationsBeforeHangXanh = [
+      'kcn long đức',
+      'ngã 3 bến gỗ', 
+      'ngã 3 long bình tân',
+      'ngã 4 thủ đức',
+      'rmk',
+      'ngã 3 cát lái',
+      'bến gỗ',
+      'bến xe miền đông',
+      'hàng xanh',
+      'hàng xanh - bến xe'
+    ];
+    
+    return stationsBeforeHangXanh.some(stationName => 
+      station.includes(stationName)
+    );
+  }
+
+  /**
+   * Check if it's a self-transport station (same logic as PDF service)
+   */
+  private isSelfTransportStation(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    const selfTransportStations = [
+      'tự túc',
+      'tự đi',
+      'không cần xe',
+      'tự lo',
+      'tự sắp xếp'
+    ];
+    
+    return selfTransportStations.some(stationName => 
+      station.includes(stationName)
+    );
+  }
+
+  /**
+   * Export overtime report PDF with vehicle assignment data
+   */
+  private async exportOvertimeReportPDFWithVehicleAssignment(result: any): Promise<void> {
+    try {
+      // Pass vehicle assignment data to PDF export service
+      await this.pdfExportService.exportOvertimeReportPDFWithVehicleAssignments(result.routeAssignments);
+      
+      // Show success message
+      this.snackBar.open('File PDF đã được tạo thành công với thông tin phân công xe!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting overtime report PDF:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
     }
   }
 

@@ -24,6 +24,22 @@ export interface RouteInfo {
   };
 }
 
+export interface RouteVehicleAssignment {
+  routeId: string;
+  routeName: string;
+  routeCode: string;
+  employeeCount: number;
+  assignedVehicle: {
+    vehicleId: string;
+    licensePlate: string;
+    vehicleType: string;
+    capacity: number;
+    garageId: string;
+    garageName: string;
+  };
+  assignedAt: Date;
+}
+
 @Injectable({ providedIn: 'root' })
 export class PdfExportService {
   constructor(private firestoreService: FirestoreService) {}
@@ -78,6 +94,60 @@ export class PdfExportService {
       pdf.save(fileName);
     } catch (error) {
       console.error('Error exporting PDF:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Export overtime report PDF with vehicle assignments
+   */
+  async exportOvertimeReportPDFWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[]): Promise<void> {
+    try {
+      // 1) Lấy dữ liệu hôm nay từ Firebase
+      const todayRegistrations = await this.getTodayRegistrations();
+      if (todayRegistrations.length === 0) {
+        alert('Không có dữ liệu đăng ký cho ngày hôm nay');
+        return;
+      }
+
+      // 2) Gom theo tuyến với thông tin xe được phân công
+      const routeGroups = await this.groupRegistrationsByRouteWithVehicleAssignments(todayRegistrations, vehicleAssignments);
+
+      // Kiểm tra có tuyến nào có nhân viên không
+      if (routeGroups.length === 0) {
+        alert('Không có dữ liệu nhân viên để xuất PDF (tất cả nhân viên đều có trạm "tự túc")');
+        return;
+      }
+
+      // 3) Tạo PDF từ HTML với merge cell (mỗi tuyến một trang)
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      pdf.setProperties({
+        title: 'Phiếu báo làm thêm giờ',
+        subject: 'Báo cáo làm thêm giờ',
+        author: 'Thibidi System',
+        creator: 'Thibidi System'
+      });
+
+      for (let i = 0; i < routeGroups.length; i++) {
+        const route = routeGroups[i];
+        
+        // Bỏ qua tuyến không có nhân viên
+        if (!route.registrations || route.registrations.length === 0) {
+          console.log(`Bỏ qua tuyến ${route.routeName} - không có nhân viên`);
+          continue;
+        }
+        
+        if (i > 0) pdf.addPage();
+
+        const htmlContent = this.generateOvertimeReportHTMLTemplate(route);
+        await this.convertHTMLToPDF(pdf, htmlContent);
+      }
+
+      // 4) Lưu file
+      const fileName = `PHIEU_BAO_LAM_THEM_GIO_${this.getCurrentDateString()}.pdf`;
+      pdf.save(fileName);
+    } catch (error) {
+      console.error('Error exporting overtime report PDF with vehicle assignments:', error);
       throw error;
     }
   }
@@ -165,6 +235,66 @@ export class PdfExportService {
   }
 
   /**
+   * Gom nhóm theo tuyến với thông tin xe được phân công
+   */
+  private async groupRegistrationsByRouteWithVehicleAssignments(registrations: Registration[], vehicleAssignments: RouteVehicleAssignment[]): Promise<RouteInfo[]> {
+    const routeMap = new Map<string, RouteInfo>();
+
+    for (const registration of registrations) {
+      const maTuyenXe = registration.maTuyenXe || 'Chưa phân tuyến';
+      
+      // Áp dụng logic ưu tiên gom HCM routes và xử lý "tự túc"
+      const finalRouteName = this.applyHCMGroupingPriority(maTuyenXe, registration.tramXe);
+      
+      if (!routeMap.has(finalRouteName)) {
+        // Tìm thông tin xe được phân công cho tuyến này
+        const vehicleAssignment = vehicleAssignments.find(va => va.routeCode === finalRouteName);
+        
+        const routeInfo = await this.determineRouteFromCode(finalRouteName, registration.hoTen);
+        
+        // Cập nhật thông tin xe và tài xế từ vehicle assignment
+        if (vehicleAssignment && vehicleAssignment.assignedVehicle.vehicleId) {
+          // Lấy thông tin xe chi tiết từ Firebase để có tên tài xế và số điện thoại
+          try {
+            const vehicleDetails = await this.firestoreService.getXeDuaDonById(vehicleAssignment.assignedVehicle.vehicleId);
+            
+            if (vehicleDetails) {
+              routeInfo.driverInfo = {
+                name: vehicleDetails.TenTaiXe || 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+                phone: vehicleDetails.SoDienThoaiTaiXe || '0900000000',
+                vehicleNumber: vehicleDetails.BienSoXe || vehicleAssignment.assignedVehicle.licensePlate
+              };
+            } else {
+              // Fallback nếu không tìm thấy thông tin xe
+              routeInfo.driverInfo = {
+                name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+                phone: '0900000000',
+                vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+              };
+            }
+          } catch (error) {
+            console.error('Error getting vehicle details:', error);
+            // Fallback nếu có lỗi
+            routeInfo.driverInfo = {
+              name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+              phone: '0900000000',
+              vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+            };
+          }
+        }
+        
+        routeInfo.registrations = [];
+        routeMap.set(finalRouteName, routeInfo);
+      }
+
+      routeMap.get(finalRouteName)!.registrations!.push(registration);
+    }
+
+    const routes = Array.from(routeMap.values());
+    return this.sortRoutesByPriority(routes);
+  }
+
+  /**
    * Gom nhóm theo tuyến dựa trên mã tuyến xe
    */
   private async groupRegistrationsByRoute(registrations: Registration[]): Promise<RouteInfo[]> {
@@ -202,21 +332,21 @@ export class PdfExportService {
 
   /**
    * Áp dụng logic ưu tiên gom HCM và BH routes
-   * Tất cả nhân viên HCM01, HCM02, HCM03 đều được gom vào HCM01 trước
+   * HCM01, HCM02, HCM03 được chia đều (không gom vào HCM01)
    * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
    * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
+   * Các trường hợp "tự túc" sẽ được gom vào một nhóm riêng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
-    // Kiểm tra nếu là tuyến HCM
+    // Kiểm tra nếu là trường hợp "tự túc"
+    if (this.isSelfTransportStation(tramXe)) {
+      return 'TỰ TÚC';
+    }
+    
+    // Kiểm tra nếu là tuyến HCM - chia đều thành 3 tuyến
     if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
-      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
-      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
-        // Gom tất cả vào HCM01
-        return 'HCM01';
-      } else {
-        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
-        return routeName;
-      }
+      // Giữ nguyên tuyến gốc để chia đều
+      return routeName;
     }
     
     // Kiểm tra nếu là tuyến BH
@@ -309,6 +439,15 @@ export class PdfExportService {
       };
     }
 
+    // Xử lý trường hợp "TỰ TÚC"
+    if (maTuyenXe === 'TỰ TÚC') {
+      return {
+        routeName: 'TỰ TÚC',
+        vehicleType: '16chỗ',
+        driverInfo: { name: 'Tự túc', phone: 'N/A', vehicleNumber: 'N/A' }
+      };
+    }
+
     try {
       // Lấy thông tin tuyến xe từ database
       const routeInfo = await this.firestoreService.getLichTrinhXeByMaTuyen(maTuyenXe);
@@ -316,14 +455,34 @@ export class PdfExportService {
       if (routeInfo && routeInfo.length > 0) {
         const route = routeInfo[0];
         const normalizedRouteName = this.normalizeRouteName(route.TenTuyenXe || maTuyenXe);
+        
+        // Lấy thông tin tài xế từ xe được gán cho tuyến này
+        let driverInfo = {
+          name: 'TX ' + (route.MaXe || 'Chung'),
+          phone: '0900000000',
+          vehicleNumber: route.MaXe || '16C 60F01899'
+        };
+        
+        // Nếu có mã xe, lấy thông tin tài xế chi tiết
+        if (route.MaXe) {
+          try {
+            const vehicleDetails = await this.firestoreService.getXeDuaDonById(route.MaXe);
+            if (vehicleDetails) {
+              driverInfo = {
+                name: vehicleDetails.TenTaiXe || 'TX ' + route.MaXe,
+                phone: vehicleDetails.SoDienThoaiTaiXe || '0900000000',
+                vehicleNumber: vehicleDetails.BienSoXe || route.MaXe
+              };
+            }
+          } catch (error) {
+            console.error('Error getting vehicle details for route:', error);
+          }
+        }
+        
         return {
           routeName: normalizedRouteName,
           vehicleType: this.determineVehicleType(route.SoGheToiDa),
-          driverInfo: {
-            name: 'TX ' + (route.MaXe || 'Chung'),
-            phone: '0900000000',
-            vehicleNumber: route.MaXe || '16C 60F01899'
-          }
+          driverInfo: driverInfo
         };
       }
     } catch (error) {

@@ -9,95 +9,91 @@
   </mat-toolbar>
 
   <div class="dialog-content">
-    <!-- Summary Card -->
-    <mat-card class="summary-card">
-      <mat-card-header>
-        <mat-card-title>
-          <mat-icon>info</mat-icon>
-          Tổng quan phân công
-        </mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        <div class="summary-stats">
-          <div class="stat-item">
-            <mat-icon>location_on</mat-icon>
-            <span class="stat-label">Tổng số trạm:</span>
-            <span class="stat-value">{{ stationAssignments.length }}</span>
+    <!-- Summary Section -->
+    <div class="summary-section">
+      <mat-card class="summary-card">
+        <mat-card-header>
+          <mat-card-title>
+            <mat-icon>dashboard</mat-icon>
+            Tổng quan phân bổ xe
+          </mat-card-title>
+        </mat-card-header>
+        <mat-card-content>
+          <div class="summary-stats">
+            <div class="stat-item">
+              <mat-icon>route</mat-icon>
+              <span class="stat-label">Tổng số trạm:</span>
+              <span class="stat-value">{{ stationAssignments.length }}</span>
+            </div>
+            <div class="stat-item">
+              <mat-icon>directions_car</mat-icon>
+              <span class="stat-label">Tổng số xe:</span>
+              <span class="stat-value">{{ data.vehicles.length }}</span>
+            </div>
+            <div class="stat-item">
+              <mat-icon>event_seat</mat-icon>
+              <span class="stat-label">Tổng số nhân viên:</span>
+              <span class="stat-value">{{ getTotalEmployees() }}</span>
+            </div>
+            <div class="stat-item">
+              <mat-icon>check_circle</mat-icon>
+              <span class="stat-label">Trạm đã phân bổ:</span>
+              <span class="stat-value">{{ getAssignedStationsCount() }}/{{ stationAssignments.length }}</span>
+            </div>
+            <div class="stat-item">
+              <mat-icon>analytics</mat-icon>
+              <span class="stat-label">Phân bổ đồng đều:</span>
+              <span class="stat-value" [class.balanced]="isEmployeeDistributionBalanced()" [class.unbalanced]="!isEmployeeDistributionBalanced()">
+                {{ isEmployeeDistributionBalanced() ? 'Có' : 'Không' }}
+              </span>
+            </div>
           </div>
-          <div class="stat-item">
-            <mat-icon>people</mat-icon>
-            <span class="stat-label">Tổng số nhân viên:</span>
-            <span class="stat-value">{{ getTotalEmployees() }}</span>
-          </div>
-          <div class="stat-item">
-            <mat-icon>check_circle</mat-icon>
-            <span class="stat-label">Đã phân công:</span>
-            <span class="stat-value">{{ stationAssignments.length - getIncompleteAssignmentsCount() }}/{{ stationAssignments.length }}</span>
-          </div>
-        </div>
-      </mat-card-content>
-    </mat-card>
+        </mat-card-content>
+      </mat-card>
+    </div>
 
-    <!-- Station Assignments -->
+    <!-- Route Assignments -->
     <div class="assignments-container">
-      <div *ngFor="let assignment of stationAssignments; let i = index" 
+      <div *ngFor="let assignment of stationAssignments" 
            class="assignment-card" 
-           [class.complete]="isAssignmentComplete(i)"
-           [class.incomplete]="!isAssignmentComplete(i)">
+           [class.complete]="isAssignmentComplete(assignment.stationId)"
+           [class.incomplete]="!isAssignmentComplete(assignment.stationId)">
         
         <mat-card>
           <mat-card-header>
             <mat-card-title>
-              <mat-icon>location_on</mat-icon>
+              <mat-icon>route</mat-icon>
               {{ assignment.stationName }}
             </mat-card-title>
-            <mat-card-subtitle>
-              Tuyến: {{ assignment.routeCode }} - {{ assignment.routeName }} | 
-              Nhân viên: {{ assignment.employeeCount }} người
-            </mat-card-subtitle>
             <div class="status-indicator">
-              <mat-icon *ngIf="isAssignmentComplete(i)" class="status-icon complete">check_circle</mat-icon>
-              <mat-icon *ngIf="!isAssignmentComplete(i)" class="status-icon incomplete">warning</mat-icon>
+              <mat-icon *ngIf="isAssignmentComplete(assignment.stationId)" class="status-icon complete">check_circle</mat-icon>
+              <mat-icon *ngIf="!isAssignmentComplete(assignment.stationId)" class="status-icon incomplete">warning</mat-icon>
             </div>
           </mat-card-header>
 
           <mat-card-content>
             <div class="assignment-form">
-              <!-- Driver Assignment -->
-              <div class="form-section">
-                <h4>
-                  <mat-icon>person</mat-icon>
-                  Phân công tài xế
-                </h4>
-                <mat-form-field appearance="outline" class="full-width">
-                  <mat-label>Chọn tài xế</mat-label>
-                  <mat-select 
-                    [value]="assignment.assignedDriver.driverId"
-                    (selectionChange)="onDriverChange(i, $event.value)">
-                    <mat-option value="">-- Chọn tài xế --</mat-option>
-                    <mat-option *ngFor="let driver of getDriverOptions()" [value]="driver.driverId">
-                      {{ driver.driverName }} - {{ driver.phoneNumber }}
-                    </mat-option>
-                  </mat-select>
-                </mat-form-field>
-                
-                <div *ngIf="assignment.assignedDriver.driverId" class="selected-info">
-                  <mat-chip-set>
-                    <mat-chip>
-                      <mat-icon>person</mat-icon>
-                      {{ assignment.assignedDriver.driverName }}
-                    </mat-chip>
-                    <mat-chip>
-                      <mat-icon>phone</mat-icon>
-                      {{ assignment.assignedDriver.phoneNumber }}
-                    </mat-chip>
-                  </mat-chip-set>
+              <!-- Station Info -->
+              <div class="station-info">
+                <div class="info-item">
+                  <mat-icon>people</mat-icon>
+                  <span>Số nhân viên: {{ assignment.employeeCount }}</span>
+                </div>
+                <div class="info-item">
+                  <mat-icon>route</mat-icon>
+                  <span>Tuyến: {{ assignment.routeCode }}</span>
+                </div>
+                <div class="info-item">
+                  <mat-icon>percent</mat-icon>
+                  <span>Tỷ lệ: {{ getEmployeePercentage(assignment.employeeCount) }}%</span>
+                </div>
+                <div class="info-item">
+                  <mat-icon>directions_car</mat-icon>
+                  <span>Xe đề xuất: {{ getRecommendedVehicleType(assignment.employeeCount) }}</span>
                 </div>
               </div>
-
-              <mat-divider></mat-divider>
-
-              <!-- Vehicle Assignment -->
+              
+              <!-- Vehicle Assignment Only -->
               <div class="form-section">
                 <h4>
                   <mat-icon>directions_car</mat-icon>
@@ -107,7 +103,7 @@
                   <mat-label>Chọn xe</mat-label>
                   <mat-select 
                     [value]="assignment.assignedVehicle.vehicleId"
-                    (selectionChange)="onVehicleChange(i, $event.value)">
+                    (selectionChange)="onVehicleChange(assignment.stationId, $event.value)">
                     <mat-option value="">-- Chọn xe --</mat-option>
                     <mat-option *ngFor="let vehicle of getVehicleOptions()" [value]="vehicle.MaXe">
                       {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
@@ -144,6 +140,13 @@
     <button mat-button (click)="onCancel()" [disabled]="isExporting">
       <mat-icon>cancel</mat-icon>
       Hủy
+    </button>
+    <button mat-button 
+            color="accent" 
+            (click)="onRedistributeVehicles()" 
+            [disabled]="isExporting">
+      <mat-icon>refresh</mat-icon>
+      Phân bổ lại xe
     </button>
     <button mat-raised-button 
             color="primary" 

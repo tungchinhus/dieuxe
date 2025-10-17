@@ -205,21 +205,15 @@ export class EmployeeAllocationService {
 
   /**
    * Áp dụng logic ưu tiên gom HCM và BH routes
-   * Tất cả nhân viên HCM01, HCM02, HCM03 đều được gom vào HCM01 trước
+   * HCM01, HCM02, HCM03 được chia đều (không gom vào HCM01)
    * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
    * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
-    // Kiểm tra nếu là tuyến HCM
+    // Kiểm tra nếu là tuyến HCM - chia đều thành 3 tuyến
     if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
-      // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
-      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
-        // Gom tất cả vào HCM01
-        return 'HCM01';
-      } else {
-        // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
-        return routeName;
-      }
+      // Giữ nguyên tuyến gốc để chia đều
+      return routeName;
     }
     
     // Kiểm tra nếu là tuyến BH

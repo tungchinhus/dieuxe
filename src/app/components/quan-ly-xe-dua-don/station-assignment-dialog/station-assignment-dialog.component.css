@@ -26,6 +26,10 @@
   background-color: #fafafa;
 }
 
+.summary-section {
+  margin-bottom: 24px;
+}
+
 .summary-card {
   margin-bottom: 24px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
@@ -67,6 +71,14 @@
 .stat-value {
   font-weight: bold;
   font-size: 1.1em;
+}
+
+.stat-value.balanced {
+  color: #4caf50;
+}
+
+.stat-value.unbalanced {
+  color: #f44336;
 }
 
 .assignments-container {
@@ -138,6 +150,31 @@
 
 .assignment-form {
   padding: 16px 0;
+}
+
+.station-info {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 16px;
+  margin-bottom: 16px;
+  padding: 16px;
+  background-color: #f5f5f5;
+  border-radius: 8px;
+}
+
+.info-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9em;
+  color: #666;
+}
+
+.info-item mat-icon {
+  font-size: 18px;
+  width: 18px;
+  height: 18px;
+  color: #999;
 }
 
 .form-section {
