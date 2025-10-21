@@ -18,7 +18,7 @@ import { StationAssignment, DriverInfo, VehicleInfo, XeDuaDon, LoaiXe } from '..
 export interface RouteVehicleAssignmentDialogData {
   routes: RouteData[];
   vehicles: XeDuaDon[];
-  drivers: DriverInfo[];
+  drivers?: DriverInfo[]; // Optional vì không cần thiết nữa
 }
 
 export interface RouteData {
@@ -26,6 +26,7 @@ export interface RouteData {
   routeName: string;
   routeCode: string;
   employeeCount: number;
+  thuTu?: number; // Order of station in route
 }
 
 export interface RouteVehicleAssignment {
@@ -34,7 +35,12 @@ export interface RouteVehicleAssignment {
   routeCode: string;
   employeeCount: number;
   assignedVehicle: VehicleInfo;
+  assignedDriver: {
+    driverName: string;
+    phoneNumber: string;
+  };
   assignedAt: Date;
+  thuTu?: number; // Order of station in route
 }
 
 @Component({
@@ -72,7 +78,26 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
 
   ngOnInit(): void {
     this.initializeAssignments();
+    this.ensureDriverData();
     this.autoAssignVehicles();
+  }
+
+  /**
+   * Đảm bảo có dữ liệu tài xế mẫu nếu chưa có
+   */
+  private ensureDriverData(): void {
+    if (!this.data.drivers || this.data.drivers.length === 0) {
+      // Tạo dữ liệu tài xế mẫu dựa trên xe có sẵn
+      this.data.drivers = this.data.vehicles.map((vehicle, index) => ({
+        driverId: `driver_${vehicle.MaXe}`,
+        driverName: `Tài xế ${vehicle.BienSoXe}`,
+        phoneNumber: `090${String(index + 1).padStart(7, '0')}`,
+        licenseNumber: `LIC${String(index + 1).padStart(3, '0')}`,
+        vehicleId: vehicle.MaXe,
+        licensePlate: vehicle.BienSoXe,
+        vehicleType: vehicle.LoaiXe
+      }));
+    }
   }
 
   private initializeAssignments(): void {
@@ -89,7 +114,12 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         garageId: '',
         garageName: ''
       },
-      assignedAt: new Date()
+      assignedDriver: {
+        driverName: '',
+        phoneNumber: ''
+      },
+      assignedAt: new Date(),
+      thuTu: route.thuTu || 0 // Include order field if available
     }));
   }
 
@@ -106,7 +136,41 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
           garageId: selectedVehicle.MaNhaXe || '',
           garageName: ''
         };
+        
+        // Tự động load thông tin tài xế cho xe được chọn
+        this.loadDriverInfoForVehicle(assignment, selectedVehicle);
       }
+    }
+  }
+
+  /**
+   * Load thông tin tài xế cho xe được chọn
+   */
+  private loadDriverInfoForVehicle(assignment: RouteVehicleAssignment, vehicle: XeDuaDon): void {
+    // Lấy thông tin tài xế trực tiếp từ xe được chọn
+    assignment.assignedDriver = {
+      driverName: vehicle.TenTaiXe || '',
+      phoneNumber: vehicle.SoDienThoaiTaiXe || ''
+    };
+  }
+
+  /**
+   * Xử lý thay đổi tên tài xế
+   */
+  onDriverNameChange(routeId: string, driverName: string): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
+    if (assignment) {
+      assignment.assignedDriver.driverName = driverName;
+    }
+  }
+
+  /**
+   * Xử lý thay đổi số điện thoại tài xế
+   */
+  onDriverPhoneChange(routeId: string, phoneNumber: string): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
+    if (assignment) {
+      assignment.assignedDriver.phoneNumber = phoneNumber;
     }
   }
 
@@ -170,8 +234,41 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     return iconMap[vehicleType] || 'directions_car';
   }
 
+  getVehicleOptionsForRoute(routeId: string): XeDuaDon[] {
+    // Tìm tuyến để lấy số nhân viên
+    const route = this.routeAssignments.find(r => r.routeId === routeId);
+    if (!route) {
+      return this.data.vehicles;
+    }
+
+    const employeeCount = route.employeeCount;
+    
+    // Sắp xếp xe theo độ phù hợp với số nhân viên của tuyến này
+    return this.data.vehicles.sort((a, b) => {
+      const capacityA = this.getVehicleCapacity(a.LoaiXe);
+      const capacityB = this.getVehicleCapacity(b.LoaiXe);
+      
+      // Tính điểm phù hợp cho từng xe
+      const scoreA = this.calculateVehicleScore(capacityA, employeeCount);
+      const scoreB = this.calculateVehicleScore(capacityB, employeeCount);
+      
+      return scoreB - scoreA; // Sắp xếp từ cao đến thấp
+    });
+  }
+
   getVehicleOptions(): XeDuaDon[] {
-    return this.data.vehicles;
+    // Sắp xếp xe theo độ phù hợp với số nhân viên của tuyến hiện tại
+    return this.data.vehicles.sort((a, b) => {
+      const capacityA = this.getVehicleCapacity(a.LoaiXe);
+      const capacityB = this.getVehicleCapacity(b.LoaiXe);
+      
+      // Tính điểm phù hợp cho từng xe dựa trên số nhân viên trung bình
+      const avgEmployeeCount = this.getTotalEmployees() / this.routeAssignments.length;
+      const scoreA = this.calculateVehicleScore(capacityA, avgEmployeeCount);
+      const scoreB = this.calculateVehicleScore(capacityB, avgEmployeeCount);
+      
+      return scoreB - scoreA; // Sắp xếp từ cao đến thấp
+    });
   }
 
   getTotalEmployees(): number {
@@ -237,11 +334,13 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return;
     }
 
-    // Sắp xếp xe theo loại và sức chứa
-    const sortedVehicles = this.sortVehiclesByCapacity(availableVehicles);
-    
-    // Phân bổ xe đồng đều cho các tuyến
-    this.distributeVehiclesEvenly(sortedVehicles);
+    // Phân bổ xe cho từng tuyến dựa trên số nhân viên
+    this.routeAssignments.forEach(route => {
+      const bestVehicle = this.selectBestVehicleForRoute(availableVehicles, route);
+      if (bestVehicle) {
+        this.assignVehicleToRoute(route.routeId, bestVehicle);
+      }
+    });
   }
 
   /**
@@ -361,16 +460,41 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
 
   /**
    * Tính điểm phù hợp của xe với số nhân viên
+   * Logic mới: Ưu tiên xe có sức chứa phù hợp nhất với số nhân viên
    */
   private calculateVehicleScore(capacity: number, employeeCount: number): number {
-    // Điểm cao nhất khi sức chứa vừa đủ hoặc hơi thừa
-    if (capacity >= employeeCount) {
-      // Ưu tiên xe có sức chứa gần với số nhân viên nhất
-      const utilization = employeeCount / capacity;
-      return utilization * 100; // Điểm từ 0-100
+    // Định nghĩa các ngưỡng sức chứa theo yêu cầu
+    const thresholds = [
+      { min: 0, max: 7, idealCapacity: 7 },      // ≤ 7 nhân viên: Taxi 7 chỗ
+      { min: 8, max: 16, idealCapacity: 16 },    // 8-16 nhân viên: Xe 16 chỗ  
+      { min: 17, max: 29, idealCapacity: 29 },    // 17-29 nhân viên: Xe 29 chỗ
+      { min: 30, max: 45, idealCapacity: 45 },    // 30-45 nhân viên: Xe 45 chỗ
+      { min: 46, max: Infinity, idealCapacity: 45 } // > 45 nhân viên: Xe 45 chỗ
+    ];
+
+    // Tìm ngưỡng phù hợp với số nhân viên
+    const suitableThreshold = thresholds.find(t => 
+      employeeCount >= t.min && employeeCount <= t.max
+    );
+
+    if (!suitableThreshold) {
+      return -1; // Không có ngưỡng phù hợp
+    }
+
+    const idealCapacity = suitableThreshold.idealCapacity;
+
+    // Tính điểm dựa trên độ phù hợp với sức chứa lý tưởng
+    if (capacity === idealCapacity) {
+      // Xe có sức chứa lý tưởng: điểm cao nhất
+      return 100;
+    } else if (capacity > idealCapacity) {
+      // Xe có sức chứa lớn hơn lý tưởng: điểm trung bình
+      const excessRatio = (capacity - idealCapacity) / idealCapacity;
+      return Math.max(50, 100 - excessRatio * 30); // Điểm từ 50-100
     } else {
-      // Xe không đủ sức chứa có điểm thấp
-      return -1;
+      // Xe có sức chứa nhỏ hơn lý tưởng: điểm thấp
+      const shortageRatio = (idealCapacity - capacity) / idealCapacity;
+      return Math.max(0, 50 - shortageRatio * 50); // Điểm từ 0-50
     }
   }
 
@@ -388,6 +512,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         garageId: vehicle.MaNhaXe || '',
         garageName: ''
       };
+      
+      // Tự động load thông tin tài xế cho xe được gán
+      this.loadDriverInfoForVehicle(assignment, vehicle);
     }
   }
 

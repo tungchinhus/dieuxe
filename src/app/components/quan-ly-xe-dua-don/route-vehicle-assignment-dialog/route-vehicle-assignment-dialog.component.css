@@ -33,14 +33,15 @@
 }
 
 .route-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+  display: grid;
+  grid-template-columns: 1fr 1.5fr 1fr 1fr;
+  gap: 16px;
   padding: 16px;
   background-color: transparent;
   border-radius: 0;
   box-shadow: none;
   transition: background-color 0.3s ease;
+  align-items: center;
 }
 
 .route-item:hover {
@@ -51,7 +52,6 @@
   display: flex;
   flex-direction: column;
   gap: 4px;
-  flex: 1;
 }
 
 .route-name {
@@ -66,7 +66,23 @@
 }
 
 .vehicle-select {
-  min-width: 250px;
+  width: 100%;
+}
+
+.assignment-controls {
+  display: contents;
+}
+
+.driver-info {
+  display: contents;
+}
+
+.driver-name {
+  width: 100%;
+}
+
+.driver-phone {
+  width: 100%;
 }
 
 .dialog-actions {
@@ -94,8 +110,7 @@
   }
   
   .route-item {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
     gap: 12px;
   }
   
@@ -104,7 +119,11 @@
   }
   
   .vehicle-select {
-    min-width: unset;
+    width: 100%;
+  }
+  
+  .driver-name,
+  .driver-phone {
     width: 100%;
   }
   

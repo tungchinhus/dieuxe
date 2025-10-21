@@ -1292,15 +1292,22 @@ export class DangKyXeComponent implements OnInit {
       // Group registrations by route using the same logic as PDF generation
       const routeGroups = await this.groupRegistrationsByRouteForDialog(todayRegistrations);
       
-      // Convert to route data format for dialog
-      const realRoutes = routeGroups.map((route, index) => ({
-        routeId: route.routeName,
-        routeName: route.routeName,
-        routeCode: route.routeName,
-        employeeCount: route.registrations?.length || 0
-      }));
-      
-      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
+      // Convert to route data format for dialog - chỉ hiển thị 2 tuyến HCM chính
+      const realRoutes = routeGroups
+        .filter(route => {
+          // Chỉ hiển thị HCM01, HCM02 và các tuyến BH
+          // Loại bỏ HCM03 vì sẽ được sắp vào các tuyến BH
+          return route.routeName === 'HCM01' || 
+                 route.routeName === 'HCM02' || 
+                 route.routeName.startsWith('BH') ||
+                 route.routeName === 'THU_DUC_TAXI';
+        })
+        .map((route, index) => ({
+          routeId: route.routeName,
+          routeName: route.routeName,
+          routeCode: route.routeName,
+          employeeCount: route.registrations?.length || 0
+        }));
       
       // Load real vehicles from Firebase
       const vehicles = await this.firestoreService.getAllXeDuaDon();
@@ -1317,6 +1324,7 @@ export class DangKyXeComponent implements OnInit {
       console.log('Loaded vehicles from Firebase:', vehicles);
       console.log('Real route groups:', realRoutes);
 
+      // Không cần mockDrivers nữa vì thông tin tài xế sẽ lấy trực tiếp từ xe
       const dialogRef = this.dialog.open(RouteVehicleAssignmentDialogComponent, {
         width: '1200px',
         maxWidth: '95vw',
@@ -1324,7 +1332,7 @@ export class DangKyXeComponent implements OnInit {
         data: {
           routes: realRoutes,
           vehicles: vehicles,
-          drivers: mockDrivers
+          drivers: [] // Không cần drivers nữa
         }
       });
 
@@ -1406,6 +1414,26 @@ export class DangKyXeComponent implements OnInit {
       route.registrations.length > 0 &&
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
+
+    // Sort routes according to the specified order: HCM01, HCM02, HCM03, BH01, BH02, BH03, BH04
+    const routeOrder = ['HCM01', 'HCM02', 'HCM03', 'BH01', 'BH02', 'BH03', 'BH04'];
+    
+    routes.sort((a, b) => {
+      const indexA = routeOrder.indexOf(a.routeName);
+      const indexB = routeOrder.indexOf(b.routeName);
+      
+      // If both routes are in the predefined order, sort by their position
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      // If only one route is in the predefined order, prioritize it
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      
+      // If neither route is in the predefined order, sort alphabetically
+      return a.routeName.localeCompare(b.routeName);
+    });
 
     return routes;
   }

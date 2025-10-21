@@ -3,6 +3,7 @@ import jsPDF from 'jspdf';
 import { StationAssignment, PDFExportData, DriverInfo, VehicleInfo } from '../models/vehicle.model';
 import { FirestoreService } from './firestore.service';
 import { RouteDetailService } from './route-detail.service';
+import { RouteDetail } from '../models/route-detail.model';
 
 @Injectable({
   providedIn: 'root'
@@ -39,9 +40,12 @@ export class StationAssignmentPdfExportService {
       // Add summary
       currentY = this.addOvertimeSummary(doc, exportData, pageWidth, currentY);
 
+      // Sort station assignments by route order (thuTu) before exporting
+      const sortedAssignments = await this.sortStationAssignmentsByRouteOrder(exportData.stationAssignments);
+
       // Add station assignments with driver and vehicle info
-      for (let i = 0; i < exportData.stationAssignments.length; i++) {
-        const assignment = exportData.stationAssignments[i];
+      for (let i = 0; i < sortedAssignments.length; i++) {
+        const assignment = sortedAssignments[i];
         
         // Check if we need a new page
         if (currentY > pageHeight - 100) {
@@ -372,6 +376,126 @@ export class StationAssignmentPdfExportService {
   }
 
   /**
+   * Normalize station name for better matching
+   */
+  private normalizeStationName(stationName: string): string {
+    if (!stationName) return '';
+    
+    return stationName
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/[()]/g, '') // Remove parentheses
+      .replace(/[.,]/g, '') // Remove dots and commas
+      .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
+      .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
+      .replace(/[ìíịỉĩ]/g, 'i')
+      .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
+      .replace(/[ùúụủũưừứựửữ]/g, 'u')
+      .replace(/[ỳýỵỷỹ]/g, 'y')
+      .replace(/đ/g, 'd');
+  }
+
+  /**
+   * Sort station assignments by route order (thuTu) from route details
+   */
+  private async sortStationAssignmentsByRouteOrder(assignments: StationAssignment[]): Promise<StationAssignment[]> {
+    try {
+      // First check if assignments already have thuTu field
+      const hasThuTuField = assignments.some(a => a.thuTu !== undefined);
+      
+      if (hasThuTuField) {
+        // Sort directly by thuTu field if available
+        const sortedAssignments = [...assignments].sort((a, b) => {
+          // First sort by route code
+          if (a.routeCode !== b.routeCode) {
+            return a.routeCode.localeCompare(b.routeCode);
+          }
+
+          // Then sort by thuTu within the same route
+          const orderA = a.thuTu || 999;
+          const orderB = b.thuTu || 999;
+          return orderA - orderB;
+        });
+
+        console.log('Sorted station assignments by thuTu field:', sortedAssignments.map(a => ({
+          routeCode: a.routeCode,
+          stationName: a.stationName,
+          thuTu: a.thuTu
+        })));
+
+        return sortedAssignments;
+      }
+
+      // Fallback: Get route details from service if thuTu field is not available
+      const routeDetails = await this.routeDetailService.getRouteDetails().toPromise();
+      
+      if (!routeDetails || routeDetails.length === 0) {
+        console.warn('No route details found, returning assignments without sorting');
+        return assignments;
+      }
+
+      // Create a map of station names to their order for each route
+      const stationOrderMap = new Map<string, Map<string, number>>();
+      
+      routeDetails.forEach(detail => {
+        if (!stationOrderMap.has(detail.maTuyenXe)) {
+          stationOrderMap.set(detail.maTuyenXe, new Map());
+        }
+        // Store both exact match and normalized match for better matching
+        stationOrderMap.get(detail.maTuyenXe)!.set(detail.tenDiemDon, detail.thuTu);
+        stationOrderMap.get(detail.maTuyenXe)!.set(this.normalizeStationName(detail.tenDiemDon), detail.thuTu);
+      });
+
+      // Sort assignments by route order
+      const sortedAssignments = [...assignments].sort((a, b) => {
+        // First sort by route code
+        if (a.routeCode !== b.routeCode) {
+          return a.routeCode.localeCompare(b.routeCode);
+        }
+
+        // Then sort by station order within the same route
+        const routeOrderMap = stationOrderMap.get(a.routeCode);
+        if (routeOrderMap) {
+          // Try exact match first
+          let orderA = routeOrderMap.get(a.stationName);
+          let orderB = routeOrderMap.get(b.stationName);
+          
+          // If no exact match, try normalized match
+          if (orderA === undefined) {
+            orderA = routeOrderMap.get(this.normalizeStationName(a.stationName));
+          }
+          if (orderB === undefined) {
+            orderB = routeOrderMap.get(this.normalizeStationName(b.stationName));
+          }
+          
+          // Use found order or default to 999
+          orderA = orderA || 999;
+          orderB = orderB || 999;
+          
+          return orderA - orderB;
+        }
+
+        // Fallback to alphabetical order if no route details found
+        return a.stationName.localeCompare(b.stationName);
+      });
+
+      console.log('Sorted station assignments by route details:', sortedAssignments.map(a => ({
+        routeCode: a.routeCode,
+        stationName: a.stationName,
+        order: stationOrderMap.get(a.routeCode)?.get(a.stationName) || 'unknown'
+      })));
+
+      return sortedAssignments;
+
+    } catch (error) {
+      console.error('Error sorting station assignments by route order:', error);
+      // Return original assignments if sorting fails
+      return assignments;
+    }
+  }
+
+  /**
    * Generate mock driver data for testing
    */
   generateMockDrivers(): DriverInfo[] {
@@ -380,88 +504,429 @@ export class StationAssignmentPdfExportService {
         driverId: 'DRV001',
         driverName: 'Nguyễn Văn An',
         phoneNumber: '0901234567',
-        licenseNumber: 'A123456789'
+        licenseNumber: 'A123456789',
+        vehicleId: '60B12345',
+        licensePlate: '60B12345',
+        vehicleType: 'Xe taxi 7 chỗ'
       },
       {
         driverId: 'DRV002',
         driverName: 'Trần Thị Bình',
         phoneNumber: '0901234568',
-        licenseNumber: 'B123456789'
+        licenseNumber: 'B123456789',
+        vehicleId: '16C60F018',
+        licensePlate: '16C60F018',
+        vehicleType: 'Xe 29 chỗ'
       },
       {
         driverId: 'DRV003',
         driverName: 'Lê Văn Cường',
         phoneNumber: '0901234569',
-        licenseNumber: 'C123456789'
+        licenseNumber: 'C123456789',
+        vehicleId: '60B04889',
+        licensePlate: '60B04889',
+        vehicleType: 'Xe 16 chỗ'
       },
       {
         driverId: 'DRV004',
         driverName: 'Phạm Thị Dung',
         phoneNumber: '0901234570',
-        licenseNumber: 'D123456789'
+        licenseNumber: 'D123456789',
+        vehicleId: '16C60F019',
+        licensePlate: '16C60F019',
+        vehicleType: 'Xe 29 chỗ'
       },
       {
         driverId: 'DRV005',
         driverName: 'Hoàng Văn Em',
         phoneNumber: '0901234571',
-        licenseNumber: 'E123456789'
+        licenseNumber: 'E123456789',
+        vehicleId: '60B04890',
+        licensePlate: '60B04890',
+        vehicleType: 'Xe 16 chỗ'
       }
     ];
   }
 
   /**
-   * Generate mock station data for testing
+   * Generate mock station data for testing with proper ordering
    */
   generateMockStations(): any[] {
     return [
+      // HCM01 - Tuyến Hồ Chí Minh 1
       {
-        stationId: 'HCM01',
+        stationId: 'HCM01_001',
+        stationName: 'Ngã 3 Bến Gỗ',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 5,
+        thuTu: 1
+      },
+      {
+        stationId: 'HCM01_002',
+        stationName: 'Ngã 3 Long Bình Tân',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 8,
+        thuTu: 2
+      },
+      {
+        stationId: 'HCM01_003',
         stationName: 'Ngã 4 Thủ Đức',
         routeCode: 'HCM01',
         routeName: 'Tuyến HCM01',
-        employeeCount: 28
+        employeeCount: 12,
+        thuTu: 3
       },
       {
-        stationId: 'HCM02',
+        stationId: 'HCM01_004',
         stationName: 'RMK',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 3,
+        thuTu: 4
+      },
+      {
+        stationId: 'HCM01_005',
+        stationName: 'Ngã 3 Cát Lái',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 6,
+        thuTu: 5
+      },
+      {
+        stationId: 'HCM01_006',
+        stationName: 'Hàng Xanh (Gần Văn Thánh)',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 4,
+        thuTu: 6
+      },
+      {
+        stationId: 'HCM01_007',
+        stationName: 'ĐTH - ĐBP',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 7,
+        thuTu: 7
+      },
+      {
+        stationId: 'HCM01_008',
+        stationName: 'Hai Bà Trưng - ĐBP',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 9,
+        thuTu: 8
+      },
+      {
+        stationId: 'HCM01_009',
+        stationName: 'BV Hòa Hảo',
+        routeCode: 'HCM01',
+        routeName: 'Tuyến HCM01',
+        employeeCount: 11,
+        thuTu: 9
+      },
+
+      // HCM02 - Tuyến Hồ Chí Minh 2
+      {
+        stationId: 'HCM02_001',
+        stationName: 'KCN Biên Hòa 2',
         routeCode: 'HCM02',
         routeName: 'Tuyến HCM02',
-        employeeCount: 2
+        employeeCount: 15,
+        thuTu: 1
       },
       {
-        stationId: 'HCM03',
-        stationName: 'Bến Gỗ',
+        stationId: 'HCM02_002',
+        stationName: 'Ngã 3 Vũng Tàu',
+        routeCode: 'HCM02',
+        routeName: 'Tuyến HCM02',
+        employeeCount: 10,
+        thuTu: 2
+      },
+      {
+        stationId: 'HCM02_003',
+        stationName: 'Cầu Rạch Miễu',
+        routeCode: 'HCM02',
+        routeName: 'Tuyến HCM02',
+        employeeCount: 8,
+        thuTu: 3
+      },
+      {
+        stationId: 'HCM02_004',
+        stationName: 'Bến Tre',
+        routeCode: 'HCM02',
+        routeName: 'Tuyến HCM02',
+        employeeCount: 6,
+        thuTu: 4
+      },
+
+      // HCM03 - Tuyến Hồ Chí Minh 3
+      {
+        stationId: 'HCM03_001',
+        stationName: 'Vòng xoay Tam Hiệp',
         routeCode: 'HCM03',
         routeName: 'Tuyến HCM03',
-        employeeCount: 8
+        employeeCount: 12,
+        thuTu: 1
       },
       {
-        stationId: 'BH01',
-        stationName: 'KCN Long Đức',
+        stationId: 'HCM03_002',
+        stationName: 'Công viên Văn Lang',
+        routeCode: 'HCM03',
+        routeName: 'Tuyến HCM03',
+        employeeCount: 9,
+        thuTu: 2
+      },
+      {
+        stationId: 'HCM03_003',
+        stationName: 'KCN Long Bình',
+        routeCode: 'HCM03',
+        routeName: 'Tuyến HCM03',
+        employeeCount: 14,
+        thuTu: 3
+      },
+      {
+        stationId: 'HCM03_004',
+        stationName: 'BV 7B',
+        routeCode: 'HCM03',
+        routeName: 'Tuyến HCM03',
+        employeeCount: 7,
+        thuTu: 4
+      },
+
+      // HCM04 - Tuyến Hồ Chí Minh 4
+      {
+        stationId: 'HCM04_001',
+        stationName: 'Huỳnh Văn Lũy',
+        routeCode: 'HCM04',
+        routeName: 'Tuyến HCM04',
+        employeeCount: 11,
+        thuTu: 1
+      },
+      {
+        stationId: 'HCM04_002',
+        stationName: 'Metro An Phú',
+        routeCode: 'HCM04',
+        routeName: 'Tuyến HCM04',
+        employeeCount: 13,
+        thuTu: 2
+      },
+      {
+        stationId: 'HCM04_003',
+        stationName: 'KCN Hiệp Phước',
+        routeCode: 'HCM04',
+        routeName: 'Tuyến HCM04',
+        employeeCount: 16,
+        thuTu: 3
+      },
+
+      // T1 - Tuyến 1
+      {
+        stationId: 'T1_001',
+        stationName: 'KCN Biên Hòa 2',
+        routeCode: 'T1',
+        routeName: 'Tuyến 1',
+        employeeCount: 18,
+        thuTu: 1
+      },
+      {
+        stationId: 'T1_002',
+        stationName: 'Ngã 3 Vũng Tàu',
+        routeCode: 'T1',
+        routeName: 'Tuyến 1',
+        employeeCount: 12,
+        thuTu: 2
+      },
+      {
+        stationId: 'T1_003',
+        stationName: 'Cầu Rạch Miễu',
+        routeCode: 'T1',
+        routeName: 'Tuyến 1',
+        employeeCount: 10,
+        thuTu: 3
+      },
+
+      // T2 - Tuyến 2
+      {
+        stationId: 'T2_001',
+        stationName: 'Ngã 3 Vũng Tàu',
+        routeCode: 'T2',
+        routeName: 'Tuyến 2',
+        employeeCount: 14,
+        thuTu: 1
+      },
+      {
+        stationId: 'T2_002',
+        stationName: 'Ngã 4 Thủ Đức',
+        routeCode: 'T2',
+        routeName: 'Tuyến 2',
+        employeeCount: 16,
+        thuTu: 2
+      },
+      {
+        stationId: 'T2_003',
+        stationName: 'KCN Long Bình',
+        routeCode: 'T2',
+        routeName: 'Tuyến 2',
+        employeeCount: 13,
+        thuTu: 3
+      },
+
+      // T3 - Tuyến 3
+      {
+        stationId: 'T3_001',
+        stationName: 'Tam Hiệp',
+        routeCode: 'T3',
+        routeName: 'Tuyến 3',
+        employeeCount: 11,
+        thuTu: 1
+      },
+      {
+        stationId: 'T3_002',
+        stationName: 'Công viên Văn Lang',
+        routeCode: 'T3',
+        routeName: 'Tuyến 3',
+        employeeCount: 9,
+        thuTu: 2
+      },
+      {
+        stationId: 'T3_003',
+        stationName: 'KCN Biên Hòa',
+        routeCode: 'T3',
+        routeName: 'Tuyến 3',
+        employeeCount: 15,
+        thuTu: 3
+      },
+
+      // T4 - Tuyến 4
+      {
+        stationId: 'T4_001',
+        stationName: 'BV 7B',
+        routeCode: 'T4',
+        routeName: 'Tuyến 4',
+        employeeCount: 8,
+        thuTu: 1
+      },
+      {
+        stationId: 'T4_002',
+        stationName: 'KCN Long Bình',
+        routeCode: 'T4',
+        routeName: 'Tuyến 4',
+        employeeCount: 12,
+        thuTu: 2
+      },
+      {
+        stationId: 'T4_003',
+        stationName: 'Bệnh viện Chợ Rẫy',
+        routeCode: 'T4',
+        routeName: 'Tuyến 4',
+        employeeCount: 6,
+        thuTu: 3
+      },
+
+      // BH01 - Tuyến Biên Hòa 1
+      {
+        stationId: 'BH01_001',
+        stationName: 'KCN Biên Hòa 1',
         routeCode: 'BH01',
         routeName: 'Tuyến BH01',
-        employeeCount: 15
+        employeeCount: 20,
+        thuTu: 1
       },
       {
-        stationId: 'BH02',
-        stationName: 'Ngã 3 Bến Gỗ',
+        stationId: 'BH01_002',
+        stationName: 'Ngã 3 Vũng Tàu',
+        routeCode: 'BH01',
+        routeName: 'Tuyến BH01',
+        employeeCount: 15,
+        thuTu: 2
+      },
+      {
+        stationId: 'BH01_003',
+        stationName: 'Cầu Rạch Miễu',
+        routeCode: 'BH01',
+        routeName: 'Tuyến BH01',
+        employeeCount: 12,
+        thuTu: 3
+      },
+
+      // BH02 - Tuyến Biên Hòa 2
+      {
+        stationId: 'BH02_001',
+        stationName: 'KCN Biên Hòa 2',
         routeCode: 'BH02',
         routeName: 'Tuyến BH02',
-        employeeCount: 12
+        employeeCount: 18,
+        thuTu: 1
       },
       {
-        stationId: 'BH03',
-        stationName: 'Ngã 3 Long Bình Tân',
+        stationId: 'BH02_002',
+        stationName: 'Ngã 3 Vũng Tàu',
+        routeCode: 'BH02',
+        routeName: 'Tuyến BH02',
+        employeeCount: 14,
+        thuTu: 2
+      },
+      {
+        stationId: 'BH02_003',
+        stationName: 'Cầu Rạch Miễu',
+        routeCode: 'BH02',
+        routeName: 'Tuyến BH02',
+        employeeCount: 11,
+        thuTu: 3
+      },
+
+      // BH03 - Tuyến Biên Hòa 3
+      {
+        stationId: 'BH03_001',
+        stationName: 'KCN Long Bình',
         routeCode: 'BH03',
         routeName: 'Tuyến BH03',
-        employeeCount: 6
+        employeeCount: 16,
+        thuTu: 1
       },
       {
-        stationId: 'BH04',
-        stationName: 'Hàng Xanh',
+        stationId: 'BH03_002',
+        stationName: 'Ngã 4 Thủ Đức',
+        routeCode: 'BH03',
+        routeName: 'Tuyến BH03',
+        employeeCount: 13,
+        thuTu: 2
+      },
+      {
+        stationId: 'BH03_003',
+        stationName: 'Tam Hiệp',
+        routeCode: 'BH03',
+        routeName: 'Tuyến BH03',
+        employeeCount: 10,
+        thuTu: 3
+      },
+
+      // BH04 - Tuyến Biên Hòa 4
+      {
+        stationId: 'BH04_001',
+        stationName: 'BV 7B',
         routeCode: 'BH04',
         routeName: 'Tuyến BH04',
-        employeeCount: 9
+        employeeCount: 9,
+        thuTu: 1
+      },
+      {
+        stationId: 'BH04_002',
+        stationName: 'KCN Hiệp Phước',
+        routeCode: 'BH04',
+        routeName: 'Tuyến BH04',
+        employeeCount: 17,
+        thuTu: 2
+      },
+      {
+        stationId: 'BH04_003',
+        stationName: 'Metro An Phú',
+        routeCode: 'BH04',
+        routeName: 'Tuyến BH04',
+        employeeCount: 12,
+        thuTu: 3
       }
     ];
   }

@@ -4,6 +4,8 @@ import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
 import { Registration } from '../models/registration.model';
 import { FirestoreService } from './firestore.service';
+import { RouteDetailService } from './route-detail.service';
+import { RouteDetail } from '../models/route-detail.model';
 // (Import dưới dùng cho map field; có thể giữ hoặc bỏ nếu không cần)
 import { DangKyPhanXe } from '../models/vehicle.model';
 
@@ -42,7 +44,10 @@ export interface RouteVehicleAssignment {
 
 @Injectable({ providedIn: 'root' })
 export class PdfExportService {
-  constructor(private firestoreService: FirestoreService) {}
+  constructor(
+    private firestoreService: FirestoreService,
+    private routeDetailService: RouteDetailService
+  ) {}
 
   /**
    * Export today's registrations to PDF with route grouping using HTML template
@@ -85,7 +90,7 @@ export class PdfExportService {
         
         if (i > 0) pdf.addPage();
 
-        const htmlContent = this.generateHTMLTemplate(route);
+        const htmlContent = await this.generateHTMLTemplate(route);
         await this.convertHTMLToPDF(pdf, htmlContent);
       }
 
@@ -139,7 +144,7 @@ export class PdfExportService {
         
         if (i > 0) pdf.addPage();
 
-        const htmlContent = this.generateOvertimeReportHTMLTemplate(route);
+        const htmlContent = await this.generateOvertimeReportHTMLTemplate(route);
         await this.convertHTMLToPDF(pdf, htmlContent);
       }
 
@@ -193,7 +198,7 @@ export class PdfExportService {
         
         if (i > 0) pdf.addPage();
 
-        const htmlContent = this.generateOvertimeReportHTMLTemplate(route);
+        const htmlContent = await this.generateOvertimeReportHTMLTemplate(route);
         await this.convertHTMLToPDF(pdf, htmlContent);
       }
 
@@ -326,16 +331,260 @@ export class PdfExportService {
     const routeArray = Array.from(routeMap.values());
     const sortedRoutes = this.sortRoutesByPriority(routeArray);
     
+    // Áp dụng logic overflow cho HCM nếu tổng > 30 nhân viên
+    const finalRoutes = await this.applyHCMOverflowLogic(sortedRoutes);
+    
+    // Áp dụng logic fill HCM02 nếu < 15 người
+    const finalRoutesWithHCM02Fill = await this.applyHCM02FillLogic(finalRoutes);
+    
     // Tính toán phân loại xe cho từng tuyến
-    return this.calculateVehicleAllocation(sortedRoutes);
+    return this.calculateVehicleAllocation(finalRoutesWithHCM02Fill);
   }
 
   /**
-   * Áp dụng logic ưu tiên gom HCM và BH routes
-   * HCM01, HCM02, HCM03 được chia đều (không gom vào HCM01)
-   * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
-   * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
-   * Các trường hợp "tự túc" sẽ được gom vào một nhóm riêng
+   * Áp dụng logic fill HCM02 nếu < 15 người:
+   * - Chuyển nhân viên từ các trạm "Ngã 3 long Bình Tân", "Ngã 4 Thủ Đức", "Bà Chiểu" từ BH sang HCM02
+   * - Mục tiêu: HCM02 có đủ 15 người cho xe 16 chỗ
+   */
+  private async applyHCM02FillLogic(routes: RouteInfo[]): Promise<RouteInfo[]> {
+    // Tìm HCM02 route
+    const hcm02Index = routes.findIndex(r => r.routeName === 'HCM02');
+    if (hcm02Index === -1) {
+      return routes; // Không có HCM02, không cần xử lý
+    }
+    
+    const hcm02Route = routes[hcm02Index];
+    const currentHCM02Count = hcm02Route.registrations?.length || 0;
+    
+    console.log(`HCM02 current count: ${currentHCM02Count}`);
+    
+    // Nếu HCM02 đã có >= 15 người, không cần fill
+    if (currentHCM02Count >= 15) {
+      console.log('HCM02 already has enough people (>= 15), no need to fill');
+      return routes;
+    }
+    
+    const targetCount = 15;
+    const neededCount = targetCount - currentHCM02Count;
+    
+    console.log(`HCM02 needs ${neededCount} more people to reach 15`);
+    
+    // Tìm nhân viên từ các trạm mục tiêu trong BH routes
+    const targetStations = [
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'ngã 4 thủ đức',
+      'nga 4 thu duc',
+      'bà chiểu',
+      'ba chieu'
+    ];
+    
+    const employeesToMove: Registration[] = [];
+    const updatedRoutes = [...routes];
+    
+    // Tìm nhân viên từ BH routes có trạm mục tiêu
+    updatedRoutes.forEach((route, routeIndex) => {
+      if (route.routeName.startsWith('BH') && route.registrations) {
+        const employeesToRemove: Registration[] = [];
+        
+        route.registrations.forEach(employee => {
+          const stationName = this.normalizeStationName(employee.tramXe);
+          
+          // Kiểm tra xem trạm có khớp với trạm mục tiêu không
+          const isTargetStation = targetStations.some(targetStation => 
+            stationName.includes(targetStation) || targetStation.includes(stationName)
+          );
+          
+          if (isTargetStation && employeesToMove.length < neededCount) {
+            console.log(`Moving employee ${employee.hoTen} from ${employee.tramXe} (${route.routeName}) to HCM02`);
+            employeesToMove.push(employee);
+            employeesToRemove.push(employee);
+          }
+        });
+        
+        // Xóa nhân viên đã chuyển khỏi BH route
+        if (employeesToRemove.length > 0) {
+          updatedRoutes[routeIndex].registrations = route.registrations.filter(
+            emp => !employeesToRemove.includes(emp)
+          );
+        }
+      }
+    });
+    
+    console.log(`Found ${employeesToMove.length} employees to move to HCM02`);
+    
+    // Thêm nhân viên vào HCM02
+    if (employeesToMove.length > 0) {
+      if (!updatedRoutes[hcm02Index].registrations) {
+        updatedRoutes[hcm02Index].registrations = [];
+      }
+      updatedRoutes[hcm02Index].registrations!.push(...employeesToMove);
+      
+      const newHCM02Count = updatedRoutes[hcm02Index].registrations!.length;
+      console.log(`HCM02 new count: ${newHCM02Count}`);
+    }
+    
+    // Loại bỏ các BH routes không còn nhân viên
+    const finalRoutes = updatedRoutes.filter(route => 
+      !route.routeName.startsWith('BH') || (route.registrations && route.registrations.length > 0)
+    );
+    
+    console.log('Final route distribution after HCM02 fill logic:');
+    finalRoutes.forEach(route => {
+      console.log(`${route.routeName}: ${route.registrations?.length || 0} employees`);
+    });
+    
+    return finalRoutes;
+  }
+
+  /**
+   * Áp dụng logic overflow cho HCM khi tổng nhân viên > 30:
+   * - Ưu tiên nhân viên có tên trạm giống với BH → chuyển vào BH
+   * - Số còn lại chia đôi cho HCM01 và HCM02
+   */
+  private async applyHCMOverflowLogic(routes: RouteInfo[]): Promise<RouteInfo[]> {
+    // Tính tổng nhân viên HCM
+    const hcmRoutes = routes.filter(route => 
+      route.routeName === 'HCM01' || route.routeName === 'HCM02' || route.routeName === 'HCM03'
+    );
+    
+    const totalHCMEmployees = hcmRoutes.reduce((sum, route) => 
+      sum + (route.registrations?.length || 0), 0
+    );
+    
+    console.log('Total HCM employees:', totalHCMEmployees);
+    
+    // Nếu tổng HCM <= 30, không cần xử lý overflow
+    if (totalHCMEmployees <= 30) {
+      return routes;
+    }
+    
+    console.log('HCM overflow detected! Applying redistribution logic...');
+    
+    // Lấy tất cả nhân viên HCM
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+    
+    // Lấy danh sách trạm BH để so sánh
+    const bhStations = await this.getBHStationNames();
+    console.log('BH stations for matching:', bhStations);
+    
+    // Phân loại nhân viên HCM
+    const employeesForBH: Registration[] = [];
+    const employeesForHCM: Registration[] = [];
+    
+    allHCMEmployees.forEach(employee => {
+      const stationName = this.normalizeStationName(employee.tramXe);
+      
+      // Kiểm tra xem trạm có khớp với trạm BH không
+      const matchingBHStation = bhStations.find(bhStation => 
+        this.normalizeStationName(bhStation) === stationName ||
+        stationName.includes(this.normalizeStationName(bhStation)) ||
+        this.normalizeStationName(bhStation).includes(stationName)
+      );
+      
+      if (matchingBHStation) {
+        console.log(`Employee ${employee.hoTen} at station ${employee.tramXe} matches BH station ${matchingBHStation}`);
+        employeesForBH.push(employee);
+      } else {
+        employeesForHCM.push(employee);
+      }
+    });
+    
+    console.log(`Employees for BH: ${employeesForBH.length}, Employees for HCM: ${employeesForHCM.length}`);
+    
+    // Chuyển nhân viên có trạm khớp vào BH routes
+    const updatedRoutes = [...routes];
+    employeesForBH.forEach(employee => {
+      const targetBHRoute = this.findBestBHRouteForEmployee(employee, updatedRoutes);
+      if (targetBHRoute) {
+        // Tìm route trong updatedRoutes
+        const routeIndex = updatedRoutes.findIndex(r => r.routeName === targetBHRoute);
+        if (routeIndex >= 0) {
+          if (!updatedRoutes[routeIndex].registrations) {
+            updatedRoutes[routeIndex].registrations = [];
+          }
+          updatedRoutes[routeIndex].registrations!.push(employee);
+        }
+      }
+    });
+    
+    // Chia đôi nhân viên còn lại cho HCM01 và HCM02
+    const halfCount = Math.ceil(employeesForHCM.length / 2);
+    const hcm01Employees = employeesForHCM.slice(0, halfCount);
+    const hcm02Employees = employeesForHCM.slice(halfCount);
+    
+    // Cập nhật HCM01 và HCM02
+    const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
+    const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
+    
+    if (hcm01Index >= 0) {
+      updatedRoutes[hcm01Index].registrations = hcm01Employees;
+    }
+    if (hcm02Index >= 0) {
+      updatedRoutes[hcm02Index].registrations = hcm02Employees;
+    }
+    
+    // Xóa HCM03 nếu có
+    const hcm03Index = updatedRoutes.findIndex(r => r.routeName === 'HCM03');
+    if (hcm03Index >= 0) {
+      updatedRoutes.splice(hcm03Index, 1);
+    }
+    
+    console.log('Final route distribution after overflow logic:');
+    updatedRoutes.forEach(route => {
+      console.log(`${route.routeName}: ${route.registrations?.length || 0} employees`);
+    });
+    
+    return updatedRoutes;
+  }
+
+  /**
+   * Lấy danh sách tên trạm của các tuyến BH
+   */
+  private async getBHStationNames(): Promise<string[]> {
+    try {
+      const routeDetails = await this.routeDetailService.getRouteDetails().toPromise();
+      const bhStations = routeDetails
+        ?.filter((detail: RouteDetail) => detail.maTuyenXe.startsWith('BH'))
+        ?.map((detail: RouteDetail) => detail.tenDiemDon) || [];
+      
+      return [...new Set(bhStations)]; // Loại bỏ trùng lặp
+    } catch (error) {
+      console.error('Error getting BH station names:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Tìm tuyến BH tốt nhất cho nhân viên
+   */
+  private findBestBHRouteForEmployee(employee: Registration, routes: RouteInfo[]): string | null {
+    const stationName = this.normalizeStationName(employee.tramXe);
+    
+    // Ưu tiên BH01, BH02, BH03, BH04 theo thứ tự
+    const bhRoutes = ['BH01', 'BH02', 'BH03', 'BH04'];
+    
+    for (const bhRoute of bhRoutes) {
+      const routeExists = routes.some(r => r.routeName === bhRoute);
+      if (routeExists) {
+        return bhRoute;
+      }
+    }
+    
+    return 'BH01'; // Fallback
+  }
+
+  /**
+   * Áp dụng logic ưu tiên gom HCM và BH routes theo tiêu chí mới:
+   * - HCM phụ trội chỉ có 2 tuyến (16 chỗ)
+   * - Tuyến thứ 3 phát sinh: Phước Tân, Bến Gỗ, Long Bình Tân, Thủ Đức
+   * - Tối ưu chi phí: Phước Tân, Bến Gỗ, Long Bình Tân sắp vào tuyến BH
+   * - Thủ Đức: nếu chỉ có vài người thì cho đi taxi
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Kiểm tra nếu là trường hợp "tự túc"
@@ -343,26 +592,172 @@ export class PdfExportService {
       return 'TỰ TÚC';
     }
     
-    // Kiểm tra nếu là tuyến HCM - chia đều thành 3 tuyến
-    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
-      // Giữ nguyên tuyến gốc để chia đều
+    // Kiểm tra nếu là tuyến HCM - chỉ có 2 tuyến chính
+    if (routeName === 'HCM01' || routeName === 'HCM02') {
+      // Giữ nguyên 2 tuyến HCM chính
       return routeName;
     }
     
+    // Xử lý tuyến HCM03 phát sinh - chuyển các trạm vào BH có cùng tên trạm
+    if (routeName === 'HCM03') {
+      // Thủ Đức -> taxi nếu ít người
+      if (this.isThuDucStation(tramXe)) {
+        return 'THU_DUC_TAXI';
+      }
+      
+      // Các trạm khác (Phước Tân, Bến Gỗ, Long Bình Tân) -> sắp vào BH có cùng tên trạm
+      // Tìm tuyến BH phù hợp dựa trên tên trạm
+      const matchingBHRoute = this.findMatchingBHRouteForStation(tramXe);
+      if (matchingBHRoute) {
+        return matchingBHRoute;
+      }
+      
+      // Fallback: gom vào BH01 nếu không tìm thấy tuyến phù hợp
+      return 'BH01';
+    }
+    
     // Kiểm tra nếu là tuyến BH
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
       // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
       if (this.isStationBeforeOrAtHangXanh(tramXe)) {
         // Gom tất cả vào BH01
         return 'BH01';
       } else {
         // Các trạm sau "Hàng xanh" giữ nguyên tuyến gốc
+        // Đặc biệt: "Ngã 3 Hãng dầu" luôn giữ nguyên tuyến BH04
+        if (this.isNga3HangDauStation(tramXe)) {
+          return 'BH04';
+        }
         return routeName;
       }
     }
     
     // Các tuyến khác không thay đổi
     return routeName;
+  }
+
+  /**
+   * Tìm tuyến BH phù hợp cho trạm từ HCM03
+   */
+  private findMatchingBHRouteForStation(tramXe: string): string | null {
+    if (!tramXe) return null;
+    
+    const station = tramXe.toLowerCase();
+    
+    // Mapping các trạm HCM03 với tuyến BH phù hợp
+    const stationToBHRouteMap: { [key: string]: string } = {
+      'phước tân': 'BH01',
+      'phuoc tan': 'BH01',
+      'bến gỗ': 'BH01', 
+      'ben go': 'BH01',
+      'ngã 3 bến gỗ': 'BH01',
+      'nga 3 ben go': 'BH01',
+      'long bình tân': 'BH02',
+      'long binh tan': 'BH02',
+      'ngã 3 long bình tân': 'BH02',
+      'nga 3 long binh tan': 'BH02'
+    };
+    
+    // Tìm tuyến BH phù hợp
+    for (const [stationName, bhRoute] of Object.entries(stationToBHRouteMap)) {
+      if (station.includes(stationName) || stationName.includes(station)) {
+        return bhRoute;
+      }
+    }
+    
+    return null;
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm cần sắp vào BH không (Phước Tân, Bến Gỗ, Long Bình Tân)
+   */
+  private isStationForBHAssignment(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    const stationsForBH = [
+      'phước tân',
+      'phuoc tan',
+      'bến gỗ',
+      'ben go',
+      'ngã 3 bến gỗ',
+      'nga 3 ben go',
+      'long bình tân',
+      'long binh tan',
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan'
+    ];
+    
+    return stationsForBH.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là Ngã 3 Hãng dầu không
+   */
+  private isNga3HangDauStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const nga3HangDauVariations = [
+      'ngã 3 hãng dầu',
+      'nga 3 hang dau',
+      'ngã 3 hàng dầu',
+      'nga 3 hang dau',
+      'hãng dầu',
+      'hang dau',
+      'hàng dầu',
+      'hang dau'
+    ];
+    
+    return nga3HangDauVariations.some(variation => 
+      stationLower.includes(variation) || variation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là BV Hòa Hảo không
+   */
+  private isBVHoaHaoStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const bvHoaHaoVariations = [
+      'bv hòa hảo',
+      'bv hoa hao',
+      'bệnh viện hòa hảo',
+      'benh vien hoa hao',
+      'hòa hảo',
+      'hoa hao'
+    ];
+    
+    return bvHoaHaoVariations.some(variation => 
+      stationLower.includes(variation) || variation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là Thủ Đức không
+   */
+  private isThuDucStation(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    const thuDucStations = [
+      'thủ đức',
+      'thu duc',
+      'ngã 4 thủ đức',
+      'nga 4 thu duc'
+    ];
+    
+    return thuDucStations.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
   }
 
   /**
@@ -392,15 +787,17 @@ export class PdfExportService {
 
   /**
    * Sắp xếp các tuyến xe theo thứ tự ưu tiên:
-   * HCM01, HCM02, HCM03
+   * HCM01, HCM02 (chỉ 2 tuyến chính)
    * BH01, BH02, BH03, BH04
+   * THU_DUC_TAXI (taxi cho Thủ Đức)
    * Các tuyến khác theo thứ tự alphabet
    */
   private sortRoutesByPriority(routes: RouteInfo[]): RouteInfo[] {
     // Định nghĩa thứ tự ưu tiên
     const priorityOrder = [
-      'HCM01', 'HCM02', 'HCM03',
-      'BH01', 'BH02', 'BH03', 'BH04'
+      'HCM01', 'HCM02', // Chỉ 2 tuyến HCM chính
+      'BH01', 'BH02', 'BH03', 'BH04',
+      'THU_DUC_TAXI' // Taxi cho Thủ Đức
     ];
 
     return routes.sort((a, b) => {
@@ -439,12 +836,12 @@ export class PdfExportService {
       };
     }
 
-    // Xử lý trường hợp "TỰ TÚC"
-    if (maTuyenXe === 'TỰ TÚC') {
+    // Xử lý trường hợp "THU_DUC_TAXI"
+    if (maTuyenXe === 'THU_DUC_TAXI') {
       return {
-        routeName: 'TỰ TÚC',
-        vehicleType: '16chỗ',
-        driverInfo: { name: 'Tự túc', phone: 'N/A', vehicleNumber: 'N/A' }
+        routeName: 'THU_DUC_TAXI',
+        vehicleType: 'Taxi',
+        driverInfo: { name: 'Taxi Thủ Đức', phone: 'Taxi', vehicleNumber: 'Taxi' }
       };
     }
 
@@ -552,7 +949,7 @@ export class PdfExportService {
   }
 
   /**
-   * Tính toán phân loại xe cho từng tuyến dựa trên số lượng nhân viên
+   * Tính toán phân loại xe cho từng tuyến dựa trên số lượng nhân viên và logic mới
    */
   private calculateVehicleAllocation(routes: RouteInfo[]): RouteInfo[] {
     return routes.map(route => {
@@ -562,7 +959,28 @@ export class PdfExportService {
       );
       
       const totalEmployees = filteredRegistrations.length;
-      const vehicleAllocation = this.calculateVehicleTypeByEmployeeCount(totalEmployees);
+      
+      // Xử lý đặc biệt cho các tuyến
+      let vehicleAllocation;
+      
+      if (route.routeName === 'THU_DUC_TAXI') {
+        // Thủ Đức: luôn dùng taxi
+        vehicleAllocation = {
+          vehicleType: 'Taxi' as const,
+          vehicleCount: Math.ceil(totalEmployees / 4), // Taxi chở tối đa 4 người
+          reason: `Thủ Đức (${totalEmployees} người) - sử dụng taxi`
+        };
+      } else if (route.routeName === 'HCM01' || route.routeName === 'HCM02') {
+        // HCM01, HCM02: luôn dùng xe 16 chỗ
+        vehicleAllocation = {
+          vehicleType: '16chỗ' as const,
+          vehicleCount: Math.ceil(totalEmployees / 16),
+          reason: `HCM phụ trội (${totalEmployees} người) - sử dụng xe 16 chỗ`
+        };
+      } else {
+        // Các tuyến khác: tính toán theo số lượng nhân viên
+        vehicleAllocation = this.calculateVehicleTypeByEmployeeCount(totalEmployees);
+      }
       
       return {
         ...route,
@@ -637,17 +1055,17 @@ export class PdfExportService {
    * - Header bảng dùng rowspan/colspan
    * - Merge cell cho nhân viên cùng trạm xe
    */
-  private generateHTMLTemplate(route: RouteInfo): string {
+  private async generateHTMLTemplate(route: RouteInfo): Promise<string> {
     const today = new Date();
     const dateStr =
       `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1)
         .toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
     // Gom nhóm nhân viên theo trạm xe để merge cell
-    const groupedByStation = this.groupRegistrationsByStation(route.registrations || []);
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
     
     // Tạo hàng dữ liệu với merge cell
-    const tableRows = this.generateTableRowsWithMergedCells(groupedByStation);
+    const tableRows = await this.generateTableRowsWithMergedCells(groupedByStation);
 
     return `
 <!DOCTYPE html>
@@ -818,9 +1236,9 @@ export class PdfExportService {
   }
 
   /**
-   * Gom nhóm đăng ký theo trạm xe (loại bỏ trạm "tự túc")
+   * Gom nhóm đăng ký theo trạm xe (loại bỏ trạm "tự túc") và sắp xếp theo thuTu
    */
-  private groupRegistrationsByStation(registrations: Registration[]): { [station: string]: Registration[] } {
+  private async groupRegistrationsByStation(registrations: Registration[]): Promise<{ [station: string]: Registration[] }> {
     const grouped: { [station: string]: Registration[] } = {};
     const stationNameMap = new Map<string, string>(); // Map từ normalized name đến original name
     
@@ -849,7 +1267,129 @@ export class PdfExportService {
       grouped[displayStationName].push(reg);
     });
     
-    return grouped;
+    // Sắp xếp các trạm theo thuTu từ RouteDetail
+    const sortedGrouped = await this.sortStationsByThuTu(grouped);
+    
+    return sortedGrouped;
+  }
+
+  /**
+   * Normalize station name for consistent matching
+   */
+  private normalizeStationName(stationName: string): string {
+    if (!stationName) return '';
+    
+    return stationName
+      .toLowerCase()
+      .trim()
+      .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+      .replace(/[()]/g, '') // Remove parentheses
+      .replace(/[.,]/g, '') // Remove dots and commas
+      .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
+      .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
+      .replace(/[ìíịỉĩ]/g, 'i')
+      .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
+      .replace(/[ùúụủũưừứựửữ]/g, 'u')
+      .replace(/[ỳýỵỷỹ]/g, 'y')
+      .replace(/đ/g, 'd');
+  }
+
+  /**
+   * Sort stations by thuTu from RouteDetail
+   */
+  private async sortStationsByThuTu(grouped: { [station: string]: Registration[] }): Promise<{ [station: string]: Registration[] }> {
+    try {
+      // Get route details to determine station order
+      const routeDetails = await this.routeDetailService.getRouteDetails().toPromise();
+      
+      if (!routeDetails || routeDetails.length === 0) {
+        console.warn('No route details found, returning stations without sorting');
+        return grouped;
+      }
+
+      // Create a map of station names to their order for each route
+      const stationOrderMap = new Map<string, Map<string, number>>();
+      
+      routeDetails.forEach(detail => {
+        if (!stationOrderMap.has(detail.maTuyenXe)) {
+          stationOrderMap.set(detail.maTuyenXe, new Map());
+        }
+        // Store both exact match and normalized match for better matching
+        stationOrderMap.get(detail.maTuyenXe)!.set(detail.tenDiemDon, detail.thuTu);
+        stationOrderMap.get(detail.maTuyenXe)!.set(this.normalizeStationName(detail.tenDiemDon), detail.thuTu);
+      });
+
+      // Get the route code from the first registration (assuming all registrations in this group are from the same route)
+      const firstRegistration = Object.values(grouped)[0]?.[0];
+      if (!firstRegistration) {
+        return grouped;
+      }
+
+      const routeCode = firstRegistration.maTuyenXe;
+      const routeOrderMap = stationOrderMap.get(routeCode);
+
+      if (!routeOrderMap) {
+        console.warn(`No route details found for route ${routeCode}, returning stations without sorting`);
+        return grouped;
+      }
+
+      // Sort stations by their thuTu order
+      const sortedEntries = Object.entries(grouped).sort(([stationA], [stationB]) => {
+        // Try exact match first
+        let orderA = routeOrderMap.get(stationA);
+        let orderB = routeOrderMap.get(stationB);
+        
+        // If no exact match, try normalized match
+        if (orderA === undefined) {
+          orderA = routeOrderMap.get(this.normalizeStationName(stationA));
+        }
+        if (orderB === undefined) {
+          orderB = routeOrderMap.get(this.normalizeStationName(stationB));
+        }
+        
+        // Special handling for BV Hòa Hảo - ensure it's always last
+        if (this.isBVHoaHaoStation(stationA)) {
+          orderA = 9999; // Highest priority to be last
+        }
+        if (this.isBVHoaHaoStation(stationB)) {
+          orderB = 9999; // Highest priority to be last
+        }
+        
+        // Use found order or default to 999
+        orderA = orderA || 999;
+        orderB = orderB || 999;
+        
+        return orderA - orderB;
+      });
+
+      // Convert back to object
+      const sortedGrouped: { [station: string]: Registration[] } = {};
+      sortedEntries.forEach(([station, registrations]) => {
+        sortedGrouped[station] = registrations;
+      });
+
+      console.log('Sorted stations by thuTu:', sortedEntries.map(([station, _]) => ({
+        station,
+        order: routeOrderMap.get(station) || routeOrderMap.get(this.normalizeStationName(station)) || 'unknown'
+      })));
+      
+      // Debug: Log all route details for this route
+      console.log(`Route details for ${routeCode}:`, routeDetails.filter(d => d.maTuyenXe === routeCode));
+      
+      // Debug: Check if Ngã 3 Hãng dầu has correct order
+      const nga3HangDauDetails = routeDetails.filter(d => 
+        d.maTuyenXe === routeCode && 
+        (d.tenDiemDon.includes('Ngã 3 Hãng dầu') || d.tenDiemDon.includes('Ngã 3 Hàng dầu'))
+      );
+      console.log('Ngã 3 Hãng dầu details:', nga3HangDauDetails);
+
+      return sortedGrouped;
+
+    } catch (error) {
+      console.error('Error sorting stations by thuTu:', error);
+      // Return original grouped if sorting fails
+      return grouped;
+    }
   }
 
   /**
@@ -881,7 +1421,7 @@ export class PdfExportService {
   /**
    * Tạo hàng bảng với merge cell cho nhân viên cùng trạm
    */
-  private generateTableRowsWithMergedCells(groupedByStation: { [station: string]: Registration[] }): string {
+  private async generateTableRowsWithMergedCells(groupedByStation: { [station: string]: Registration[] }): Promise<string> {
     let tableRows = '';
     let sttCounter = 1;
     
@@ -915,17 +1455,17 @@ export class PdfExportService {
   /**
    * Template HTML cho phiếu báo làm thêm giờ với merge cell
    */
-  private generateOvertimeReportHTMLTemplate(route: RouteInfo): string {
+  private async generateOvertimeReportHTMLTemplate(route: RouteInfo): Promise<string> {
     const today = new Date();
     const dateStr =
       `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1)
         .toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
     // Gom nhóm nhân viên theo trạm xe để merge cell
-    const groupedByStation = this.groupRegistrationsByStation(route.registrations || []);
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
     
     // Tạo hàng dữ liệu với merge cell
-    const tableRows = this.generateOvertimeTableRowsWithMergedCells(groupedByStation);
+    const tableRows = await this.generateOvertimeTableRowsWithMergedCells(groupedByStation);
 
     return `
 <!DOCTYPE html>
@@ -1064,7 +1604,7 @@ export class PdfExportService {
   /**
    * Tạo hàng bảng phiếu báo làm thêm giờ với merge cell cho nhân viên cùng trạm
    */
-  private generateOvertimeTableRowsWithMergedCells(groupedByStation: { [station: string]: Registration[] }): string {
+  private async generateOvertimeTableRowsWithMergedCells(groupedByStation: { [station: string]: Registration[] }): Promise<string> {
     let tableRows = '';
     let sttCounter = 1;
     
@@ -1120,15 +1660,5 @@ export class PdfExportService {
     return yPosition + 200;
   }
 
-  /**
-   * Normalize tên trạm để không phân biệt chữ hoa thường
-   * @param stationName - Tên trạm gốc
-   * @returns Tên trạm đã được normalize
-   */
-  private normalizeStationName(stationName: string): string {
-    if (!stationName) return stationName;
-    
-    // Chuyển về chữ thường và loại bỏ khoảng trắng thừa
-    return stationName.toLowerCase().trim();
-  }
 }
+

@@ -17,17 +17,37 @@
           <span class="employee-count">({{ assignment.employeeCount }} nhân viên)</span>
         </div>
         
-        <mat-form-field appearance="outline" class="vehicle-select">
-          <mat-label>Chọn xe</mat-label>
-          <mat-select 
-            [value]="assignment.assignedVehicle.vehicleId"
-            (selectionChange)="onVehicleChange(assignment.routeId, $event.value)">
-            <mat-option value="">-- Chọn xe --</mat-option>
-            <mat-option *ngFor="let vehicle of getVehicleOptions()" [value]="vehicle.MaXe">
-              {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
-            </mat-option>
-          </mat-select>
-        </mat-form-field>
+        <div class="assignment-controls">
+          <mat-form-field appearance="outline" class="vehicle-select">
+            <mat-label>Chọn xe</mat-label>
+            <mat-select 
+              [value]="assignment.assignedVehicle.vehicleId"
+              (selectionChange)="onVehicleChange(assignment.routeId, $event.value)">
+              <mat-option value="">-- Chọn xe --</mat-option>
+              <mat-option *ngFor="let vehicle of getVehicleOptionsForRoute(assignment.routeId)" [value]="vehicle.MaXe">
+                {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
+              </mat-option>
+            </mat-select>
+          </mat-form-field>
+
+          <div class="driver-info">
+            <mat-form-field appearance="outline" class="driver-name">
+              <mat-label>Tên tài xế</mat-label>
+              <input matInput 
+                     [value]="assignment.assignedDriver.driverName"
+                     (input)="onDriverNameChange(assignment.routeId, $event.target.value)"
+                     placeholder="Nhập tên tài xế">
+            </mat-form-field>
+
+            <mat-form-field appearance="outline" class="driver-phone">
+              <mat-label>Số điện thoại</mat-label>
+              <input matInput 
+                     [value]="assignment.assignedDriver.phoneNumber"
+                     (input)="onDriverPhoneChange(assignment.routeId, $event.target.value)"
+                     placeholder="Nhập số điện thoại">
+            </mat-form-field>
+          </div>
+        </div>
       </div>
     </div>
   </div>

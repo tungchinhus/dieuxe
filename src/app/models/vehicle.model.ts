@@ -83,6 +83,7 @@ export interface StationAssignment {
   assignedVehicle: VehicleInfo;
   employeeCount: number;
   assignedAt: Date;
+  thuTu?: number; // Order of station in route
 }
 
 export interface DriverInfo {
@@ -90,6 +91,9 @@ export interface DriverInfo {
   driverName: string;
   phoneNumber: string;
   licenseNumber?: string;
+  vehicleId?: string;
+  licensePlate?: string;
+  vehicleType?: string;
 }
 
 export interface VehicleInfo {

@@ -30,6 +30,7 @@ export interface StationData {
   routeCode: string;
   routeName: string;
   employeeCount: number;
+  thuTu?: number; // Order of station in route
 }
 
 @Component({
@@ -93,7 +94,8 @@ export class StationAssignmentDialogComponent implements OnInit {
         garageId: '',
         garageName: ''
       },
-      assignedAt: new Date()
+      assignedAt: new Date(),
+      thuTu: station.thuTu // Copy thuTu field from station data
     }));
   }
 

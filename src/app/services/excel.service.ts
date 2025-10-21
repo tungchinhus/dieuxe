@@ -81,13 +81,13 @@ export class ExcelService {
   private async convertToRegistrations(data: any[]): Promise<Registration[]> {
     const registrations: Registration[] = [];
     
-    // Find the header row (contains "Mã nhân viên")
+    // Find the header row (contains "STT" or "Họ và tên")
     let headerRowIndex = -1;
     for (let i = 0; i < data.length; i++) {
       const row = data[i];
       if (row && row.length > 0) {
         const rowString = row.join(' ').toLowerCase();
-        if (rowString.includes('mã nhân viên') || rowString.includes('stt')) {
+        if (rowString.includes('stt') || rowString.includes('họ và tên')) {
           headerRowIndex = i;
           break;
         }
@@ -106,7 +106,7 @@ export class ExcelService {
       // Skip empty rows
       if (!row || row.length === 0) continue;
       
-      // Skip rows that don't have employee ID
+      // Skip rows that don't have employee name
       if (!this.getStringValue(row[1])) continue;
       
       try {
@@ -116,33 +116,46 @@ export class ExcelService {
         console.log(`Row ${i} data:`, row);
         console.log(`Row ${i} length:`, row.length);
         
-        // Extract basic information
-        const hoTen = this.getStringValue(row[2]) || ''; // Cột C: Họ và tên
-        const tramXe = this.getStringValue(row[3]) || ''; // Cột D: Trạm xe
-        const quanLyNhanVien = this.getStringValue(row[6]) || ''; // Cột G: Quản lý nhân viên (if exists)
+        // Extract basic information based on overtime report form structure:
+        // Column A (0): STT - Serial Number
+        // Column B (1): Họ và tên - Full Name
+        // Column C (2): Trạm xe - Station/Location
+        // Column D (3): Điện thoại - Phone Number
+        // Column F (5): Thời gian làm việc (Từ...) - Working Hours (From...)
+        // Column G (6): Thời gian làm việc (Đến...) - Working Hours (To...)
+        
+        const hoTen = this.getStringValue(row[1]) || ''; // Column B: Họ và tên
+        const tramXe = this.getStringValue(row[2]) || ''; // Column C: Trạm xe
+        const dienThoai = this.getStringValue(row[3]) || ''; // Column D: Điện thoại
+        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[5])) || ''; // Column F: Từ...
+        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[6])) || ''; // Column G: Đến...
         
         // Get route information using database lookup
-        const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen, quanLyNhanVien);
+        const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen);
+        
+        // Generate employee ID from name if not available
+        const maNhanVien = this.generateEmployeeId(hoTen, i);
         
         const registration: Registration = {
           id: `excel_${i}`, // Temporary ID for Excel import
-          maNhanVien: this.getStringValue(row[1]) || `NV${i.toString().padStart(3, '0')}`, // Cột B: Mã nhân viên
-          hoTen: hoTen, // Cột C: Họ và tên
-          dienThoai: this.getStringValue(row[4]) || '', // Cột E: Điện thoại
+          maNhanVien: maNhanVien, // Generated from name
+          hoTen: hoTen, // Column B: Họ và tên
+          dienThoai: dienThoai, // Column D: Điện thoại
           phongBan: '', // Default empty for now
           ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
-          loaiCa: this.extractShiftFromTime(this.getStringValue(row[6])) || 'PT-cc', // Cột H: Ca (extract from time)
-          thoiGianBatDau: this.getStringValue(row[7]) || '', // Cột H: Thời gian làm việc (Từ...)
-          thoiGianKetThuc: this.getStringValue(row[8]) || '', // Cột I: Thời gian làm việc (Đến...)
+          loaiCa: this.extractShiftFromTime(thoiGianBatDau) || 'PT-cc', // Extract from start time
+          thoiGianBatDau: thoiGianBatDau, // Column F: Thời gian làm việc (Từ...)
+          thoiGianKetThuc: thoiGianKetThuc, // Column G: Thời gian làm việc (Đến...)
           maTuyenXe: maTuyenXe, // Derived from database lookup
-          tramXe: tramXe, // Cột D: Trạm xe
-          noiDungCongViec: this.getStringValue(row[5]) || '', // Cột F: Nội dung công việc
+          tramXe: tramXe, // Column C: Trạm xe
+          noiDungCongViec: '', // Default empty for overtime work
           dangKyCom: false // Default false for overtime work
         };
         
-        // Debug: Log the extracted time values
+        // Debug: Log the extracted values
+        console.log(`Row ${i} - HoTen: ${registration.hoTen}, TramXe: ${registration.tramXe}`);
         console.log(`Row ${i} - ThoiGianBatDau: ${registration.thoiGianBatDau}, ThoiGianKetThuc: ${registration.thoiGianKetThuc}`);
-        console.log(`Row ${i} - Raw data from row[7]: "${this.getStringValue(row[7])}", row[8]: "${this.getStringValue(row[8])}"`);
+        console.log(`Row ${i} - Raw data from row[5]: "${this.getStringValue(row[5])}", row[6]: "${this.getStringValue(row[6])}"`);
         console.log(`Row ${i} - Derived maTuyenXe: "${maTuyenXe}" for hoTen: "${hoTen}", tramXe: "${tramXe}"`);
         
         console.log(`Converted registration ${i}:`, registration);
@@ -154,6 +167,27 @@ export class ExcelService {
     }
     
     return registrations;
+  }
+
+  /**
+   * Generate employee ID from name
+   * @param hoTen - Full name
+   * @param rowIndex - Row index for uniqueness
+   * @returns Generated employee ID
+   */
+  private generateEmployeeId(hoTen: string, rowIndex: number): string {
+    if (!hoTen) return `NV${rowIndex.toString().padStart(3, '0')}`;
+    
+    // Extract first name and last name
+    const nameParts = hoTen.trim().split(' ');
+    if (nameParts.length >= 2) {
+      const lastName = nameParts[nameParts.length - 1];
+      const firstName = nameParts[0];
+      return `${lastName.toUpperCase().substring(0, 3)}${firstName.toUpperCase().substring(0, 2)}${rowIndex.toString().padStart(3, '0')}`;
+    }
+    
+    // Fallback to simple generation
+    return `NV${rowIndex.toString().padStart(3, '0')}`;
   }
 
   /**
@@ -500,6 +534,10 @@ export class ExcelService {
     const dateStr = `Ngày ${today.getDate().toString().padStart(2, '0')} tháng ${(today.getMonth() + 1).toString().padStart(2, '0')} năm ${today.getFullYear()}`;
     
     const templateData = [
+      // Unit row
+      ['', 'Đơn vị: Xưởng Thiết Bị Điện', '', '', '', '', '', '', '', '', '', '', '', ''],
+      // Empty row
+      ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
       // Title row
       ['', '', '', '', '', '', '', '', '', 'PHIẾU BÁO LÀM THÊM GIỜ', '', '', '', ''],
       // Empty row
@@ -509,13 +547,15 @@ export class ExcelService {
       // Empty row
       ['', '', '', '', '', '', '', '', '', '', '', '', '', ''],
       // Header row
-      ['STT', 'Mã nhân viên', 'Họ và tên', 'Trạm xe', 'Điện thoại', 'Nội dung công việc', 'Ca', 'Thời gian làm việc', 'Thời gian làm việc', '', '', '', '', ''],
+      ['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', '', 'Thời gian làm việc', '', '', '', '', '', '', '', ''],
       // Sub-header row for time columns
-      ['', '', '', '', '', '', '', 'Từ...', 'Đến...', '', '', '', '', ''],
+      ['', '', '', '', '', 'Từ...', 'Đến...', '', '', '', '', '', '', ''],
       // Sample data
-      [1, 'THI00137', 'Lê Văn Thư', 'Trạm xe Công Viên Tam Hiệp', '0944286128', 'KTV', 'PT-cc', '15h45', '19h', '', '', '', '', ''],
-      [2, 'THI00156', 'Lê Thành Châu', 'Trạm xe Ngã 4 Thủ Đức', '0908262300', 'Quấn bối dây hạ', 'PT-cc', '15h45', '19h', '', '', '', '', ''],
-      [3, 'THI00174', 'Vũ Trung Sơn', 'Trạm xe BV 7B', '0963101461', 'Cắt giấy', 'PT-cc', '15h45', '19h', '', '', '', '', '']
+      [1, 'Trịnh Tấn Tài', 'Ngã 4 Vũng Tàu (Ajinomoto)', '0934445411', '', '15h45', '19h', '', '', '', '', '', '', ''],
+      [2, 'Nguyễn Mạnh Quân', 'Bà Chiểu', '0907891712', '', '15h45', '19h', '', '', '', '', '', '', ''],
+      [3, 'Nguyễn Hoài Hữu', 'Bà chiểu', '0832591880', '', '15h45', '19h', '', '', '', '', '', '', ''],
+      [4, 'Huỳnh Bảo Đại Phúc', 'bv 7B', '0976016771', '', '15h45', '19h', '', '', '', '', '', '', ''],
+      [5, 'Huỳnh Thanh Sơn', 'bv Đồng Nai', '0967888525', '', '15h45', '19h', '', '', '', '', '', '', '']
     ];
 
     const worksheet = XLSX.utils.aoa_to_sheet(templateData);
@@ -523,14 +563,14 @@ export class ExcelService {
     // Set column widths
     const colWidths = [
       { wch: 5 },   // STT
-      { wch: 12 },  // Mã nhân viên
       { wch: 20 },  // Họ và tên
-      { wch: 25 },  // Trạm xe
+      { wch: 30 },  // Trạm xe
       { wch: 12 },  // Điện thoại
-      { wch: 20 },  // Nội dung công việc
-      { wch: 8 },   // Ca
+      { wch: 10 },  // Empty
       { wch: 10 },  // Từ...
       { wch: 10 },  // Đến...
+      { wch: 10 },  // Empty
+      { wch: 10 },  // Empty
       { wch: 10 },  // Empty
       { wch: 10 },  // Empty
       { wch: 10 },  // Empty
@@ -539,9 +579,13 @@ export class ExcelService {
     ];
     worksheet['!cols'] = colWidths;
     
-    // Merge cells for title
+    // Merge cells for title and headers
     worksheet['!merges'] = [
-      { s: { r: 0, c: 9 }, e: { r: 0, c: 13 } } // Merge title cells
+      { s: { r: 0, c: 1 }, e: { r: 0, c: 2 } }, // Unit row
+      { s: { r: 2, c: 9 }, e: { r: 2, c: 13 } }, // Title row
+      { s: { r: 6, c: 5 }, e: { r: 6, c: 6 } }, // Time header
+      { s: { r: 7, c: 5 }, e: { r: 7, c: 5 } }, // From sub-header
+      { s: { r: 7, c: 6 }, e: { r: 7, c: 6 } }  // To sub-header
     ];
     
     const workbook = XLSX.utils.book_new();
