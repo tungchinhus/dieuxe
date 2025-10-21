@@ -418,6 +418,18 @@
   color: #d32f2f;
 }
 
+.search-date-button {
+  margin-left: 16px;
+  flex-shrink: 0;
+  min-width: 180px;
+  height: 40px;
+  font-weight: 500;
+}
+
+.search-date-button mat-icon {
+  margin-right: 8px;
+}
+
 .filter-info {
   color: #666;
   font-size: 12px;

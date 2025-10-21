@@ -361,16 +361,41 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
 
   /**
    * Tính điểm phù hợp của xe với số nhân viên
+   * Logic mới: Ưu tiên xe có sức chứa phù hợp nhất với số nhân viên
    */
   private calculateVehicleScore(capacity: number, employeeCount: number): number {
-    // Điểm cao nhất khi sức chứa vừa đủ hoặc hơi thừa
-    if (capacity >= employeeCount) {
-      // Ưu tiên xe có sức chứa gần với số nhân viên nhất
-      const utilization = employeeCount / capacity;
-      return utilization * 100; // Điểm từ 0-100
+    // Định nghĩa các ngưỡng sức chứa
+    const thresholds = [
+      { min: 0, max: 7, idealCapacity: 7 },      // ≤ 7 nhân viên: Taxi 7 chỗ
+      { min: 8, max: 16, idealCapacity: 16 },   // 8-16 nhân viên: Xe 16 chỗ  
+      { min: 17, max: 29, idealCapacity: 29 },   // 17-29 nhân viên: Xe 29 chỗ
+      { min: 30, max: 45, idealCapacity: 45 },   // 30-45 nhân viên: Xe 45 chỗ
+      { min: 46, max: Infinity, idealCapacity: 45 } // > 45 nhân viên: Xe 45 chỗ
+    ];
+
+    // Tìm ngưỡng phù hợp với số nhân viên
+    const suitableThreshold = thresholds.find(t => 
+      employeeCount >= t.min && employeeCount <= t.max
+    );
+
+    if (!suitableThreshold) {
+      return -1; // Không có ngưỡng phù hợp
+    }
+
+    const idealCapacity = suitableThreshold.idealCapacity;
+
+    // Tính điểm dựa trên độ phù hợp với sức chứa lý tưởng
+    if (capacity === idealCapacity) {
+      // Xe có sức chứa lý tưởng: điểm cao nhất
+      return 100;
+    } else if (capacity > idealCapacity) {
+      // Xe có sức chứa lớn hơn lý tưởng: điểm trung bình
+      const excessRatio = (capacity - idealCapacity) / idealCapacity;
+      return Math.max(50, 100 - excessRatio * 30); // Điểm từ 50-100
     } else {
-      // Xe không đủ sức chứa có điểm thấp
-      return -1;
+      // Xe có sức chứa nhỏ hơn lý tưởng: điểm thấp
+      const shortageRatio = (idealCapacity - capacity) / idealCapacity;
+      return Math.max(0, 50 - shortageRatio * 50); // Điểm từ 0-50
     }
   }
 

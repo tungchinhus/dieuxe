@@ -91,6 +91,7 @@ export class DangKyXeComponent implements OnInit {
   isImportingExcel = false;
   isExportingPDF = false;
   isExportingEmployeeStationPDF = false;
+  isLoadingFromFirestore = false;
   
   // Time filter properties
   startDate: Date | null = null;
@@ -942,6 +943,88 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Load data from Firestore filtered by date range or all data if no dates selected
+   */
+  async loadDataFromFirestoreByDate(): Promise<void> {
+    this.isLoadingFromFirestore = true;
+    try {
+      let dangKyList: any[] = [];
+      
+      if (this.startDate && this.endDate) {
+        // Set time to start of day for startDate and end of day for endDate
+        const startOfDay = new Date(this.startDate);
+        startOfDay.setHours(0, 0, 0, 0);
+        
+        const endOfDay = new Date(this.endDate);
+        endOfDay.setHours(23, 59, 59, 999);
+
+        dangKyList = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
+        
+        console.log(`Loading data from Firestore for date range ${this.startDate.toISOString().split('T')[0]} to ${this.endDate.toISOString().split('T')[0]}:`, dangKyList);
+      } else {
+        // Load all data if no dates selected
+        dangKyList = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+        console.log('Loading all data from Firestore (no date filter):', dangKyList);
+      }
+      
+      if (!dangKyList || dangKyList.length === 0) {
+        console.log('No data found in Firestore');
+        this.dataSource.data = [];
+        const message = (this.startDate && this.endDate) 
+          ? 'Không có dữ liệu trong khoảng thời gian đã chọn.' 
+          : 'Không có dữ liệu trong Firestore.';
+        this.snackBar.open(message, 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+      
+      // Convert DangKyPhanXe to Registration format for display
+      const registrations: Registration[] = dangKyList.map((dangKy, index) => {
+        return {
+          id: dangKy.ID || `temp_${index}`,
+          maNhanVien: dangKy.MaNhanVien || '',
+          hoTen: dangKy.HoTen || '',
+          dienThoai: dangKy.DienThoai || '',
+          phongBan: '',
+          ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
+          loaiCa: dangKy.LoaiCa || '',
+          thoiGianBatDau: dangKy.ThoiGianBatDau || '',
+          thoiGianKetThuc: dangKy.ThoiGianKetThuc || '',
+          maTuyenXe: dangKy.MaTuyenXe || '',
+          tramXe: dangKy.TramXe || '',
+          noiDungCongViec: dangKy.NoiDungCongViec || '',
+          dangKyCom: dangKy.DangKyCom || false
+        };
+      });
+
+      this.dataSource.data = registrations;
+      console.log(`Loaded ${registrations.length} registrations from Firestore`);
+      
+      const message = (this.startDate && this.endDate) 
+        ? `Đã tải ${registrations.length} đăng ký từ Firestore trong khoảng thời gian đã chọn.`
+        : `Đã tải ${registrations.length} đăng ký từ Firestore.`;
+      this.snackBar.open(message, 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } catch (error) {
+      console.error('Error loading data from Firestore:', error);
+      this.dataSource.data = [];
+      this.snackBar.open('Lỗi khi tải dữ liệu từ Firestore.', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } finally {
+      this.isLoadingFromFirestore = false;
+    }
+  }
+
+  /**
    * Load data from Firebase and update the table - only for today's date
    */
   async loadDataFromFirebase(): Promise<void> {
@@ -1407,7 +1490,25 @@ export class DangKyXeComponent implements OnInit {
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
 
-    return routes;
+    // Sort routes according to the specified order
+    const routeOrder = ['HCM01', 'HCM02', 'HCM03', 'BH01', 'BH02', 'BH03', 'BH04'];
+    
+    return routes.sort((a, b) => {
+      const indexA = routeOrder.indexOf(a.routeName);
+      const indexB = routeOrder.indexOf(b.routeName);
+      
+      // If both routes are in the predefined order, sort by their position
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+      
+      // If only one route is in the predefined order, prioritize it
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+      
+      // If neither route is in the predefined order, sort alphabetically
+      return a.routeName.localeCompare(b.routeName);
+    });
   }
 
   /**

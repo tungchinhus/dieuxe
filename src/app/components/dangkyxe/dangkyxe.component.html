@@ -116,6 +116,16 @@
             <mat-datepicker #endPicker></mat-datepicker>
           </mat-form-field>
 
+          <button mat-raised-button 
+                  color="primary" 
+                  [disabled]="isLoadingFromFirestore"
+                  (click)="loadDataFromFirestoreByDate()"
+                  class="search-date-button">
+            <mat-icon *ngIf="!isLoadingFromFirestore">search</mat-icon>
+            <mat-spinner *ngIf="isLoadingFromFirestore" diameter="20"></mat-spinner>
+            {{ startDate && endDate ? 'Tìm kiếm theo ngày' : 'Tải tất cả từ Firestore' }}
+          </button>
+
           <button mat-icon-button 
                   color="warn" 
                   (click)="clearAllFilters()"
@@ -247,18 +257,20 @@
   </div>
 
   <!-- Fullscreen Loading Overlay -->
-  <div *ngIf="isImportingExcel || isExportingPDF || isExportingEmployeeStationPDF" class="loading-overlay">
+  <div *ngIf="isImportingExcel || isExportingPDF || isExportingEmployeeStationPDF || isLoadingFromFirestore" class="loading-overlay">
     <div class="loading-content">
       <mat-spinner class="loading-spinner" diameter="50"></mat-spinner>
       <div class="loading-text">
         <span *ngIf="isImportingExcel">Đang import dữ liệu từ Excel...</span>
         <span *ngIf="isExportingPDF">Đang tạo file PDF...</span>
         <span *ngIf="isExportingEmployeeStationPDF">Đang tạo file PDF danh sách nhân viên...</span>
+        <span *ngIf="isLoadingFromFirestore">Đang tải dữ liệu từ Firestore...</span>
       </div>
       <div class="loading-subtitle">
         <span *ngIf="isImportingExcel">Vui lòng chờ trong giây lát</span>
         <span *ngIf="isExportingPDF">Vui lòng chờ trong giây lát</span>
         <span *ngIf="isExportingEmployeeStationPDF">Vui lòng chờ trong giây lát</span>
+        <span *ngIf="isLoadingFromFirestore">Vui lòng chờ trong giây lát</span>
       </div>
     </div>
   </div>
