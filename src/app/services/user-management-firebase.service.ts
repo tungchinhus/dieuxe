@@ -1,16 +1,17 @@
-import { Injectable } from '@angular/core';
-import { BehaviorSubject, Observable, of } from 'rxjs';
+import { Injectable, OnDestroy } from '@angular/core';
+import { BehaviorSubject, Observable, of, Subscription } from 'rxjs';
 import { User, Role, Permission, UserRole, UserPermission, PREDEFINED_ROLES, PREDEFINED_PERMISSIONS } from '../models/user.model';
 import { FirebaseUserManagementService } from './firebase-user-management.service';
 
 @Injectable({
   providedIn: 'root'
 })
-export class UserManagementFirebaseService {
+export class UserManagementFirebaseService implements OnDestroy {
   private usersSubject = new BehaviorSubject<User[]>([]);
   private rolesSubject = new BehaviorSubject<Role[]>([]);
   private permissionsSubject = new BehaviorSubject<Permission[]>([]);
   private currentUserSubject = new BehaviorSubject<User | null>(null);
+  private subscriptions: Subscription[] = [];
 
   public users$ = this.usersSubject.asObservable();
   public roles$ = this.rolesSubject.asObservable();
@@ -21,19 +22,26 @@ export class UserManagementFirebaseService {
     this.initializeData();
   }
 
+  ngOnDestroy(): void {
+    this.subscriptions.forEach(sub => sub.unsubscribe());
+  }
+
   private initializeData(): void {
-    // Subscribe to Firebase data
-    this.firebaseUserService.users$.subscribe(users => {
+    // Subscribe to Firebase data with proper subscription management
+    const usersSub = this.firebaseUserService.users$.subscribe(users => {
       this.usersSubject.next(users);
     });
+    this.subscriptions.push(usersSub);
 
-    this.firebaseUserService.roles$.subscribe(roles => {
+    const rolesSub = this.firebaseUserService.roles$.subscribe(roles => {
       this.rolesSubject.next(roles);
     });
+    this.subscriptions.push(rolesSub);
 
-    this.firebaseUserService.permissions$.subscribe(permissions => {
+    const permissionsSub = this.firebaseUserService.permissions$.subscribe(permissions => {
       this.permissionsSubject.next(permissions);
     });
+    this.subscriptions.push(permissionsSub);
   }
 
   // ==================== USER METHODS ====================
@@ -43,10 +51,11 @@ export class UserManagementFirebaseService {
 
   getUserById(id: string): Observable<User | undefined> {
     return new Observable(observer => {
-      this.users$.subscribe(users => {
+      const sub = this.users$.subscribe(users => {
         const user = users.find(u => u.id === id);
         observer.next(user);
         observer.complete();
+        sub.unsubscribe(); // Clean up subscription
       });
     });
   }
@@ -91,10 +100,11 @@ export class UserManagementFirebaseService {
 
   getRoleById(id: string): Observable<Role | undefined> {
     return new Observable(observer => {
-      this.roles$.subscribe(roles => {
+      const sub = this.roles$.subscribe(roles => {
         const role = roles.find(r => r.id === id);
         observer.next(role);
         observer.complete();
+        sub.unsubscribe(); // Clean up subscription
       });
     });
   }
@@ -139,10 +149,11 @@ export class UserManagementFirebaseService {
 
   getPermissionById(id: string): Observable<Permission | undefined> {
     return new Observable(observer => {
-      this.permissions$.subscribe(permissions => {
+      const sub = this.permissions$.subscribe(permissions => {
         const permission = permissions.find(p => p.id === id);
         observer.next(permission);
         observer.complete();
+        sub.unsubscribe(); // Clean up subscription
       });
     });
   }

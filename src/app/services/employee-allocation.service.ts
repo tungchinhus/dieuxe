@@ -210,6 +210,21 @@ export class EmployeeAllocationService {
    * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
+    // Kiểm tra nếu là trường hợp "tự túc"
+    if (this.isSelfTransportStation(tramXe)) {
+      return 'TỰ TÚC';
+    }
+    
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH04';
+    }
+    
+    // Đặc biệt: Ngã 3 Long Bình Tân và Bà Chiểu ưu tiên vào HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
+      return 'HCM02';
+    }
+    
     // Kiểm tra nếu là tuyến HCM - chia đều thành 3 tuyến
     if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
       // Giữ nguyên tuyến gốc để chia đều
@@ -217,7 +232,7 @@ export class EmployeeAllocationService {
     }
     
     // Kiểm tra nếu là tuyến BH
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
       // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
       if (this.isStationBeforeOrAtHangXanh(tramXe)) {
         // Gom tất cả vào BH01
@@ -233,6 +248,32 @@ export class EmployeeAllocationService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   */
+  private isHCM02PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm02PriorityStations = [
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'long bình tân',
+      'long binh tan',
+      'bà chiểu',
+      'ba chieu',
+      'bà chiểu',
+      'ba chieu'
+    ];
+    
+    return hcm02PriorityStations.some(priorityStation => 
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm xe có phải là trạm trước hoặc tại "Hàng xanh" không
    */
   private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
@@ -241,11 +282,11 @@ export class EmployeeAllocationService {
     const station = tramXe.toLowerCase();
     
     // Danh sách các trạm từ KCN Long Đức đến Hàng xanh (theo thứ tự)
+    // Loại bỏ các trạm không nên gom vào BH01 như Ngã 4 Thủ Đức, Bà Chiểu, Chợ Gò Vấp
     const stationsBeforeHangXanh = [
       'kcn long đức',
       'ngã 3 bến gỗ', 
       'ngã 3 long bình tân',
-      'ngã 4 thủ đức',
       'rmk',
       'ngã 3 cát lái',
       'hàng xanh'
@@ -254,6 +295,54 @@ export class EmployeeAllocationService {
     // Kiểm tra xem trạm có trong danh sách các trạm trước hoặc tại "Hàng xanh" không
     return stationsBeforeHangXanh.some(stationName => 
       station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là "Ngã 3 Hãng dầu" không
+   */
+  private isNga3HangDauStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const nga3HangDauVariations = [
+      'ngã 3 hãng dầu',
+      'nga 3 hang dau',
+      'ngã 3 hàng dầu',
+      'nga 3 hang dau',
+      'hãng dầu',
+      'hang dau',
+      'hàng dầu',
+      'hang dau'
+    ];
+    
+    return nga3HangDauVariations.some(variation => 
+      stationLower.includes(variation) || variation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm "tự túc" không
+   */
+  private isSelfTransportStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const selfTransportStations = [
+      'tự túc',
+      'tu tuc',
+      'tự đi',
+      'tu di',
+      'đi xe máy',
+      'di xe may',
+      'xe máy',
+      'xe may'
+    ];
+    
+    return selfTransportStations.some(selfTransportStation => 
+      stationLower.includes(selfTransportStation)
     );
   }
 

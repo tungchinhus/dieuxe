@@ -4,7 +4,7 @@
 
 Theo yêu cầu từ hình ảnh, tất cả 3 tuyến HCM (HCM01, HCM02, HCM03) và 3 tuyến BH (BH01, BH02, BH03) đều có chung trạm "Hàng xanh" khi đi từ KCN Long Đức. Do đó, hệ thống đã được cập nhật để ưu tiên gom tất cả nhân viên HCM vào tuyến HCM01 trước và tất cả nhân viên BH vào tuyến BH01 trước.
 
-## Logic mới
+## Logic mới (Đã cập nhật)
 
 ### 1. Nguyên tắc hoạt động
 
@@ -14,18 +14,22 @@ Theo yêu cầu từ hình ảnh, tất cả 3 tuyến HCM (HCM01, HCM02, HCM03)
 - **Trạm sau "Hàng xanh"**: 
   - Các nhân viên HCM01, HCM02, HCM03 tại các trạm này sẽ giữ nguyên tuyến gốc
   - Các nhân viên BH01, BH02, BH03 tại các trạm này sẽ giữ nguyên tuyến gốc
+- **Đặc biệt**: 
+  - **Ngã 3 Hãng dầu** luôn thuộc **BH04**, không phân biệt tuyến gốc
+  - **Ngã 4 Thủ Đức**, **Bà Chiểu**, **Chợ Gò Vấp** không được gom vào BH01 nếu thuộc các tuyến khác
 - **Các tuyến khác**: Không thay đổi logic gom nhóm
 
-### 2. Danh sách trạm trước "Hàng xanh"
+### 2. Danh sách trạm trước "Hàng xanh" (Đã cập nhật)
 
 Theo thứ tự từ KCN Long Đức đến Hàng xanh:
 1. KCN Long Đức
 2. Ngã 3 Bến Gỗ
 3. Ngã 3 Long Bình Tân
-4. Ngã 4 Thủ Đức
-5. RMK
-6. Ngã 3 Cát Lái
-7. Hàng xanh
+4. RMK
+5. Ngã 3 Cát Lái
+6. Hàng xanh
+
+**Lưu ý**: Đã loại bỏ **Ngã 4 Thủ Đức** khỏi danh sách để tránh gom sai vào BH01.
 
 ### 3. Ví dụ thực tế
 

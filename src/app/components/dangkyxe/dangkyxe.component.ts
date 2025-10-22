@@ -18,14 +18,13 @@ import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
 import { DuplicateDataDialogComponent } from './duplicate-data-dialog/duplicate-data-dialog.component';
 import { Registration } from '../../models/registration.model';
-import { GoogleDriveUploadService } from '../../services/google-drive-upload.service';
-import { GoogleDriveWebUploadService } from '../../services/google-drive-web-upload.service';
 import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
 import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
+import { RouteDetailService } from '../../services/route-detail.service';
 import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
 import { RouteVehicleAssignmentDialogComponent } from '../quan-ly-xe-dua-don/route-vehicle-assignment-dialog/route-vehicle-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
@@ -100,14 +99,13 @@ export class DangKyXeComponent implements OnInit {
     private sidenavService: SidenavService,
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
-    private googleDriveUploadService: GoogleDriveUploadService,
-    private googleDriveWebUploadService: GoogleDriveWebUploadService,
     private excelService: ExcelService,
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
     private firestoreService: FirestoreService,
     private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
+    private routeDetailService: RouteDetailService,
     // private pdfExportEmployeeStationService: PdfExportEmployeeStationService,
     private authService: AuthService
   ) {}
@@ -389,78 +387,13 @@ export class DangKyXeComponent implements OnInit {
     input.click();
   }
 
-  // Direct upload to Google Drive - one click upload
+  // Direct upload to Google Drive - one click upload (DISABLED - Google Drive services removed)
   async uploadToGoogleDrive(file: File): Promise<void> {
-    try {
-      // Show loading message
-      const loadingSnackBar = this.snackBar.open('Đang upload file lên Google Drive...', 'Đóng', {
-        duration: 0,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
-
-      // Use web upload service
-      const uploadResult = await this.googleDriveWebUploadService.uploadFileToDrive(file, file.name);
-      
-      loadingSnackBar.dismiss();
-      
-      if (uploadResult.success) {
-        // Show success message and open Google Drive
-        const snackBarRef = this.snackBar.open(
-          `File "${file.name}" đã được upload thành công lên Google Drive!`, 
-          'Mở Google Drive', 
-          {
-            duration: 5000,
-            horizontalPosition: 'right',
-            verticalPosition: 'top'
-          }
-        );
-        
-        snackBarRef.onAction().subscribe(() => {
-          // Open Google Drive folder
-          this.googleDriveWebUploadService.openFolderInNewTab();
-        });
-      } else {
-        // Show error message
-        this.snackBar.open(
-          'Có lỗi xảy ra khi upload. Vui lòng thử lại.', 
-          'Thử lại', 
-          {
-            duration: 5000,
-            horizontalPosition: 'right',
-            verticalPosition: 'top'
-          }
-        ).onAction().subscribe(() => {
-          this.uploadToGoogleDrive(file);
-        });
-      }
-
-    } catch (error) {
-      console.error('Error uploading to Google Drive:', error);
-      
-      // Check if it's a CSP error
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      let userMessage = 'Có lỗi xảy ra khi upload. Vui lòng thử lại.';
-      
-      if (errorMessage.includes('CSP') || errorMessage.includes('Content Security Policy')) {
-        userMessage = 'Lỗi bảo mật: Vui lòng kiểm tra cài đặt CSP và thử lại.';
-      } else if (errorMessage.includes('Failed to load Google API script')) {
-        userMessage = 'Không thể tải Google API. Vui lòng kiểm tra kết nối mạng và thử lại.';
-      }
-      
-      // Show error message
-      this.snackBar.open(
-        userMessage, 
-        'Thử lại', 
-        {
-          duration: 5000,
-          horizontalPosition: 'right',
-          verticalPosition: 'top'
-        }
-      ).onAction().subscribe(() => {
-        this.uploadToGoogleDrive(file);
-      });
-    }
+    this.snackBar.open('Google Drive upload đã bị vô hiệu hóa. Vui lòng sử dụng tính năng export PDF.', 'Đóng', {
+      duration: 5000,
+      horizontalPosition: 'right',
+      verticalPosition: 'top'
+    });
   }
 
   // Simulate upload process
@@ -520,47 +453,21 @@ export class DangKyXeComponent implements OnInit {
     }
   }
 
-  // Show upload instructions based on result
+  // Show upload instructions based on result (DISABLED - Google Drive services removed)
   private showUploadInstructions(uploadResult: any): void {
-    const snackBarRef = this.snackBar.open(
-      uploadResult.message, 
-      'Mở Google Drive', 
-      {
-        duration: 8000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      }
-    );
-    
-    snackBarRef.onAction().subscribe(() => {
-      // Open Google Drive folder
-      this.googleDriveUploadService.openFolderInNewTab();
-      
-      // Download the file if available
-      if (uploadResult.downloadUrl) {
-        this.googleDriveUploadService.downloadFile(new File([uploadResult.downloadUrl], uploadResult.fileName));
-      }
+    this.snackBar.open('Google Drive upload đã bị vô hiệu hóa. Vui lòng sử dụng tính năng export PDF.', 'Đóng', {
+      duration: 5000,
+      horizontalPosition: 'right',
+      verticalPosition: 'top'
     });
   }
 
-  // Show manual upload instructions
+  // Show manual upload instructions (DISABLED - Google Drive services removed)
   private showManualUploadInstructions(file: File): void {
-    const snackBarRef = this.snackBar.open(
-      `File "${file.name}" đã sẵn sàng để upload thủ công lên Google Drive!`, 
-      'Mở Google Drive', 
-      {
-        duration: 8000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      }
-    );
-    
-    snackBarRef.onAction().subscribe(() => {
-      // Open Google Drive folder
-      this.googleDriveUploadService.openFolderInNewTab();
-      
-      // Download the file for user to upload
-      this.googleDriveUploadService.downloadFile(file);
+    this.snackBar.open('Google Drive upload đã bị vô hiệu hóa. Vui lòng sử dụng tính năng export PDF.', 'Đóng', {
+      duration: 5000,
+      horizontalPosition: 'right',
+      verticalPosition: 'top'
     });
   }
 
@@ -997,8 +904,14 @@ export class DangKyXeComponent implements OnInit {
       });
 
       console.log('Converted registrations for today:', registrations);
-      this.dataSource.data = registrations;
-      console.log(`Loaded ${registrations.length} registrations for today from Firebase`);
+      
+      // Sort registrations by station order within each route
+      console.log('🔧 Applying station sorting logic...');
+      const sortedRegistrations = await this.sortRegistrationsByStationOrder(registrations);
+      console.log('✅ Station sorting completed. Original count:', registrations.length, 'Sorted count:', sortedRegistrations.length);
+      
+      this.dataSource.data = sortedRegistrations;
+      console.log(`Loaded ${sortedRegistrations.length} registrations for today from Firebase`);
     } catch (error) {
       console.error('Error loading data from Firebase:', error);
       // Fallback to empty array instead of showing error
@@ -1354,6 +1267,132 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Sort registrations by station order within each route
+   */
+  private async sortRegistrationsByStationOrder(registrations: Registration[]): Promise<Registration[]> {
+    try {
+      console.log('🔍 Starting station sorting for', registrations.length, 'registrations');
+      
+      // Get route details to determine station order
+      const routeDetails = await this.routeDetailService.getRouteDetails().toPromise();
+      
+      if (!routeDetails || routeDetails.length === 0) {
+        console.warn('⚠️ No route details found, returning registrations without sorting');
+        return registrations;
+      }
+
+      console.log('📋 Found', routeDetails.length, 'route details');
+
+      // Create a map of station names to their order for each route
+      const stationOrderMap = new Map<string, Map<string, number>>();
+      
+      routeDetails.forEach((detail: any) => {
+        if (!stationOrderMap.has(detail.maTuyenXe)) {
+          stationOrderMap.set(detail.maTuyenXe, new Map());
+        }
+        // Store both exact match and normalized match for better matching
+        stationOrderMap.get(detail.maTuyenXe)!.set(detail.tenDiemDon, detail.thuTu);
+        stationOrderMap.get(detail.maTuyenXe)!.set(this.normalizeStationName(detail.tenDiemDon), detail.thuTu);
+      });
+
+      // Log HCM02 station orders
+      const hcm02Map = stationOrderMap.get('HCM02');
+      if (hcm02Map) {
+        console.log('🗺️ HCM02 station orders:');
+        for (const [station, order] of hcm02Map) {
+          console.log(`   "${station}" -> order: ${order}`);
+        }
+      }
+
+      // Sort registrations by route first, then by station order within each route
+      const sorted = registrations.sort((a, b) => {
+        // First sort by route
+        const routeComparison = (a.maTuyenXe || '').localeCompare(b.maTuyenXe || '');
+        if (routeComparison !== 0) {
+          return routeComparison;
+        }
+
+        // Then sort by station order within the same route
+        const routeCode = a.maTuyenXe;
+        const routeOrderMap = stationOrderMap.get(routeCode);
+        
+        if (!routeOrderMap) {
+          return 0; // No sorting if route not found
+        }
+
+        const stationA = a.tramXe || '';
+        const stationB = b.tramXe || '';
+        
+        let orderA = routeOrderMap.get(stationA) || routeOrderMap.get(this.normalizeStationName(stationA)) || 999;
+        let orderB = routeOrderMap.get(stationB) || routeOrderMap.get(this.normalizeStationName(stationB)) || 999;
+
+        // Special handling for HCM02: ensure Bà Chiểu comes after Ngã 4 Thủ Đức and RMK
+        if (routeCode === 'HCM02') {
+          if (this.isBaChieuStation(stationA)) {
+            // Bà Chiểu should come after Ngã 4 Thủ Đức and RMK
+            // Find the highest order among stations that should come before Bà Chiểu
+            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
+            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
+            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
+            orderA = maxOrderBeforeBaChieu + 1; // Set to be after both stations
+            console.log(`🔄 Bà Chiểu order adjusted: ${stationA} -> ${orderA} (after Ngã 4 Thủ Đức: ${nga4ThuDucOrder}, RMK: ${rmkOrder})`);
+          }
+          if (this.isBaChieuStation(stationB)) {
+            // Bà Chiểu should come after Ngã 4 Thủ Đức and RMK
+            // Find the highest order among stations that should come before Bà Chiểu
+            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
+            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
+            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
+            orderB = maxOrderBeforeBaChieu + 1; // Set to be after both stations
+            console.log(`🔄 Bà Chiểu order adjusted: ${stationB} -> ${orderB} (after Ngã 4 Thủ Đức: ${nga4ThuDucOrder}, RMK: ${rmkOrder})`);
+          }
+        }
+
+        return orderA - orderB;
+      });
+
+      console.log('✅ Sorting completed. Final order:');
+      sorted.forEach((reg, index) => {
+        console.log(`   ${index + 1}. ${reg.hoTen} - ${reg.tramXe} (${reg.maTuyenXe})`);
+      });
+
+      return sorted;
+    } catch (error) {
+      console.error('❌ Error sorting registrations by station order:', error);
+      return registrations; // Return original order if sorting fails
+    }
+  }
+
+  /**
+   * Normalize station name for comparison
+   */
+  private normalizeStationName(stationName: string): string {
+    if (!stationName) return '';
+    return stationName.toLowerCase()
+      .replace(/[àáạảãâầấậẩẫăằắặẳẵ]/g, 'a')
+      .replace(/[èéẹẻẽêềếệểễ]/g, 'e')
+      .replace(/[ìíịỉĩ]/g, 'i')
+      .replace(/[òóọỏõôồốộổỗơờớợởỡ]/g, 'o')
+      .replace(/[ùúụủũưừứựửữ]/g, 'u')
+      .replace(/[ỳýỵỷỹ]/g, 'y')
+      .replace(/đ/g, 'd');
+  }
+
+  /**
+   * Check if station is Bà Chiểu
+   */
+  private isBaChieuStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const baChieuVariations = [
+      'bà chiểu', 'ba chieu'
+    ];
+    return baChieuVariations.some(variation =>
+      stationLower.includes(variation) || variation.includes(stationLower)
+    );
+  }
+
+  /**
    * Get today's registrations from Firebase
    */
   private async getTodayRegistrations(): Promise<Registration[]> {
@@ -1447,6 +1486,16 @@ export class DangKyXeComponent implements OnInit {
       return 'TỰ TÚC';
     }
     
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH04';
+    }
+    
+    // Đặc biệt: Ngã 3 Long Bình Tân và Bà Chiểu ưu tiên vào HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
+      return 'HCM02';
+    }
+    
     // Check if it's HCM route - distribute evenly among 3 routes
     if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
       // Keep original route assignment for even distribution
@@ -1454,7 +1503,7 @@ export class DangKyXeComponent implements OnInit {
     }
     
     // Check if it's BH route
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
       // Check if station is before or at "Hàng xanh"
       if (this.isStationBeforeOrAtHangXanh(tramXe)) {
         // Group all into BH01
@@ -1470,6 +1519,32 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   */
+  private isHCM02PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm02PriorityStations = [
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'long bình tân',
+      'long binh tan',
+      'bà chiểu',
+      'ba chieu',
+      'bà chiểu',
+      'ba chieu'
+    ];
+    
+    return hcm02PriorityStations.some(priorityStation => 
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Check if station is before or at "Hàng xanh" (same logic as PDF service)
    */
   private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
@@ -1478,11 +1553,11 @@ export class DangKyXeComponent implements OnInit {
     const station = tramXe.toLowerCase();
     
     // Danh sách các trạm từ KCN Long Đức đến Hàng xanh (theo thứ tự)
+    // Loại bỏ các trạm không nên gom vào BH01 như Ngã 4 Thủ Đức, Bà Chiểu, Chợ Gò Vấp
     const stationsBeforeHangXanh = [
       'kcn long đức',
       'ngã 3 bến gỗ', 
       'ngã 3 long bình tân',
-      'ngã 4 thủ đức',
       'rmk',
       'ngã 3 cát lái',
       'bến gỗ',
@@ -1514,6 +1589,30 @@ export class DangKyXeComponent implements OnInit {
     
     return selfTransportStations.some(stationName => 
       station.includes(stationName)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là "Ngã 3 Hãng dầu" không
+   */
+  private isNga3HangDauStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const nga3HangDauVariations = [
+      'ngã 3 hãng dầu',
+      'nga 3 hang dau',
+      'ngã 3 hàng dầu',
+      'nga 3 hang dau',
+      'hãng dầu',
+      'hang dau',
+      'hàng dầu',
+      'hang dau'
+    ];
+    
+    return nga3HangDauVariations.some(variation => 
+      stationLower.includes(variation) || variation.includes(stationLower)
     );
   }
 
