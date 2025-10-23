@@ -160,9 +160,14 @@ export function mockApplyHCMOverflowLogic(employees: TestEmployee[]): TestEmploy
   
   console.log('HCM employees >= 30, applying overflow logic...');
   
-  // Phân loại nhân viên HCM: không trùng trạm BH vs trùng trạm BH
-  const employeesNotMatchingBH: TestEmployee[] = [];
+  // Tính số nhân viên dư thừa
+  const maxHCMCapacity = 30; // 2 xe x 15 chỗ
+  const overflowCount = totalHCMEmployees - maxHCMCapacity;
+  console.log(`HCM overflow: ${overflowCount} employees need to be reassigned to BH routes`);
+  
+  // Phân loại nhân viên HCM: trùng trạm BH vs không trùng trạm BH
   const employeesMatchingBH: TestEmployee[] = [];
+  const employeesNotMatchingBH: TestEmployee[] = [];
   
   hcmEmployees.forEach(employee => {
     const stationName = normalizeStationName(employee.TramXe || '');
@@ -182,37 +187,68 @@ export function mockApplyHCMOverflowLogic(employees: TestEmployee[]): TestEmploy
     }
   });
   
-  console.log(`Employees not matching BH: ${employeesNotMatchingBH.length}, Employees matching BH: ${employeesMatchingBH.length}`);
+  console.log(`Employees matching BH: ${employeesMatchingBH.length}, Not matching BH: ${employeesNotMatchingBH.length}`);
   
-  // Ưu tiên nhân viên không trùng trạm BH cho HCM01 và HCM02
-  // Mỗi tuyến cần 15 nhân viên (2 xe 16 chỗ)
+  // Chuyển nhân viên trùng trạm BH sang BH routes (ưu tiên chuyển đủ số dư thừa)
+  const employeesToMoveToBH = employeesMatchingBH.slice(0, overflowCount);
+  const remainingHCMEmployees = [
+    ...employeesNotMatchingBH,
+    ...employeesMatchingBH.slice(overflowCount)
+  ];
+  
+  console.log(`Moving ${employeesToMoveToBH.length} employees to BH routes`);
+  console.log(`Remaining HCM employees: ${remainingHCMEmployees.length}`);
+  
+  // Phân chia nhân viên HCM còn lại cho HCM01 và HCM02
   const targetEmployeesPerHCMRoute = 15;
-  const totalTargetHCM = targetEmployeesPerHCMRoute * 2; // HCM01 + HCM02
   
-  // Lấy nhân viên không trùng trạm BH trước (tối đa 30 người)
-  const hcm01Employees = employeesNotMatchingBH.slice(0, targetEmployeesPerHCMRoute);
-  const hcm02Employees = employeesNotMatchingBH.slice(targetEmployeesPerHCMRoute, totalTargetHCM);
+  // Ưu tiên HCM02 cho các trạm đặc biệt
+  const hcm02PriorityEmployees: TestEmployee[] = [];
+  const otherHCMEmployees: TestEmployee[] = [];
   
-  // Nếu không đủ nhân viên không trùng trạm BH, lấy thêm từ nhân viên trùng trạm BH
-  const remainingHCMSlots = totalTargetHCM - (hcm01Employees.length + hcm02Employees.length);
-  if (remainingHCMSlots > 0) {
-    const additionalEmployees = employeesMatchingBH.slice(0, remainingHCMSlots);
-    const halfAdditional = Math.ceil(additionalEmployees.length / 2);
-    
-    hcm01Employees.push(...additionalEmployees.slice(0, halfAdditional));
-    hcm02Employees.push(...additionalEmployees.slice(halfAdditional));
+  remainingHCMEmployees.forEach(employee => {
+    if (isHCM02PriorityStation(employee.TramXe || '')) {
+      hcm02PriorityEmployees.push(employee);
+    } else {
+      otherHCMEmployees.push(employee);
+    }
+  });
+  
+  // Phân bổ cho HCM02 (tối đa 15 nhân viên)
+  let hcm02Employees = hcm02PriorityEmployees.slice(0, targetEmployeesPerHCMRoute);
+  
+  // Nếu HCM02 chưa đủ, lấy thêm từ nhân viên khác
+  const remainingHCM02Slots = targetEmployeesPerHCMRoute - hcm02Employees.length;
+  if (remainingHCM02Slots > 0) {
+    const additionalForHCM02 = otherHCMEmployees.slice(0, remainingHCM02Slots);
+    hcm02Employees.push(...additionalForHCM02);
   }
   
-  // Phần dư còn lại (nhân viên trùng trạm BH) sắp qua tuyến Biên Hòa
-  const remainingEmployees = employeesMatchingBH.slice(remainingHCMSlots);
-  console.log(`Remaining employees to be assigned to BH routes: ${remainingEmployees.length}`);
+  // Phân bổ cho HCM01 (tối đa 15 nhân viên)
+  const remainingForHCM01 = otherHCMEmployees.slice(remainingHCM02Slots);
+  const hcm01Employees = remainingForHCM01.slice(0, targetEmployeesPerHCMRoute);
+  
+  // Nếu HCM01 chưa đủ, lấy thêm từ nhân viên HCM02 dư thừa
+  const remainingHCM01Slots = targetEmployeesPerHCMRoute - hcm01Employees.length;
+  if (remainingHCM01Slots > 0) {
+    const hcm02Overflow = hcm02PriorityEmployees.slice(targetEmployeesPerHCMRoute);
+    const additionalForHCM01 = hcm02Overflow.slice(0, remainingHCM01Slots);
+    hcm01Employees.push(...additionalForHCM01);
+  }
+  
+  // Nhân viên HCM02 dư thừa còn lại chuyển sang BH
+  const hcm02RemainingOverflow = hcm02PriorityEmployees.slice(targetEmployeesPerHCMRoute + remainingHCM01Slots);
+  employeesToMoveToBH.push(...hcm02RemainingOverflow);
+  
+  console.log(`Final HCM distribution: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
+  console.log(`Total employees moved to BH: ${employeesToMoveToBH.length}`);
   
   // Cập nhật MaTuyenXe cho các nhân viên
   hcm01Employees.forEach(emp => emp.MaTuyenXe = 'HCM01');
   hcm02Employees.forEach(emp => emp.MaTuyenXe = 'HCM02');
   
   // Chuyển nhân viên dư thừa vào BH routes
-  remainingEmployees.forEach(employee => {
+  employeesToMoveToBH.forEach(employee => {
     employee.MaTuyenXe = 'BH01'; // Simplified for testing
   });
   
@@ -225,13 +261,13 @@ export function mockApplyHCMOverflowLogic(employees: TestEmployee[]): TestEmploy
     ...nonHCMEmployees,
     ...hcm01Employees,
     ...hcm02Employees,
-    ...remainingEmployees
+    ...employeesToMoveToBH
   ];
   
   console.log('Final HCM distribution:');
   console.log(`HCM01: ${hcm01Employees.length} employees`);
   console.log(`HCM02: ${hcm02Employees.length} employees`);
-  console.log(`BH routes: ${remainingEmployees.length} employees`);
+  console.log(`BH routes: ${employeesToMoveToBH.length} employees`);
   
   return result;
 }

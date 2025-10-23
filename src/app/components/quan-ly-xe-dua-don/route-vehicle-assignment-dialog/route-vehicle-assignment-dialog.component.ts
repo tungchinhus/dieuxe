@@ -130,7 +130,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       if (assignment) {
         assignment.assignedVehicle = {
           vehicleId: selectedVehicle.MaXe,
-          licensePlate: selectedVehicle.BienSoXe,
+          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount),
           vehicleType: selectedVehicle.LoaiXe,
           capacity: this.getVehicleCapacity(selectedVehicle.LoaiXe),
           garageId: selectedVehicle.MaNhaXe || '',
@@ -139,6 +139,146 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         
         // Tự động load thông tin tài xế cho xe được chọn
         this.loadDriverInfoForVehicle(assignment, selectedVehicle);
+      }
+    }
+  }
+
+  /**
+   * Xử lý thay đổi biển số xe từ text input
+   */
+  onVehicleTextChange(routeId: string, licensePlate: string): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
+    if (assignment) {
+      // Lấy biển số gốc (loại bỏ prefix nếu có)
+      const originalLicensePlate = licensePlate.replace(/^16C - /, '');
+      
+      // Tìm xe theo biển số gốc
+      const selectedVehicle = this.data.vehicles.find(v => 
+        v.BienSoXe.toLowerCase() === originalLicensePlate.toLowerCase()
+      );
+      
+      if (selectedVehicle) {
+        // Nếu tìm thấy xe trong danh sách, cập nhật thông tin đầy đủ
+        assignment.assignedVehicle = {
+          vehicleId: selectedVehicle.MaXe,
+          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount),
+          vehicleType: selectedVehicle.LoaiXe,
+          capacity: this.getVehicleCapacity(selectedVehicle.LoaiXe),
+          garageId: selectedVehicle.MaNhaXe || '',
+          garageName: ''
+        };
+        
+        // Tự động load thông tin tài xế cho xe được chọn
+        this.loadDriverInfoForVehicle(assignment, selectedVehicle);
+      } else {
+        // Nếu không tìm thấy xe trong danh sách, chỉ cập nhật biển số với format phù hợp
+        assignment.assignedVehicle.licensePlate = this.formatLicensePlateForRoute(originalLicensePlate, assignment.employeeCount);
+        assignment.assignedVehicle.vehicleId = '';
+        assignment.assignedVehicle.vehicleType = '';
+        assignment.assignedVehicle.capacity = 0;
+        assignment.assignedVehicle.garageId = '';
+        assignment.assignedVehicle.garageName = '';
+        
+        // Xóa thông tin tài xế
+        assignment.assignedDriver.driverName = '';
+        assignment.assignedDriver.phoneNumber = '';
+      }
+    }
+  }
+
+  /**
+   * Format biển số xe dựa trên số nhân viên của tuyến
+   */
+  private formatLicensePlateForRoute(licensePlate: string, employeeCount: number): string {
+    let prefix = '';
+    
+    // Logic chọn xe dựa trên số nhân viên
+    if (employeeCount < 7) {
+      prefix = 'TAXI - '; // Dưới 7 nhân viên: Taxi
+    } else if (employeeCount >= 7 && employeeCount <= 15) {
+      prefix = '16C - '; // 7 đến 15 nhân viên: Xe 16 chỗ
+    } else if (employeeCount >= 16 && employeeCount <= 28) {
+      prefix = '29C - '; // 16 đến 28 nhân viên: Xe 29 chỗ
+    } else if (employeeCount > 28) {
+      prefix = '45C - '; // Trên 28 nhân viên: Xe 45 chỗ
+    }
+    
+    // Thêm prefix nếu chưa có
+    if (prefix && !licensePlate.startsWith(prefix)) {
+      return `${prefix}${licensePlate}`;
+    }
+    
+    return licensePlate;
+  }
+
+  /**
+   * Lấy prefix hiển thị dựa trên số nhân viên
+   */
+  getVehiclePrefix(employeeCount: number): string {
+    if (employeeCount < 7) {
+      return 'TAXI - ';
+    } else if (employeeCount >= 7 && employeeCount <= 15) {
+      return '16C - ';
+    } else if (employeeCount >= 16 && employeeCount <= 28) {
+      return '29C - ';
+    } else if (employeeCount > 28) {
+      return '45C - ';
+    }
+    return '';
+  }
+  getLicensePlateNumber(assignment: RouteVehicleAssignment): string {
+    const licensePlate = assignment.assignedVehicle.licensePlate;
+    
+    // Loại bỏ các prefix có thể có
+    const prefixes = ['TAXI - ', '16C - ', '29C - ', '45C - '];
+    for (const prefix of prefixes) {
+      if (licensePlate.startsWith(prefix)) {
+        return licensePlate.replace(prefix, '');
+      }
+    }
+    
+    return licensePlate;
+  }
+
+  /**
+   * Xử lý thay đổi số xe (chỉ phần số, không bao gồm prefix)
+   */
+  onLicensePlateNumberChange(routeId: string, licensePlateNumber: string): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
+    if (assignment) {
+      // Tạo biển số đầy đủ với prefix dựa trên số nhân viên
+      const fullLicensePlate = this.formatLicensePlateForRoute(licensePlateNumber, assignment.employeeCount);
+
+      // Tìm xe theo biển số gốc (không có prefix)
+      const selectedVehicle = this.data.vehicles.find(v => 
+        v.BienSoXe.toLowerCase() === licensePlateNumber.toLowerCase()
+      );
+      
+      if (selectedVehicle) {
+        // Nếu tìm thấy xe trong danh sách, cập nhật thông tin đầy đủ
+        assignment.assignedVehicle = {
+          vehicleId: selectedVehicle.MaXe,
+          licensePlate: fullLicensePlate,
+          vehicleType: selectedVehicle.LoaiXe,
+          capacity: this.getVehicleCapacity(selectedVehicle.LoaiXe),
+          garageId: selectedVehicle.MaNhaXe || '',
+          garageName: ''
+        };
+        
+        // Tự động load thông tin tài xế cho xe được chọn
+        this.loadDriverInfoForVehicle(assignment, selectedVehicle);
+      } else {
+        // Nếu không tìm thấy xe trong danh sách, chỉ cập nhật biển số
+        assignment.assignedVehicle.licensePlate = fullLicensePlate;
+        assignment.assignedVehicle.vehicleId = '';
+        assignment.assignedVehicle.vehicleType = '';
+        assignment.assignedVehicle.capacity = 0;
+        assignment.assignedVehicle.garageId = '';
+        assignment.assignedVehicle.garageName = '';
+        
+        // Xóa thông tin tài xế
+        assignment.assignedDriver.driverName = '';
+        assignment.assignedDriver.phoneNumber = '';
       }
     }
   }
@@ -188,7 +328,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
 
   isAssignmentComplete(routeId: string): boolean {
     const assignment = this.routeAssignments.find(a => a.routeId === routeId);
-    return assignment ? !!assignment.assignedVehicle.vehicleId : false;
+    return assignment ? !!assignment.assignedVehicle.licensePlate : false;
   }
 
   getIncompleteAssignmentsCount(): number {
@@ -276,7 +416,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
   }
 
   getAssignedRoutesCount(): number {
-    return this.routeAssignments.filter(a => a.assignedVehicle.vehicleId).length;
+    return this.routeAssignments.filter(a => a.assignedVehicle.licensePlate).length;
   }
 
   /**
@@ -506,7 +646,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     if (assignment) {
       assignment.assignedVehicle = {
         vehicleId: vehicle.MaXe,
-        licensePlate: vehicle.BienSoXe,
+        licensePlate: this.formatLicensePlateForRoute(vehicle.BienSoXe, assignment.employeeCount),
         vehicleType: vehicle.LoaiXe,
         capacity: this.getVehicleCapacity(vehicle.LoaiXe),
         garageId: vehicle.MaNhaXe || '',
@@ -524,8 +664,12 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
   onRedistributeVehicles(): void {
     // Lấy danh sách xe đã được phân bổ
     const assignedVehicles = this.routeAssignments
-      .filter(assignment => assignment.assignedVehicle.vehicleId)
-      .map(assignment => this.data.vehicles.find(v => v.MaXe === assignment.assignedVehicle.vehicleId))
+      .filter(assignment => assignment.assignedVehicle.licensePlate)
+      .map(assignment => {
+        // Lấy biển số gốc (loại bỏ prefix nếu có)
+        const originalLicensePlate = assignment.assignedVehicle.licensePlate.replace(/^16C - /, '');
+        return this.data.vehicles.find(v => v.BienSoXe === originalLicensePlate);
+      })
       .filter(vehicle => vehicle !== undefined) as XeDuaDon[];
 
     // Reset tất cả phân bổ

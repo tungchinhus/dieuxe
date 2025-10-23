@@ -300,9 +300,10 @@ export class VehicleDataService {
       errors.push('Họ tên không được để trống');
     }
 
-    if (!dangKy.DienThoai?.trim()) {
-      errors.push('Số điện thoại không được để trống');
-    }
+    // Bỏ kiểm tra số điện thoại - không bắt buộc
+    // if (!dangKy.DienThoai?.trim()) {
+    //   errors.push('Số điện thoại không được để trống');
+    // }
 
     if (!dangKy.NgayDangKy) {
       errors.push('Ngày đăng ký không được để trống');
@@ -320,9 +321,10 @@ export class VehicleDataService {
       errors.push('Loại ca không được để trống');
     }
 
-    if (!dangKy.MaTuyenXe?.trim()) {
-      errors.push('Mã tuyến xe không được để trống');
-    }
+    // Bỏ kiểm tra MaTuyenXe - cho phép để trống khi import Excel
+    // if (!dangKy.MaTuyenXe?.trim()) {
+    //   errors.push('Mã tuyến xe không được để trống');
+    // }
 
     return errors;
   }

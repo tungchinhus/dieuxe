@@ -18,7 +18,19 @@ function isHCM02PriorityStation(station: string): boolean {
     'bà chiểu',
     'ba chieu',
     'bà chiểu',
-    'ba chieu'
+    'ba chieu',
+    'chợ gò vấp',
+    'cho go vap',
+    'chợ gò vấp',
+    'cho go vap',
+    'gò vấp',
+    'go vap',
+    'hóc môn',
+    'hoc mon',
+    'hóc môn (chùa hoằng pháp)',
+    'hoc mon (chua hoang phap)',
+    'chùa hoằng pháp',
+    'chua hoang phap'
   ];
   
   return hcm02PriorityStations.some(priorityStation => 

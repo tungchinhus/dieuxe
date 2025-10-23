@@ -1,5 +1,6 @@
 import { Component, OnInit, ViewChild } from '@angular/core';
 import { CommonModule } from '@angular/common';
+import { firstValueFrom } from 'rxjs';
 import { MatButtonModule } from '@angular/material/button';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
@@ -17,14 +18,17 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
 import { DuplicateDataDialogComponent } from './duplicate-data-dialog/duplicate-data-dialog.component';
+import { ImportErrorDialogComponent } from './import-error-dialog.component';
 import { Registration } from '../../models/registration.model';
 import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
+import { ExcelExportService } from '../../services/excel-export.service';
 import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
 import { RouteDetailService } from '../../services/route-detail.service';
+import { DataCacheService } from '../../services/data-cache.service';
 import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
 import { RouteVehicleAssignmentDialogComponent } from '../quan-ly-xe-dua-don/route-vehicle-assignment-dialog/route-vehicle-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
@@ -89,6 +93,7 @@ export class DangKyXeComponent implements OnInit {
   // Loading states
   isImportingExcel = false;
   isExportingPDF = false;
+  isExportingExcel = false;
   isExportingEmployeeStationPDF = false;
   
   // Time filter properties
@@ -103,9 +108,11 @@ export class DangKyXeComponent implements OnInit {
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
+    private excelExportService: ExcelExportService,
     private firestoreService: FirestoreService,
     private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
     private routeDetailService: RouteDetailService,
+    private dataCacheService: DataCacheService,
     // private pdfExportEmployeeStationService: PdfExportEmployeeStationService,
     private authService: AuthService
   ) {}
@@ -115,10 +122,20 @@ export class DangKyXeComponent implements OnInit {
     this.sidenavService.toggle();
   }
 
-  ngOnInit(): void {
+  async ngOnInit(): Promise<void> {
     console.log('Component initialized successfully!');
+    
+    // Load data cache first
+    try {
+      await this.dataCacheService.loadAllData();
+      console.log('Data cache loaded successfully');
+    } catch (error) {
+      console.error('Error loading data cache:', error);
+    }
+    
     this.loadDataFromFirebase(); // Load data from Firebase instead of mock data
     this.buildInfo = this.versionService.getBuildInfo();
+    this.updateDisplayedColumns();
   }
 
   ngAfterViewInit(): void {
@@ -231,6 +248,100 @@ export class DangKyXeComponent implements OnInit {
    */
   getTotalCount(): number {
     return this.dataSource.data.length;
+  }
+
+  /**
+   * Search by date range for super_admin
+   * If no dates are provided, search all records
+   */
+  async searchByDate(): Promise<void> {
+    // If no dates are provided, show all records
+    if (!this.startDate && !this.endDate) {
+      await this.loadDataFromFirebase();
+      this.snackBar.open('Hiển thị tất cả bản ghi', 'Đóng', { duration: 2000 });
+      return;
+    }
+
+    try {
+      // Show loading
+      const loadingSnackBar = this.snackBar.open('Đang tìm kiếm dữ liệu...', '', { duration: 0 });
+      
+      // Load all data from Firebase
+      const dangKyList = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      
+      if (!dangKyList || dangKyList.length === 0) {
+        this.dataSource.data = [];
+        loadingSnackBar.dismiss();
+        this.snackBar.open('Không tìm thấy dữ liệu nào', 'Đóng', { duration: 2000 });
+        return;
+      }
+
+      // Filter by date range
+      const filteredRegistrations = dangKyList.filter(dangKy => {
+        if (!dangKy.NgayDangKy) return false;
+        
+        const registrationDate = new Date(dangKy.NgayDangKy);
+        const startDate = this.startDate ? new Date(this.startDate) : null;
+        const endDate = this.endDate ? new Date(this.endDate) : null;
+        
+        // If only start date is provided
+        if (startDate && !endDate) {
+          return registrationDate >= startDate;
+        }
+        
+        // If only end date is provided
+        if (!startDate && endDate) {
+          return registrationDate <= endDate;
+        }
+        
+        // If both dates are provided
+        if (startDate && endDate) {
+          return registrationDate >= startDate && registrationDate <= endDate;
+        }
+        
+        return true;
+      });
+
+      // Convert to Registration format
+      const registrations: Registration[] = filteredRegistrations.map((dangKy, index) => ({
+        id: dangKy.ID || `temp_${index}`,
+        maNhanVien: dangKy.MaNhanVien || '',
+        hoTen: dangKy.HoTen || '',
+        dienThoai: dangKy.DienThoai || '',
+        phongBan: '',
+        ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
+        loaiCa: dangKy.LoaiCa || '',
+        thoiGianBatDau: dangKy.ThoiGianBatDau || '',
+        thoiGianKetThuc: dangKy.ThoiGianKetThuc || '',
+        maTuyenXe: dangKy.MaTuyenXe || '',
+        tramXe: dangKy.TramXe || '',
+        noiDungCongViec: dangKy.NoiDungCongViec || '',
+        dangKyCom: dangKy.DangKyCom || false
+      }));
+
+      // Update data source
+      this.dataSource.data = registrations;
+      
+      // Dismiss loading
+      loadingSnackBar.dismiss();
+      
+      const count = registrations.length;
+      this.snackBar.open(`Tìm thấy ${count} bản ghi trong khoảng thời gian đã chọn`, 'Đóng', { duration: 3000 });
+      
+    } catch (error) {
+      console.error('Error searching by date:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tìm kiếm dữ liệu', 'Đóng', { duration: 3000 });
+    }
+  }
+
+  /**
+   * Clear date search and show all records
+   */
+  async clearDateSearch(): Promise<void> {
+    this.startDate = null;
+    this.endDate = null;
+    await this.loadDataFromFirebase();
+    this.snackBar.open('Đã xóa bộ lọc ngày', 'Đóng', { duration: 2000 });
   }
 
   private loadMockData(): void {
@@ -501,11 +612,23 @@ export class DangKyXeComponent implements OnInit {
 
           // Auto-save valid data while showing dialog
           if (duplicateCheck.validData.length > 0) {
-            const savedCount = await this.saveRegistrationsToFirebase(duplicateCheck.validData);
+            const result = await this.saveRegistrationsToFirebase(duplicateCheck.validData);
             
-            if (savedCount > 0) {
+            if (result.savedCount > 0) {
               // Refresh data from Firebase
               await this.loadDataFromFirebase();
+            }
+            
+            // Show detailed import results if there are any failures
+            if (result.failedData.length > 0) {
+              const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+                width: '1000px',
+                data: {
+                  totalProcessed: duplicateCheck.validData.length,
+                  savedCount: result.savedCount,
+                  failedData: result.failedData
+                }
+              });
             }
           }
 
@@ -515,15 +638,15 @@ export class DangKyXeComponent implements OnInit {
           });
         } else {
           // No duplicates, save all data
-          const savedCount = await this.saveRegistrationsToFirebase(registrations);
+          const result = await this.saveRegistrationsToFirebase(registrations);
           
-          if (savedCount > 0) {
+          if (result.savedCount > 0) {
             // Refresh data from Firebase
             await this.loadDataFromFirebase();
             
             // Show success message
             const snackBarRef = this.snackBar.open(
-              `Đã import và lưu ${savedCount}/${registrations.length} đăng ký vào hệ thống!`, 
+              `Đã import và lưu ${result.savedCount}/${registrations.length} đăng ký vào hệ thống!`, 
               '', 
               {
                 duration: 8000,
@@ -531,12 +654,23 @@ export class DangKyXeComponent implements OnInit {
                 verticalPosition: 'top'
               }
             );
-            
           } else {
             this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
               duration: 3000,
               horizontalPosition: 'right',
               verticalPosition: 'top'
+            });
+          }
+          
+          // Show detailed import results if there are any failures
+          if (result.failedData.length > 0) {
+            const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+              width: '1000px',
+              data: {
+                totalProcessed: registrations.length,
+                savedCount: result.savedCount,
+                failedData: result.failedData
+              }
             });
           }
         }
@@ -766,9 +900,9 @@ export class DangKyXeComponent implements OnInit {
   /**
    * Convert Registration array to DangKyPhanXe array and save to Firebase
    */
-  private async saveRegistrationsToFirebase(registrations: Registration[], allowOverwrite: boolean = false): Promise<number> {
+  private async saveRegistrationsToFirebase(registrations: Registration[], allowOverwrite: boolean = false): Promise<{savedCount: number, failedData: Array<{registration: Registration, reason: string}>}> {
     let savedCount = 0;
-    const duplicateErrors: string[] = [];
+    const failedData: Array<{registration: Registration, reason: string}> = [];
     
     for (const reg of registrations) {
       try {
@@ -785,7 +919,7 @@ export class DangKyXeComponent implements OnInit {
           NoiDungCongViec: reg.noiDungCongViec || '',
           DangKyCom: reg.dangKyCom,
           TramXe: reg.tramXe || '',
-          MaTuyenXe: reg.maTuyenXe || ''
+          MaTuyenXe: '' // Bỏ MaTuyenXe khi import từ Excel - để trống
         };
 
         // Debug: Log the conversion
@@ -797,6 +931,10 @@ export class DangKyXeComponent implements OnInit {
         const errors = this.vehicleDataService.validateDangKyPhanXe(dangKyPhanXe);
         if (errors.length > 0) {
           console.warn(`Validation errors for ${reg.maNhanVien}:`, errors);
+          failedData.push({
+            registration: reg,
+            reason: `Lỗi validation: ${errors.join(', ')}`
+          });
           continue;
         }
 
@@ -805,7 +943,10 @@ export class DangKyXeComponent implements OnInit {
         
         if (isDuplicate && !allowOverwrite) {
           console.warn(`Duplicate found: ${reg.hoTen} at ${reg.tramXe} for ${reg.ngayDangKy}`);
-          duplicateErrors.push(`${reg.hoTen} - đã đăng ký tại trạm ${reg.tramXe} cho ngày ${reg.ngayDangKy}`);
+          failedData.push({
+            registration: reg,
+            reason: `Trùng lặp: đã đăng ký tại trạm ${reg.tramXe} cho ngày ${reg.ngayDangKy}`
+          });
           continue;
         }
 
@@ -818,6 +959,11 @@ export class DangKyXeComponent implements OnInit {
               console.log(`Deleted existing registration for ${reg.maNhanVien} to allow overwrite`);
             } catch (deleteError) {
               console.error(`Error deleting existing registration for ${reg.maNhanVien}:`, deleteError);
+              failedData.push({
+                registration: reg,
+                reason: `Lỗi khi xóa đăng ký cũ: ${deleteError}`
+              });
+              continue;
             }
           }
         }
@@ -828,28 +974,21 @@ export class DangKyXeComponent implements OnInit {
         
       } catch (error) {
         console.error(`Error saving registration for ${reg.maNhanVien}:`, error);
+        failedData.push({
+          registration: reg,
+          reason: `Lỗi khi lưu vào Firebase: ${error}`
+        });
         continue;
       }
     }
     
-    // Show duplicate errors if any (only when not allowing overwrite)
-    if (duplicateErrors.length > 0 && !allowOverwrite) {
-      this.snackBar.open(
-        `Có ${duplicateErrors.length} đăng ký bị trùng lặp và đã bỏ qua:\n${duplicateErrors.join('\n')}`, 
-        'Đóng', 
-        {
-          duration: 8000,
-          horizontalPosition: 'right',
-          verticalPosition: 'top'
-        }
-      );
-    }
-    
-    return savedCount;
+    return { savedCount, failedData };
   }
 
   /**
-   * Load data from Firebase and update the table - only for today's date
+   * Load data from Firebase and update the table
+   * For regular users: only today's data
+   * For super_admin: can load data by date range
    */
   async loadDataFromFirebase(): Promise<void> {
     try {
@@ -863,22 +1002,30 @@ export class DangKyXeComponent implements OnInit {
         return;
       }
       
-      // Get today's date in YYYY-MM-DD format
-      const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
-      console.log('Filtering data for today:', todayString);
+      let filteredRegistrations = dangKyList;
       
-      // Filter data to only include today's registrations
-      const todayRegistrations = dangKyList.filter(dangKy => {
-        if (!dangKy.NgayDangKy) return false;
-        const registrationDate = dangKy.NgayDangKy.toISOString().split('T')[0];
-        return registrationDate === todayString;
-      });
-      
-      console.log(`Found ${todayRegistrations.length} registrations for today out of ${dangKyList.length} total`);
+      // For regular users, only show today's data
+      // For super_admin, show all data (can be filtered by date search)
+      if (!this.hasAdminRole()) {
+        // Get today's date in YYYY-MM-DD format
+        const today = new Date();
+        const todayString = today.toISOString().split('T')[0];
+        console.log('Filtering data for today:', todayString);
+        
+        // Filter data to only include today's registrations
+        filteredRegistrations = dangKyList.filter(dangKy => {
+          if (!dangKy.NgayDangKy) return false;
+          const registrationDate = dangKy.NgayDangKy.toISOString().split('T')[0];
+          return registrationDate === todayString;
+        });
+        
+        console.log(`Found ${filteredRegistrations.length} registrations for today out of ${dangKyList.length} total`);
+      } else {
+        console.log(`Super admin: Loading all ${dangKyList.length} registrations`);
+      }
       
       // Convert DangKyPhanXe to Registration format for display
-      const registrations: Registration[] = todayRegistrations.map((dangKy, index) => {
+      const registrations: Registration[] = filteredRegistrations.map((dangKy, index) => {
         console.log(`Processing item ${index}:`, {
           ID: dangKy.ID,
           MaNhanVien: dangKy.MaNhanVien,
@@ -1186,6 +1333,125 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Export registrations to Excel with vehicle assignment dialog
+   */
+  async exportToExcel(): Promise<void> {
+    try {
+      if (this.dataSource.data.length === 0) {
+        this.snackBar.open('Không có dữ liệu để xuất Excel!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      // Set loading state
+      this.isExportingExcel = true;
+
+      // Open vehicle assignment dialog first
+      await this.openRouteVehicleAssignmentDialogForExcel();
+
+    } catch (error) {
+      console.error('Error exporting Excel:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file Excel!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } finally {
+      // Reset loading state
+      this.isExportingExcel = false;
+    }
+  }
+
+  /**
+   * Open route vehicle assignment dialog for Excel export
+   */
+  async openRouteVehicleAssignmentDialogForExcel(): Promise<void> {
+    try {
+      // Get real data from today's registrations
+      const todayRegistrations = await this.getTodayRegistrations();
+      
+      if (todayRegistrations.length === 0) {
+        this.snackBar.open('Không có dữ liệu đăng ký cho ngày hôm nay!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      // Load danh sách tuyến từ cache
+      const routeDetails = this.dataCacheService.getRouteDetails();
+      console.log('Dialog Excel - Route details from cache:', routeDetails.length);
+      console.log('Dialog Excel - Available routes:', [...new Set(routeDetails.map(detail => detail.maTuyenXe))]);
+      
+      // Group registrations by route using the same logic as PDF generation
+      const routeGroups = await this.groupRegistrationsByRouteForDialog(todayRegistrations);
+      console.log('Dialog Excel - Route groups after grouping:', routeGroups.map(rg => `${rg.routeName} (${rg.registrations?.length || 0} employees)`));
+      
+      // Tạo danh sách tuyến từ routeGroups (đã được xử lý logic phân chia)
+      const realRoutes = routeGroups
+        .map(routeGroup => ({
+          routeId: routeGroup.routeName,
+          routeName: routeGroup.routeName, // Sử dụng routeName từ routeGroup
+          routeCode: routeGroup.routeName,
+          employeeCount: routeGroup.registrations?.length || 0
+        }))
+        .sort((a, b) => {
+          // Sắp xếp: HCM01, HCM02 trước, sau đó các tuyến BH
+          if (a.routeCode === 'HCM01') return -1;
+          if (b.routeCode === 'HCM01') return 1;
+          if (a.routeCode === 'HCM02') return -1;
+          if (b.routeCode === 'HCM02') return 1;
+          return a.routeCode.localeCompare(b.routeCode);
+        });
+      
+      // Load real vehicles from Firebase
+      const vehicles = await this.firestoreService.getAllXeDuaDon();
+
+      if (vehicles.length === 0) {
+        this.snackBar.open('Không có dữ liệu xe đưa đón!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+        return;
+      }
+
+      console.log('Loaded vehicles from Firebase:', vehicles);
+      console.log('Real route groups:', realRoutes);
+
+      // Không cần mockDrivers nữa vì thông tin tài xế sẽ lấy trực tiếp từ xe
+      const dialogRef = this.dialog.open(RouteVehicleAssignmentDialogComponent, {
+        width: '1200px',
+        maxWidth: '95vw',
+        data: {
+          routes: realRoutes,
+          vehicles: vehicles,
+          drivers: [] // Không cần drivers nữa
+        }
+      });
+
+      dialogRef.afterClosed().subscribe(async result => {
+        if (result && result.routeAssignments) {
+          // Export to Excel after vehicle assignment
+          await this.exportOvertimeReportExcelWithVehicleAssignment(result);
+        }
+      });
+
+    } catch (error) {
+      console.error('Error opening route vehicle assignment dialog for Excel:', error);
+      this.snackBar.open('Có lỗi xảy ra khi mở dialog phân công xe!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
    * Open route vehicle assignment dialog for PDF export
    */
   async openRouteVehicleAssignmentDialog(): Promise<void> {
@@ -1202,25 +1468,31 @@ export class DangKyXeComponent implements OnInit {
         return;
       }
 
+      // Load danh sách tuyến từ cache
+      const routeDetails = this.dataCacheService.getRouteDetails();
+      console.log('Dialog - Route details from cache:', routeDetails.length);
+      console.log('Dialog - Available routes:', [...new Set(routeDetails.map(detail => detail.maTuyenXe))]);
+
       // Group registrations by route using the same logic as PDF generation
       const routeGroups = await this.groupRegistrationsByRouteForDialog(todayRegistrations);
+      console.log('Dialog - Route groups after grouping:', routeGroups.map(rg => `${rg.routeName} (${rg.registrations?.length || 0} employees)`));
       
-      // Convert to route data format for dialog - chỉ hiển thị 2 tuyến HCM chính
+      // Tạo danh sách tuyến từ routeGroups (đã được xử lý logic phân chia)
       const realRoutes = routeGroups
-        .filter(route => {
-          // Chỉ hiển thị HCM01, HCM02 và các tuyến BH
-          // Loại bỏ HCM03 vì sẽ được sắp vào các tuyến BH
-          return route.routeName === 'HCM01' || 
-                 route.routeName === 'HCM02' || 
-                 route.routeName.startsWith('BH') ||
-                 route.routeName === 'THU_DUC_TAXI';
-        })
-        .map((route, index) => ({
-          routeId: route.routeName,
-          routeName: route.routeName,
-          routeCode: route.routeName,
-          employeeCount: route.registrations?.length || 0
-        }));
+        .map(routeGroup => ({
+          routeId: routeGroup.routeName,
+          routeName: routeGroup.routeName, // Sử dụng routeName từ routeGroup
+          routeCode: routeGroup.routeName,
+          employeeCount: routeGroup.registrations?.length || 0
+        }))
+        .sort((a, b) => {
+          // Sắp xếp: HCM01, HCM02 trước, sau đó các tuyến BH
+          if (a.routeCode === 'HCM01') return -1;
+          if (b.routeCode === 'HCM01') return 1;
+          if (a.routeCode === 'HCM02') return -1;
+          if (b.routeCode === 'HCM02') return 1;
+          return a.routeCode.localeCompare(b.routeCode);
+        });
       
       // Load real vehicles from Firebase
       const vehicles = await this.firestoreService.getAllXeDuaDon();
@@ -1426,16 +1698,36 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
-   * Group registrations by route using the same logic as PDF generation
+   * Group registrations by route using StationRouteMappingService to map by tramXe
    */
   private async groupRegistrationsByRouteForDialog(registrations: Registration[]): Promise<any[]> {
+    console.log('Dialog - Starting groupRegistrationsByRouteForDialog with', registrations.length, 'registrations');
     const routeMap = new Map<string, any>();
 
     for (const registration of registrations) {
-      const maTuyenXe = registration.maTuyenXe || 'Chưa phân tuyến';
+      let finalRouteName = 'Chưa phân tuyến';
+      
+      // Nếu đã có maTuyenXe, sử dụng nó
+      if (registration.maTuyenXe && registration.maTuyenXe.trim() !== '') {
+        finalRouteName = registration.maTuyenXe;
+        console.log(`Dialog - Using existing maTuyenXe "${finalRouteName}" for ${registration.hoTen}`);
+      } else if (registration.tramXe && registration.tramXe.trim() !== '') {
+        // Nếu chưa có maTuyenXe, map từ tramXe sử dụng cache
+        const mappedRoute = this.dataCacheService.getRouteForStation(registration.tramXe);
+        if (mappedRoute) {
+          finalRouteName = mappedRoute;
+          console.log(`Dialog - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}"`);
+        } else {
+          console.warn(`Dialog - No route mapping found for station "${registration.tramXe}"`);
+        }
+      }
       
       // Apply HCM grouping priority logic (same as PDF generation)
-      const finalRouteName = this.applyHCMGroupingPriority(maTuyenXe, registration.tramXe);
+      const originalRouteName = finalRouteName;
+      finalRouteName = this.applyHCMGroupingPriority(finalRouteName, registration.tramXe);
+      if (originalRouteName !== finalRouteName) {
+        console.log(`Dialog - HCM grouping priority changed route from "${originalRouteName}" to "${finalRouteName}" for ${registration.hoTen}`);
+      }
       
       if (!routeMap.has(finalRouteName)) {
         routeMap.set(finalRouteName, {
@@ -1454,8 +1746,10 @@ export class DangKyXeComponent implements OnInit {
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
 
-    // Sort routes according to the specified order: HCM01, HCM02, HCM03, BH01, BH02, BH03, BH04
-    const routeOrder = ['HCM01', 'HCM02', 'HCM03', 'BH01', 'BH02', 'BH03', 'BH04'];
+    console.log('Dialog - Routes before sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
+
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, BH04
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -1474,11 +1768,18 @@ export class DangKyXeComponent implements OnInit {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    return routes;
+    console.log('Dialog - Routes after sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
+
+    // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với PDF export
+    const processedRoutes = await this.applyHCMOverflowLogicForDialog(routes);
+
+    console.log('Dialog - Final processed routes:', processedRoutes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
+
+    return processedRoutes;
   }
 
   /**
-   * Apply HCM grouping priority logic - distribute evenly among 3 HCM routes
+   * Apply HCM grouping priority logic - chỉ xử lý "tự túc" và "ngã 3 hãng dầu", còn lại giữ nguyên tuyến từ database
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Check if it's a self-transport case
@@ -1486,37 +1787,15 @@ export class DangKyXeComponent implements OnInit {
       return 'TỰ TÚC';
     }
     
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04
     if (this.isNga3HangDauStation(tramXe)) {
       return 'BH04';
     }
     
-    // Đặc biệt: Ngã 3 Long Bình Tân và Bà Chiểu ưu tiên vào HCM02
-    if (this.isHCM02PriorityStation(tramXe)) {
-      return 'HCM02';
-    }
-    
-    // Check if it's HCM route - distribute evenly among 3 routes
-    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
-      // Keep original route assignment for even distribution
-      return routeName;
-    }
-    
-    // Check if it's BH route
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
-      // Check if station is before or at "Hàng xanh"
-      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
-        // Group all into BH01
-        return 'BH01';
-      } else {
-        // Stations after "Hàng xanh" keep original route
-        return routeName;
-      }
-    }
-    
-    // Other routes don't change
+    // Giữ nguyên tuyến từ database mapping
     return routeName;
   }
+
 
   /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
@@ -1536,7 +1815,19 @@ export class DangKyXeComponent implements OnInit {
       'bà chiểu',
       'ba chieu',
       'bà chiểu',
-      'ba chieu'
+      'ba chieu',
+      'chợ gò vấp',
+      'cho go vap',
+      'chợ gò vấp',
+      'cho go vap',
+      'gò vấp',
+      'go vap',
+      'hóc môn',
+      'hoc mon',
+      'hóc môn (chùa hoằng pháp)',
+      'hoc mon (chua hoang phap)',
+      'chùa hoằng pháp',
+      'chua hoang phap'
     ];
     
     return hcm02PriorityStations.some(priorityStation => 
@@ -1642,6 +1933,31 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Export overtime report Excel with vehicle assignment data
+   */
+  private async exportOvertimeReportExcelWithVehicleAssignment(result: any): Promise<void> {
+    try {
+      // Pass vehicle assignment data to Excel export service
+      await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(result.routeAssignments);
+      
+      // Show success message
+      this.snackBar.open('File Excel đã được tạo thành công với thông tin phân công xe!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+
+    } catch (error) {
+      console.error('Error exporting overtime report Excel:', error);
+      this.snackBar.open('Có lỗi xảy ra khi tạo file Excel!', 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    }
+  }
+
+  /**
    * Export employee station PDF
    */
   async exportEmployeeStationPDF(): Promise<void> {
@@ -1683,6 +1999,37 @@ export class DangKyXeComponent implements OnInit {
     return this.authService.hasAnyRoleSync(['admin', 'super_admin']);
   }
 
+  /**
+   * Check if current user has super_admin role
+   */
+  hasSuperAdminRole(): boolean {
+    return this.authService.hasAnyRoleSync(['super_admin']);
+  }
+
+  /**
+   * Update displayed columns based on user role
+   */
+  updateDisplayedColumns(): void {
+    const baseColumns = [
+      'select',
+      'maNhanVien', 
+      'hoTen', 
+      'dienThoai', 
+      'ngayDangKy', 
+      'thoiGianBatDau', 
+      'tramXe',
+      'actions'
+    ];
+
+    if (this.hasSuperAdminRole()) {
+      // Insert maTuyenXe column before actions for super_admin
+      const maTuyenXeIndex = baseColumns.indexOf('actions');
+      baseColumns.splice(maTuyenXeIndex, 0, 'maTuyenXe');
+    }
+
+    this.displayedColumns = baseColumns;
+  }
+
   // ==================== STATION ASSIGNMENT PDF EXPORT METHODS ====================
 
   /**
@@ -1690,10 +2037,6 @@ export class DangKyXeComponent implements OnInit {
    */
   async openStationAssignmentDialog(): Promise<void> {
     try {
-      // Generate mock data for demonstration
-      // In real implementation, you would fetch this from Firebase
-      const mockStations = this.stationAssignmentPdfExportService.generateMockStations();
-      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
       
       // Get vehicles from Firebase or use mock data
       const vehicles = await this.getVehiclesForAssignment();
@@ -1712,9 +2055,9 @@ export class DangKyXeComponent implements OnInit {
         maxWidth: '95vw',
         height: '90vh',
         data: {
-          stations: mockStations,
+          stations: [],
           vehicles: vehicles,
-          drivers: mockDrivers
+          drivers: []
         }
       });
 
@@ -1813,5 +2156,689 @@ export class DangKyXeComponent implements OnInit {
         verticalPosition: 'top'
       });
     }
+  }
+
+  /**
+   * Áp dụng logic overflow HCM cho dialog để đảm bảo tính nhất quán với PDF export
+   */
+  private async applyHCMOverflowLogicForDialog(routes: any[]): Promise<any[]> {
+    console.log('Dialog - Applying HCM overflow logic with cache data');
+    
+    // Tính tổng nhân viên HCM
+    const hcmRoutes = routes.filter(route => 
+      route.routeName === 'HCM01' || route.routeName === 'HCM02'
+    );
+    
+    const totalHCMEmployees = hcmRoutes.reduce((sum, route) => 
+      sum + (route.registrations?.length || 0), 0
+    );
+    
+    console.log('Dialog - Total HCM employees:', totalHCMEmployees);
+    
+    // Kiểm tra nếu HCM02 vượt quá 15 nhân viên
+    const hcm02Route = hcmRoutes.find(route => route.routeName === 'HCM02');
+    const hcm02Count = hcm02Route?.registrations?.length || 0;
+    
+    if (hcm02Count > 15) {
+      console.log(`Dialog - HCM02 has ${hcm02Count} employees (exceeds 15), applying overflow logic...`);
+      return this.applyHCM02SpecificOverflowLogicForDialog(routes, hcmRoutes);
+    }
+    
+    // Gom tất cả nhân viên HCM và phân chia theo logic mới: HCM01 trước (đủ 15), sau đó HCM02, nếu dư thì chuyển sang BH
+    console.log('Dialog - Applying sequential HCM distribution logic...');
+    return this.distributeHCMSequentiallyForDialog(routes, hcmRoutes);
+    
+    console.log('Dialog - HCM employees > 30, applying overflow logic...');
+    
+    // Lấy tất cả nhân viên HCM
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+    
+    // Lấy danh sách trạm BH để so sánh
+    const bhStations = await this.getBHStationNamesForDialog();
+    console.log('Dialog - BH stations for matching:', bhStations);
+    
+    // Tính số nhân viên dư thừa
+    const maxHCMCapacity = 30; // 2 xe x 15 chỗ
+    const overflowCount = totalHCMEmployees - maxHCMCapacity;
+    console.log(`Dialog - HCM overflow: ${overflowCount} employees need to be reassigned to BH routes`);
+    
+    // Trường hợp đặc biệt: Nếu chỉ dư 1 nhân viên (31 tổng), tìm nhân viên có trạm trùng BH trước
+    if (overflowCount === 1) {
+      console.log('Dialog - Special case: Only 1 employee overflow, finding BH-matching employee first');
+      
+      // Tìm nhân viên có trạm trùng với BH
+      const bhMatchingEmployee = allHCMEmployees.find(employee => {
+        const stationName = this.normalizeStationName(employee.tramXe);
+        return bhStations.some(bhStation => 
+          this.normalizeStationName(bhStation) === stationName ||
+          stationName.includes(this.normalizeStationName(bhStation)) ||
+          this.normalizeStationName(bhStation).includes(stationName)
+        );
+      });
+      
+      if (bhMatchingEmployee) {
+        console.log(`Dialog - Found BH-matching employee: ${bhMatchingEmployee?.hoTen} at station ${bhMatchingEmployee?.tramXe}`);
+        
+        // Chuyển nhân viên này sang BH route
+        if (bhMatchingEmployee) {
+          const targetBHRoute = this.findBestBHRouteForEmployeeForDialog(bhMatchingEmployee!, routes);
+          if (targetBHRoute) {
+            const routeIndex = routes.findIndex(r => r.routeName === targetBHRoute);
+            if (routeIndex >= 0) {
+              if (!routes[routeIndex].registrations) {
+                routes[routeIndex].registrations = [];
+              }
+              routes[routeIndex].registrations.push(bhMatchingEmployee!);
+              console.log(`Dialog - Moved ${bhMatchingEmployee!.hoTen} to ${targetBHRoute}`);
+            }
+          }
+        }
+        
+        // Phân bổ 30 nhân viên còn lại cho HCM01 và HCM02 bằng logic phân chia đều
+        const remainingHCMEmployees = allHCMEmployees.filter(emp => emp !== bhMatchingEmployee);
+        const remainingHCMRoutes = hcmRoutes.map(route => ({
+          ...route,
+          registrations: route.registrations?.filter((emp: Registration) => emp !== bhMatchingEmployee) || []
+        }));
+        return this.distributeHCMEmployeesEvenlyForDialog(routes, remainingHCMRoutes);
+      } else {
+        console.log('Dialog - No BH-matching employee found, using general overflow logic');
+      }
+    }
+    
+    // Phân loại nhân viên HCM: trùng trạm BH vs không trùng trạm BH
+    const employeesMatchingBH: Registration[] = [];
+    const employeesNotMatchingBH: Registration[] = [];
+    
+    allHCMEmployees.forEach(employee => {
+      const stationName = this.normalizeStationName(employee.tramXe);
+      
+      // Kiểm tra xem trạm có khớp với trạm BH không
+      const matchingBHStation = bhStations.find(bhStation => 
+        this.normalizeStationName(bhStation) === stationName ||
+        stationName.includes(this.normalizeStationName(bhStation)) ||
+        this.normalizeStationName(bhStation).includes(stationName)
+      );
+      
+      if (matchingBHStation) {
+        console.log(`Dialog - Employee ${employee.hoTen} at station ${employee.tramXe} matches BH station ${matchingBHStation}`);
+        employeesMatchingBH.push(employee);
+      } else {
+        employeesNotMatchingBH.push(employee);
+      }
+    });
+    
+    console.log(`Dialog - Employees matching BH: ${employeesMatchingBH.length}, Not matching BH: ${employeesNotMatchingBH.length}`);
+    
+    // Chuyển nhân viên trùng trạm BH sang BH routes (ưu tiên chuyển đủ số dư thừa)
+    const employeesToMoveToBH = employeesMatchingBH.slice(0, overflowCount);
+    const remainingHCMEmployees = [
+      ...employeesNotMatchingBH,
+      ...employeesMatchingBH.slice(overflowCount)
+    ];
+    
+    console.log(`Dialog - Moving ${employeesToMoveToBH.length} employees to BH routes`);
+    console.log(`Dialog - Remaining HCM employees: ${remainingHCMEmployees.length}`);
+    
+    // Phân chia nhân viên HCM còn lại bằng logic phân chia đều
+    const remainingHCMRoutes = hcmRoutes.map(route => ({
+      ...route,
+      registrations: remainingHCMEmployees
+    }));
+    
+    const updatedRoutes = this.distributeHCMEmployeesEvenlyForDialog(routes, remainingHCMRoutes);
+    
+    // Chuyển nhân viên dư thừa vào BH routes
+    employeesToMoveToBH.forEach(employee => {
+      const targetBHRoute = this.findBestBHRouteForEmployeeForDialog(employee, updatedRoutes);
+      if (targetBHRoute) {
+        const routeIndex = updatedRoutes.findIndex(r => r.routeName === targetBHRoute);
+        if (routeIndex >= 0) {
+          if (!updatedRoutes[routeIndex].registrations) {
+            updatedRoutes[routeIndex].registrations = [];
+          }
+          updatedRoutes[routeIndex].registrations.push(employee);
+        }
+      }
+    });
+    
+    console.log('Dialog - Final route distribution after overflow logic:');
+    updatedRoutes.forEach(route => {
+      console.log(`${route.routeName}: ${route.registrations?.length || 0} employees`);
+    });
+    
+    return updatedRoutes;
+  }
+
+  /**
+   * Distribute HCM employees sequentially: HCM01 trước (đủ 15), sau đó HCM02, nếu dư thì chuyển sang BH
+   * Thứ tự trạm phải tồn tại trong tuyến dựa vào chiTietTuyenDuong
+   */
+  private async distributeHCMSequentiallyForDialog(routes: any[], hcmRoutes: any[]): Promise<any[]> {
+    console.log('Dialog - Applying sequential distribution logic for HCM routes...');
+    
+    // Gom tất cả nhân viên HCM
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+    
+    console.log(`Dialog - Total HCM employees to distribute: ${allHCMEmployees.length}`);
+    console.log(`Dialog - HCM employees details:`, allHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`));
+    
+    // Sắp xếp nhân viên theo thứ tự trạm trong tuyến từ chiTietTuyenDuong
+    const sortedHCMEmployees = await this.sortEmployeesByStationOrder(allHCMEmployees);
+    console.log(`Dialog - Sorted HCM employees by station order: ${sortedHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
+    
+    const hcm01Employees: Registration[] = [];
+    const hcm02Employees: Registration[] = [];
+    const maxEmployeesPerRoute = 15;
+    
+    console.log(`Dialog - Starting distribution with max ${maxEmployeesPerRoute} employees per route`);
+    
+    // Phân chia tuần tự: HCM01 trước (đủ 15), sau đó HCM02
+    for (let i = 0; i < sortedHCMEmployees.length; i++) {
+      const employee = sortedHCMEmployees[i];
+      
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+        console.log(`Dialog - Assigned ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
+      } else if (hcm02Employees.length < maxEmployeesPerRoute) {
+        hcm02Employees.push(employee);
+        console.log(`Dialog - HCM01 full, assigned ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
+      } else {
+        // Cả hai tuyến đều đủ, nhân viên còn lại sẽ được chuyển sang BH
+        console.log(`Dialog - Both HCM routes full, employee ${employee.hoTen} will be moved to BH route`);
+        break;
+      }
+    }
+    
+    console.log(`Dialog - Sequential distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
+    console.log(`Dialog - HCM01 employees:`, hcm01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`));
+    console.log(`Dialog - HCM02 employees:`, hcm02Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`));
+    
+    // Cập nhật routes
+    const updatedRoutes = [...routes];
+    const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
+    const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
+    
+    if (hcm01Index >= 0) {
+      updatedRoutes[hcm01Index].registrations = hcm01Employees;
+    }
+    if (hcm02Index >= 0) {
+      updatedRoutes[hcm02Index].registrations = hcm02Employees;
+    }
+    
+    // Chuyển nhân viên dư thừa sang tuyến BH theo trạm
+    const remainingEmployees = sortedHCMEmployees.slice(hcm01Employees.length + hcm02Employees.length);
+    console.log(`Dialog - Moving ${remainingEmployees.length} overflow employees to BH routes`);
+    
+    for (const employee of remainingEmployees) {
+      const bhRoute = await this.findBHRouteForStationForDialog(employee.tramXe || '');
+      if (bhRoute) {
+        const bhRouteIndex = updatedRoutes.findIndex(r => r.routeName === bhRoute);
+        if (bhRouteIndex >= 0) {
+          if (!updatedRoutes[bhRouteIndex].registrations) {
+            updatedRoutes[bhRouteIndex].registrations = [];
+          }
+          updatedRoutes[bhRouteIndex].registrations.push(employee);
+          console.log(`Dialog - Moved overflow employee ${employee.hoTen} from station "${employee.tramXe}" to ${bhRoute}`);
+        }
+      }
+    }
+    
+    return updatedRoutes;
+  }
+
+  /**
+   * Sắp xếp nhân viên theo thứ tự trạm trong tuyến từ cache
+   */
+  private async sortEmployeesByStationOrder(employees: Registration[]): Promise<Registration[]> {
+    try {
+      if (!this.dataCacheService.isDataLoaded()) {
+        console.warn('Dialog - Data cache not loaded, returning employees without sorting');
+        return employees;
+      }
+
+      // Sắp xếp nhân viên theo thứ tự trạm từ cache
+      const sortedEmployees = [...employees].sort((a, b) => {
+        const stationA = a.tramXe || '';
+        const stationB = b.tramXe || '';
+        
+        // Tìm thứ tự trạm từ cache
+        let orderA = 999;
+        let orderB = 999;
+        
+        // Tìm thứ tự trạm từ HCM01
+        const hcm01OrderA = this.dataCacheService.getStationOrderInRoute('HCM01', stationA);
+        const hcm01OrderB = this.dataCacheService.getStationOrderInRoute('HCM01', stationB);
+        if (hcm01OrderA !== null) orderA = hcm01OrderA;
+        if (hcm01OrderB !== null) orderB = hcm01OrderB;
+        
+        // Nếu không tìm thấy trong HCM01, tìm trong HCM02
+        if (orderA === 999 || orderB === 999) {
+          const hcm02OrderA = this.dataCacheService.getStationOrderInRoute('HCM02', stationA);
+          const hcm02OrderB = this.dataCacheService.getStationOrderInRoute('HCM02', stationB);
+          if (hcm02OrderA !== null && orderA === 999) orderA = hcm02OrderA;
+          if (hcm02OrderB !== null && orderB === 999) orderB = hcm02OrderB;
+        }
+        
+        // Sắp xếp theo thứ tự trạm
+        if (orderA !== orderB) {
+          return orderA - orderB;
+        }
+        
+        // Fallback: sắp xếp theo tên nhân viên
+        return a.hoTen.localeCompare(b.hoTen);
+      });
+
+      console.log(`Dialog - Sorted ${sortedEmployees.length} employees by station order`);
+      return sortedEmployees;
+      
+    } catch (error) {
+      console.error('Dialog - Error sorting employees by station order:', error);
+      return employees;
+    }
+  }
+  private async findBHRouteForStationForDialog(stationName: string): Promise<string> {
+    // Lấy tuyến từ cache
+    const actualRoute = this.dataCacheService.getRouteForStation(stationName);
+    if (actualRoute) {
+      console.log(`Dialog - Found route "${actualRoute}" for station "${stationName}" from cache`);
+      return actualRoute;
+    }
+
+    console.log(`Dialog - No matching route found for "${stationName}", defaulting to BH01`);
+    return 'BH01';
+  }
+
+  /**
+   * Phân chia đều nhân viên HCM giữa HCM01 và HCM02 không quan tâm mã tuyến ban đầu
+   */
+  private distributeHCMEmployeesEvenlyForDialog(routes: any[], hcmRoutes: any[]): any[] {
+    console.log('Dialog - Applying even distribution logic for HCM routes...');
+    
+    // Gom tất cả nhân viên HCM01 và HCM02 thành một danh sách chung
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+    
+    console.log(`Dialog - Total HCM employees to distribute: ${allHCMEmployees.length}`);
+    
+    // Khởi tạo danh sách nhân viên cho từng tuyến
+    const hcm01Employees: Registration[] = [];
+    const hcm02Employees: Registration[] = [];
+    
+    const maxEmployeesPerRoute = 15;
+    let currentRoute = 'HCM01'; // Bắt đầu với HCM01
+    
+    // Vòng lặp tuần tự gán nhân viên
+    for (let i = 0; i < allHCMEmployees.length; i++) {
+      const employee = allHCMEmployees[i];
+      
+      if (currentRoute === 'HCM01') {
+        if (hcm01Employees.length < maxEmployeesPerRoute) {
+          hcm01Employees.push(employee);
+          console.log(`Dialog - Assigned ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
+        } else {
+          // HCM01 đã đủ, chuyển sang HCM02
+          currentRoute = 'HCM02';
+          hcm02Employees.push(employee);
+          console.log(`Dialog - HCM01 full, assigned ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
+        }
+      } else if (currentRoute === 'HCM02') {
+        if (hcm02Employees.length < maxEmployeesPerRoute) {
+          hcm02Employees.push(employee);
+          console.log(`Dialog - Assigned ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
+        } else {
+          // Cả hai tuyến đều đủ, nhân viên còn lại sẽ được xử lý bởi overflow logic
+          console.log(`Dialog - Both HCM routes full, employee ${employee.hoTen} will be handled by overflow logic`);
+          break;
+        }
+      }
+    }
+    
+    console.log(`Dialog - Even distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
+    
+    // Cập nhật routes
+    const updatedRoutes = [...routes];
+    
+    // Cập nhật HCM01 và HCM02
+    const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
+    const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
+    
+    if (hcm01Index >= 0) {
+      updatedRoutes[hcm01Index].registrations = hcm01Employees;
+    }
+    if (hcm02Index >= 0) {
+      updatedRoutes[hcm02Index].registrations = hcm02Employees;
+    }
+    
+    return updatedRoutes;
+  }
+
+  /**
+   * Áp dụng logic overflow cụ thể cho HCM02 khi vượt quá 15 nhân viên (cho dialog)
+   */
+  private async applyHCM02SpecificOverflowLogicForDialog(routes: any[], hcmRoutes: any[]): Promise<any[]> {
+    console.log('Dialog - Applying HCM02 specific overflow logic...');
+    
+    // Lấy tất cả nhân viên HCM
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+    
+    console.log(`Dialog - Total HCM employees: ${allHCMEmployees.length}`);
+    
+    // Tính số nhân viên dư thừa
+    const maxHCMCapacity = 30; // 2 xe x 15 chỗ
+    const overflowCount = allHCMEmployees.length - maxHCMCapacity;
+    console.log(`Dialog - HCM02 overflow: ${overflowCount} employees need to be reassigned to BH routes`);
+    
+    // Lấy danh sách trạm BH để so sánh
+    const bhStations = await this.getBHStationNamesForDialog();
+    console.log('Dialog - BH stations for matching:', bhStations);
+    
+    // Phân loại nhân viên HCM: trùng trạm BH vs không trùng trạm BH
+    const employeesMatchingBH: Registration[] = [];
+    const employeesNotMatchingBH: Registration[] = [];
+    
+    allHCMEmployees.forEach(employee => {
+      const stationName = this.normalizeStationName(employee.tramXe);
+      
+      // Kiểm tra xem trạm có khớp với trạm BH không
+      const matchingBHStation = bhStations.find(bhStation => 
+        this.normalizeStationName(bhStation) === stationName ||
+        stationName.includes(this.normalizeStationName(bhStation)) ||
+        this.normalizeStationName(bhStation).includes(stationName)
+      );
+      
+      if (matchingBHStation) {
+        console.log(`Dialog - Employee ${employee.hoTen} at station ${employee.tramXe} matches BH station ${matchingBHStation}`);
+        employeesMatchingBH.push(employee);
+      } else {
+        employeesNotMatchingBH.push(employee);
+      }
+    });
+    
+    console.log(`Dialog - Employees matching BH: ${employeesMatchingBH.length}, Not matching BH: ${employeesNotMatchingBH.length}`);
+    
+    // Chuyển nhân viên trùng trạm BH sang BH routes (ưu tiên chuyển đủ số dư thừa)
+    const employeesToMoveToBH = employeesMatchingBH.slice(0, overflowCount);
+    const remainingHCMEmployees = [
+      ...employeesNotMatchingBH,
+      ...employeesMatchingBH.slice(overflowCount)
+    ];
+    
+    console.log(`Dialog - Moving ${employeesToMoveToBH.length} employees to BH routes`);
+    console.log(`Dialog - Remaining HCM employees: ${remainingHCMEmployees.length}`);
+    
+    // Phân chia nhân viên HCM còn lại bằng logic phân chia đều
+    const remainingHCMRoutes = hcmRoutes.map(route => ({
+      ...route,
+      registrations: remainingHCMEmployees
+    }));
+    
+    const updatedRoutes = this.distributeHCMEmployeesEvenlyForDialog(routes, remainingHCMRoutes);
+    
+    // Chuyển nhân viên dư thừa vào BH routes
+    employeesToMoveToBH.forEach(employee => {
+      const targetBHRoute = this.findBestBHRouteForEmployeeForDialog(employee, updatedRoutes);
+      if (targetBHRoute) {
+        const routeIndex = updatedRoutes.findIndex(r => r.routeName === targetBHRoute);
+        if (routeIndex >= 0) {
+          if (!updatedRoutes[routeIndex].registrations) {
+            updatedRoutes[routeIndex].registrations = [];
+          }
+          updatedRoutes[routeIndex].registrations.push(employee);
+        }
+      }
+    });
+    
+    console.log('Dialog - Final route distribution after HCM02 overflow logic:');
+    updatedRoutes.forEach(route => {
+      console.log(`${route.routeName}: ${route.registrations?.length || 0} employees`);
+    });
+    
+    return updatedRoutes;
+  }
+
+  /**
+   * Chia đều nhân viên HCM cho HCM01 và HCM02 khi tổng < 30 (cho dialog)
+   */
+  private distributeHCMEvenlyForDialog(routes: any[], hcmRoutes: any[]): any[] {
+    console.log('Dialog - Using new even distribution logic for HCM routes...');
+    return this.distributeHCMEmployeesEvenlyForDialog(routes, hcmRoutes);
+  }
+
+  /**
+   * Lấy danh sách tên trạm của các tuyến BH (cho dialog)
+   */
+  private async getBHStationNamesForDialog(): Promise<string[]> {
+    try {
+      const routeDetails = await this.routeDetailService.getRouteDetails().toPromise();
+      const bhStations = routeDetails
+        ?.filter((detail: any) => detail.maTuyenXe.startsWith('BH'))
+        ?.map((detail: any) => detail.tenDiemDon) || [];
+      
+      return [...new Set(bhStations)]; // Loại bỏ trùng lặp
+    } catch (error) {
+      console.error('Dialog - Error getting BH station names:', error);
+      return [];
+    }
+  }
+
+  /**
+   * Tìm tuyến BH tốt nhất cho nhân viên (cho dialog)
+   */
+  private findBestBHRouteForEmployeeForDialog(employee: Registration, routes: any[]): string | null {
+    const stationName = this.normalizeStationName(employee.tramXe);
+    const stationLower = employee.tramXe.toLowerCase();
+    
+    // Ưu tiên BH03/BH04 cho các trạm cụ thể từ HCM02 overflow
+    const stationsForBH03BH04 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
+    const shouldUseBH03BH04 = stationsForBH03BH04.some(station => 
+      stationLower.includes(station) || station.includes(stationLower)
+    );
+    
+    if (shouldUseBH03BH04) {
+      // Phân biệt cụ thể: Ngã 3 Bến Gỗ → BH03, Ngã 3 Long Bình Tân → BH04
+      if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
+        const routeExists = routes.some(r => r.routeName === 'BH03');
+        if (routeExists) {
+          console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to BH03`);
+          return 'BH03';
+        }
+      }
+      
+      if (stationLower.includes('ngã 3 long bình tân') || stationLower.includes('nga 3 long binh tan')) {
+        const routeExists = routes.some(r => r.routeName === 'BH04');
+        if (routeExists) {
+          console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to BH04`);
+          return 'BH04';
+        }
+      }
+      
+      // Fallback: Ưu tiên BH03 trước, sau đó BH04
+      const preferredBHRoutes = ['BH03', 'BH04'];
+      for (const bhRoute of preferredBHRoutes) {
+        const routeExists = routes.some(r => r.routeName === bhRoute);
+        if (routeExists) {
+          console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to ${bhRoute} (fallback)`);
+          return bhRoute;
+        }
+      }
+    }
+    
+    // Ưu tiên BH01, BH02, BH03, BH04 theo thứ tự cho các trạm khác
+    const bhRoutes = ['BH01', 'BH02', 'BH03', 'BH04'];
+    
+    for (const bhRoute of bhRoutes) {
+      const routeExists = routes.some(r => r.routeName === bhRoute);
+      if (routeExists) {
+        console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to ${bhRoute}`);
+        return bhRoute;
+      }
+    }
+    
+    console.log(`Dialog - No BH route found, using BH01 as fallback for ${employee.hoTen}`);
+    return 'BH01'; // Fallback
+  }
+
+  /**
+   * Kiểm tra trạm thuộc về tuyến nào dựa trên dữ liệu từ Firebase (cho dialog)
+   */
+  private async getStationRouteMappingForDialog(): Promise<Map<string, string>> {
+    const stationRouteMap = new Map<string, string>();
+    
+    try {
+      // Import RouteDetailService để lấy dữ liệu từ Firebase
+      const { RouteDetailService } = await import('../../services/route-detail.service');
+      const routeDetailService = new RouteDetailService();
+      
+      // Lấy tất cả route details
+      const routeDetails = await routeDetailService.getRouteDetails().toPromise();
+      
+      if (routeDetails) {
+        routeDetails.forEach((detail: any) => {
+          const normalizedStation = this.normalizeStationName(detail.tenDiemDon);
+          stationRouteMap.set(normalizedStation, detail.maTuyenXe);
+          // Cũng lưu tên gốc để đảm bảo matching
+          stationRouteMap.set(detail.tenDiemDon.toLowerCase(), detail.maTuyenXe);
+        });
+      }
+      
+      console.log('Dialog - Station-Route mapping loaded:', Array.from(stationRouteMap.entries()));
+      
+      // Log một số mapping quan trọng để kiểm tra
+      const importantStations = ['đinh tiên hoàng-đbp', 'bv hòa hảo', 'ngã 3 bến gỗ', 'ngã 3 long bình tân'];
+      importantStations.forEach(station => {
+        const route = stationRouteMap.get(station) || stationRouteMap.get(this.normalizeStationName(station));
+        console.log(`Dialog - Important station "${station}" mapped to route: ${route || 'NOT FOUND'}`);
+      });
+      
+    } catch (error) {
+      console.error('Dialog - Error loading station-route mapping from Firebase:', error);
+      console.error('Dialog - This may cause incorrect station assignments. Please check Firebase connection.');
+    }
+    
+    return stationRouteMap;
+  }
+
+  /**
+   * Phân bổ 30 nhân viên HCM còn lại cho HCM01 và HCM02 (cho dialog)
+   */
+  private async distributeRemainingHCMEmployeesForDialog(hcmEmployees: Registration[], routes: any[]): Promise<any[]> {
+    console.log('Dialog - Distributing remaining HCM employees:', hcmEmployees.length);
+    
+    const targetEmployeesPerHCMRoute = 15;
+    
+    // Sử dụng service đã load dữ liệu Firebase
+    console.log('Dialog - Using pre-loaded Firebase data for station-route mapping');
+    
+    // Phân loại nhân viên theo tuyến thực tế và trạm ưu tiên HCM02
+    const hcm01Employees: Registration[] = [];
+    const hcm02PriorityEmployees: Registration[] = [];
+    const otherHCMEmployees: Registration[] = [];
+    
+    // Lấy danh sách trạm chính thức của HCM01 và HCM02 từ cache
+    const officialHCM01Stations = this.dataCacheService.getStationsForRoute('HCM01');
+    const officialHCM02Stations = this.dataCacheService.getStationsForRoute('HCM02');
+    
+    hcmEmployees.forEach(employee => {
+      // Sử dụng cache để lấy route cho trạm
+      const actualRoute = this.dataCacheService.getRouteForStation(employee.tramXe);
+      
+      console.log(`Dialog - Processing employee ${employee.hoTen} at station "${employee.tramXe}"`);
+      console.log(`Dialog - Cache mapping result: ${actualRoute || 'NOT FOUND IN CACHE'}`);
+      
+      // CHỈ DỰA VÀO CACHE DATA - KHÔNG HARDCODE
+      if (actualRoute === 'HCM01' && officialHCM01Stations.includes(employee.tramXe)) {
+        // Trạm thuộc HCM01 và có trong danh sách chính thức cache
+        hcm01Employees.push(employee);
+        console.log(`Dialog - ✅ Station "${employee.tramXe}" belongs to HCM01 (Cache confirmed), keeping in HCM01`);
+      } else if (actualRoute === 'HCM02' && officialHCM02Stations.includes(employee.tramXe)) {
+        // Trạm thuộc HCM02 và có trong danh sách chính thức cache
+        hcm02PriorityEmployees.push(employee);
+        console.log(`Dialog - ✅ Station "${employee.tramXe}" belongs to HCM02 (Cache confirmed), assigning to HCM02`);
+      } else {
+        // Trạm không thuộc HCM01 hoặc HCM02 chính thức - phân bổ linh hoạt
+        otherHCMEmployees.push(employee);
+        console.log(`Dialog - ⚠️ Station "${employee.tramXe}" NOT in official cache lists, flexible assignment`);
+        console.log(`Dialog - ⚠️ Cache HCM01 stations: ${officialHCM01Stations.join(', ')}`);
+        console.log(`Dialog - ⚠️ Cache HCM02 stations: ${officialHCM02Stations.join(', ')}`);
+      }
+    });
+    
+    console.log(`Dialog - HCM01 employees: ${hcm01Employees.length}`);
+    console.log(`Dialog - HCM02 priority employees: ${hcm02PriorityEmployees.length}`);
+    console.log(`Dialog - Other HCM employees: ${otherHCMEmployees.length}`);
+    
+    // Phân bổ cho HCM01: CHỈ lấy từ hcm01Employees (Firebase confirmed)
+    let finalHCM01Employees = [...hcm01Employees];
+    
+    // Phân bổ cho HCM02: CHỈ lấy từ hcm02PriorityEmployees (Firebase confirmed)
+    let finalHCM02Employees = [...hcm02PriorityEmployees];
+    
+    // Các trạm không thuộc Firebase sẽ được phân bổ vào tuyến khác (KHÔNG vào HCM01/HCM02)
+    console.log(`Dialog - ⚠️ ${otherHCMEmployees.length} employees from non-Firebase stations will be assigned to other routes`);
+    otherHCMEmployees.forEach(emp => {
+      console.log(`Dialog - ⚠️ Employee "${emp.hoTen}" at station "${emp.tramXe}" - NOT assigned to HCM01/HCM02 (not in Firebase)`);
+    });
+    
+    // Đảm bảo không vượt quá 15 nhân viên mỗi tuyến
+    if (finalHCM01Employees.length > targetEmployeesPerHCMRoute) {
+      console.log(`Dialog - ⚠️ HCM01 has ${finalHCM01Employees.length} employees, limiting to ${targetEmployeesPerHCMRoute}`);
+      finalHCM01Employees = finalHCM01Employees.slice(0, targetEmployeesPerHCMRoute);
+    }
+    
+    if (finalHCM02Employees.length > targetEmployeesPerHCMRoute) {
+      console.log(`Dialog - ⚠️ HCM02 has ${finalHCM02Employees.length} employees, limiting to ${targetEmployeesPerHCMRoute}`);
+      finalHCM02Employees = finalHCM02Employees.slice(0, targetEmployeesPerHCMRoute);
+    }
+    
+    console.log(`Dialog - Final distribution: HCM01=${finalHCM01Employees.length}, HCM02=${finalHCM02Employees.length}`);
+    
+    // Cập nhật routes
+    const updatedRoutes = [...routes];
+    
+    // Sắp xếp nhân viên theo thứ tự trạm từ cache
+    console.log('Dialog - Sorting employees by station order from cache...');
+    const sortedHCM01Employees = await this.sortEmployeesByStationOrder(finalHCM01Employees);
+    const sortedHCM02Employees = await this.sortEmployeesByStationOrder(finalHCM02Employees);
+    
+    console.log('Dialog - HCM01 employees after sorting:', sortedHCM01Employees.map((emp: Registration) => `${emp.hoTen} - ${emp.tramXe}`));
+    console.log('Dialog - HCM02 employees after sorting:', sortedHCM02Employees.map((emp: Registration) => `${emp.hoTen} - ${emp.tramXe}`));
+    
+    // Cập nhật HCM01 và HCM02
+    const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
+    const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
+    
+    if (hcm01Index >= 0) {
+      updatedRoutes[hcm01Index].registrations = sortedHCM01Employees;
+    }
+    if (hcm02Index >= 0) {
+      updatedRoutes[hcm02Index].registrations = sortedHCM02Employees;
+    }
+    
+    
+    console.log('Dialog - Final distribution result:');
+    console.log(`HCM01: ${sortedHCM01Employees.length} employees`);
+    console.log(`HCM02: ${sortedHCM02Employees.length} employees`);
+    
+    return updatedRoutes;
   }
 }

@@ -205,7 +205,7 @@ export class EmployeeAllocationService {
 
   /**
    * Áp dụng logic ưu tiên gom HCM và BH routes
-   * HCM01, HCM02, HCM03 được chia đều (không gom vào HCM01)
+   * HCM01, HCM02 được chia đều (không gom vào HCM01)
    * Tất cả nhân viên BH01, BH02, BH03 đều được gom vào BH01 trước
    * Các trạm sau "Hàng xanh" sẽ được gom theo cách hiện tại
    */
@@ -226,7 +226,7 @@ export class EmployeeAllocationService {
     }
     
     // Kiểm tra nếu là tuyến HCM - chia đều thành 3 tuyến
-    if (routeName === 'HCM01' || routeName === 'HCM02' || routeName === 'HCM03') {
+    if (routeName === 'HCM01' || routeName === 'HCM02') {
       // Giữ nguyên tuyến gốc để chia đều
       return routeName;
     }
@@ -265,7 +265,19 @@ export class EmployeeAllocationService {
       'bà chiểu',
       'ba chieu',
       'bà chiểu',
-      'ba chieu'
+      'ba chieu',
+      'chợ gò vấp',
+      'cho go vap',
+      'chợ gò vấp',
+      'cho go vap',
+      'gò vấp',
+      'go vap',
+      'hóc môn',
+      'hoc mon',
+      'hóc môn (chùa hoằng pháp)',
+      'hoc mon (chua hoang phap)',
+      'chùa hoằng pháp',
+      'chua hoang phap'
     ];
     
     return hcm02PriorityStations.some(priorityStation => 

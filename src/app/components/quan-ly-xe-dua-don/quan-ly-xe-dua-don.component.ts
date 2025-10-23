@@ -475,8 +475,6 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     try {
       // Generate mock data for demonstration
       // In real implementation, you would fetch this from Firebase
-      const mockStations = this.stationAssignmentPdfExportService.generateMockStations();
-      const mockDrivers = this.stationAssignmentPdfExportService.generateMockDrivers();
       const vehicles = this.dataSource.data;
 
       if (vehicles.length === 0) {
@@ -493,9 +491,9 @@ export class QuanLyXeDuaDonComponent implements OnInit {
         maxWidth: '95vw',
         height: '90vh',
         data: {
-          stations: mockStations,
+          stations: [],
           vehicles: vehicles,
-          drivers: mockDrivers
+          drivers: []
         }
       });
 

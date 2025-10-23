@@ -69,6 +69,49 @@
   width: 100%;
 }
 
+.vehicle-select .mat-mdc-form-field-infix {
+  display: flex;
+  align-items: center;
+  min-height: auto;
+  padding: 0;
+}
+
+.vehicle-select .mat-mdc-text-field-wrapper {
+  padding: 0;
+}
+
+.license-plate-input {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+}
+
+.prefix-label {
+  font-weight: 500;
+  color: #333;
+  font-size: 16px;
+  user-select: none;
+  pointer-events: none;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.license-plate-input input {
+  flex: 1;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  height: 100%;
+  border: none;
+  outline: none;
+  background: transparent;
+  font-size: 16px;
+  line-height: 1.5;
+}
+
 .assignment-controls {
   display: contents;
 }

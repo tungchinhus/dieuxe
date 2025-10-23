@@ -20,14 +20,13 @@
         <div class="assignment-controls">
           <mat-form-field appearance="outline" class="vehicle-select">
             <mat-label>Chọn xe</mat-label>
-            <mat-select 
-              [value]="assignment.assignedVehicle.vehicleId"
-              (selectionChange)="onVehicleChange(assignment.routeId, $event.value)">
-              <mat-option value="">-- Chọn xe --</mat-option>
-              <mat-option *ngFor="let vehicle of getVehicleOptionsForRoute(assignment.routeId)" [value]="vehicle.MaXe">
-                {{ vehicle.BienSoXe }} - {{ vehicle.LoaiXe }}
-              </mat-option>
-            </mat-select>
+            <div class="license-plate-input">
+              <span *ngIf="getVehiclePrefix(assignment.employeeCount)" class="prefix-label">{{ getVehiclePrefix(assignment.employeeCount) }}</span>
+              <input matInput 
+                     [value]="getLicensePlateNumber(assignment)"
+                     (input)="onLicensePlateNumberChange(assignment.routeId, $event.target.value)"
+                     placeholder="Nhập biển số xe">
+            </div>
           </mat-form-field>
 
           <div class="driver-info">
