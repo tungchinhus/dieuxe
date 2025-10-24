@@ -1779,7 +1779,9 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
-   * Apply HCM grouping priority logic - chỉ xử lý "tự túc" và "ngã 3 hãng dầu", còn lại giữ nguyên tuyến từ database
+   * Apply HCM grouping priority logic - Updated based on image data
+   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Check if it's a self-transport case
@@ -1792,13 +1794,44 @@ export class DangKyXeComponent implements OnInit {
       return 'BH04';
     }
     
+    // Kiểm tra nếu là trạm ưu tiên cho HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
+      return 'HCM02';
+    }
+    
+    // Kiểm tra nếu là trạm ưu tiên cho HCM01
+    if (this.isHCM01PriorityStation(tramXe)) {
+      return 'HCM01';
+    }
+    
     // Giữ nguyên tuyến từ database mapping
     return routeName;
   }
 
 
   /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
+   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   */
+  private isHCM01PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm01PriorityStations = [
+      'đinh tiên hoàng', 'dinh tien hoang',
+      'hai bà trưng', 'hai ba trung',
+      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'
+    ];
+    
+    return hcm01PriorityStations.some(priorityStation =>
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   * Cập nhật theo hình ảnh: HCM02 bao gồm Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private isHCM02PriorityStation(station: string): boolean {
     if (!station) return false;
@@ -1806,28 +1839,11 @@ export class DangKyXeComponent implements OnInit {
     const stationLower = station.toLowerCase();
     
     const hcm02PriorityStations = [
-      'ngã 3 long bình tân',
-      'nga 3 long binh tan',
-      'ngã 3 long bình tân',
-      'nga 3 long binh tan',
-      'long bình tân',
-      'long binh tan',
-      'bà chiểu',
-      'ba chieu',
-      'bà chiểu',
-      'ba chieu',
-      'chợ gò vấp',
-      'cho go vap',
-      'chợ gò vấp',
-      'cho go vap',
-      'gò vấp',
-      'go vap',
-      'hóc môn',
-      'hoc mon',
-      'hóc môn (chùa hoằng pháp)',
-      'hoc mon (chua hoang phap)',
-      'chùa hoằng pháp',
-      'chua hoang phap'
+      'bà chiểu', 'ba chieu',
+      'chợ gò vấp', 'cho go vap', 'gò vấp', 'go vap',
+      'hóc môn', 'hoc mon',
+      'chùa hoằng pháp', 'chua hoang phap',
+      'trường lý tự trọng', 'truong ly tu trong'
     ];
     
     return hcm02PriorityStations.some(priorityStation => 

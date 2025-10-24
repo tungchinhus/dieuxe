@@ -77,7 +77,7 @@
             <mat-icon>table_chart</mat-icon>
             <span>Phiếu báo làm thêm giờ (Excel)</span>
           </button>
-          <button mat-menu-item (click)="openStationAssignmentDialog()">
+          <button mat-menu-item (click)="openStationAssignmentDialog()" [disabled]="true">
             <mat-icon>assignment</mat-icon>
             <span>Phân công tài xế và xe</span>
           </button>

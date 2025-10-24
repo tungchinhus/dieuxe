@@ -443,10 +443,9 @@ export class PdfExportEmployeeStationService {
 
   /**
    * Áp dụng logic ưu tiên gom HCM và BH routes
-   * - < 30 nhân viên HCM: chia đều cho HCM01, HCM02
-   * - >= 30 nhân viên HCM: ưu tiên nhân viên không trùng trạm BH
-   * - Đảm bảo đủ 2 xe 16 chỗ (15 nhân viên) cho HCM01, HCM02
-   * - Phần dư còn lại sắp qua tuyến Biên Hòa
+   * Cập nhật theo hình ảnh: HCM01 và HCM02 có các trạm cụ thể
+   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private async applyHCMGroupingPriority(routeName: string, tramXe: string): Promise<string> {
     // Kiểm tra nếu là trường hợp "tự túc"
@@ -459,21 +458,14 @@ export class PdfExportEmployeeStationService {
       return 'BH04';
     }
     
-    // CHỈ DỰA VÀO FIREBASE DATA - KHÔNG HARDCODE
-    // Load Firebase mapping data first
-    await this.stationRouteMappingService.loadStationRouteMapping();
-    
-    // Lấy danh sách trạm chính thức từ Firebase
-    const officialHCM01Stations = this.stationRouteMappingService.getOfficialStationsForRoute('HCM01');
-    const officialHCM02Stations = this.stationRouteMappingService.getOfficialStationsForRoute('HCM02');
-    
-    // Kiểm tra Firebase mapping
-    const actualRoute = this.stationRouteMappingService.getRouteForStation(tramXe);
-    
-    if (actualRoute === 'HCM01' && officialHCM01Stations.includes(tramXe)) {
-      return 'HCM01';
-    } else if (actualRoute === 'HCM02' && officialHCM02Stations.includes(tramXe)) {
+    // Kiểm tra nếu là trạm ưu tiên cho HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
       return 'HCM02';
+    }
+    
+    // Kiểm tra nếu là trạm ưu tiên cho HCM01
+    if (this.isHCM01PriorityStation(tramXe)) {
+      return 'HCM01';
     }
     
     // Kiểm tra nếu là tuyến HCM
@@ -499,8 +491,24 @@ export class PdfExportEmployeeStationService {
   }
 
   /**
-   * Kiểm tra xem trạm xe có phải là trạm trước hoặc tại "Hàng xanh" không
+   * Kiểm tra xem trạm có phải là Thủ Đức không
    */
+  private isThuDucStation(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    const thuDucStations = [
+      'thủ đức',
+      'thu duc',
+      'ngã 4 thủ đức',
+      'nga 4 thu duc'
+    ];
+    
+    return thuDucStations.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
+  }
   private isStationBeforeOrAtHangXanh(tramXe: string): boolean {
     if (!tramXe) return false;
     
@@ -526,8 +534,7 @@ export class PdfExportEmployeeStationService {
   /**
    * Áp dụng logic overflow cho HCM dựa trên số lượng nhân viên:
    * - Số lượng < 30: Chia đều cho HCM01 và HCM02
-   * - Số lượng ≥ 30: Lấy ra nhân viên có trạm ghép vào các trạm Biên Hòa từ DB
-   * - Nguyên tắc: Dựa vào trạm nhân viên đăng ký → tìm tuyến xe có trạm giống
+   * - Số lượng ≥ 30: Ưu tiên tách số dư từ trạm Thủ Đức và lấy trạm gần để tối ưu chi phí
    */
   private async applyHCMOverflowLogic(employees: NhanVien[], routeDetails: RouteDetail[]): Promise<NhanVien[]> {
     // Lọc nhân viên HCM
@@ -547,14 +554,186 @@ export class PdfExportEmployeeStationService {
       return await this.distributeHCMEvenly(employees, hcmEmployees);
     }
     
-    // Nếu số lượng ≥ 30: Ghép trạm HCM vào trạm Biên Hòa từ DB
-    console.log('HCM employees >= 30, applying station matching logic with BH routes from DB...');
-    return await this.applyHCMStationMatchingLogic(employees, hcmEmployees, routeDetails);
+    // Nếu số lượng ≥ 30: Áp dụng logic overflow với ưu tiên Thủ Đức
+    console.log('HCM employees >= 30, applying overflow logic with Thủ Đức priority...');
+    return await this.applyHCMOverflowWithThuDucPriority(employees, hcmEmployees, routeDetails);
   }
 
   /**
-   * Áp dụng logic ghép trạm HCM vào trạm Biên Hòa từ DB
+   * Áp dụng logic overflow HCM với ưu tiên tách số dư từ trạm Thủ Đức
+   * Cập nhật: Thủ Đức dư thừa sẽ đi taxi thay vì phân bổ vào tuyến BH
    */
+  private async applyHCMOverflowWithThuDucPriority(allEmployees: NhanVien[], hcmEmployees: NhanVien[], routeDetails: RouteDetail[]): Promise<NhanVien[]> {
+    console.log('Applying HCM overflow logic with Thủ Đức priority (taxi for overflow)...');
+    
+    const totalHCMEmployees = hcmEmployees.length;
+    const maxCapacityPerRoute = 15; // Xe 16 chỗ, 15 nhân viên
+    const maxTotalCapacity = maxCapacityPerRoute * 2; // 2 tuyến HCM
+    const overflowCount = totalHCMEmployees - maxTotalCapacity;
+
+    console.log(`Total HCM employees: ${totalHCMEmployees}, Max capacity: ${maxTotalCapacity}, Overflow: ${overflowCount}`);
+
+    if (overflowCount <= 0) {
+      return await this.distributeHCMEvenly(allEmployees, hcmEmployees);
+    }
+
+    // Phân loại nhân viên theo trạm
+    const thuDucEmployees: NhanVien[] = [];
+    const otherEmployees: NhanVien[] = [];
+
+    hcmEmployees.forEach(emp => {
+      if (this.isThuDucStation(emp.TramXe || '')) {
+        thuDucEmployees.push(emp);
+      } else {
+        otherEmployees.push(emp);
+      }
+    });
+
+    console.log(`Thủ Đức employees: ${thuDucEmployees.length}, Other employees: ${otherEmployees.length}`);
+
+    // Ưu tiên tách số dư từ trạm Thủ Đức trước - đi taxi
+    let employeesToMoveToTaxi: NhanVien[] = [];
+    let employeesToMoveToBH: NhanVien[] = [];
+    
+    if (thuDucEmployees.length >= overflowCount) {
+      // Đủ nhân viên Thủ Đức để tách - tất cả đi taxi
+      employeesToMoveToTaxi = thuDucEmployees.slice(0, overflowCount);
+      console.log(`Moving ${overflowCount} Thủ Đức employees to TAXI`);
+    } else {
+      // Tách tất cả nhân viên Thủ Đức đi taxi + một số nhân viên khác đi BH
+      employeesToMoveToTaxi = [...thuDucEmployees];
+      const remainingToMove = overflowCount - thuDucEmployees.length;
+      
+      // Ưu tiên các trạm gần để tối ưu chi phí cho BH routes
+      const sortedOtherEmployees = this.sortEmployeesByCostOptimization(otherEmployees);
+      employeesToMoveToBH = sortedOtherEmployees.slice(0, remainingToMove);
+      
+      console.log(`Moving ${thuDucEmployees.length} Thủ Đức to TAXI + ${remainingToMove} other employees to BH routes`);
+    }
+
+    // Chuyển nhân viên Thủ Đức sang taxi
+    const taxiEmployees = employeesToMoveToTaxi.map(emp => ({
+      ...emp,
+      MaTuyenXe: 'TAXI'
+    }));
+
+    // Chuyển nhân viên khác sang tuyến BH gần nhất
+    const bhEmployees = await this.moveEmployeesToNearestBHRoute(employeesToMoveToBH);
+    
+    // Cập nhật danh sách nhân viên
+    const updatedEmployees = allEmployees.map(emp => {
+      // Kiểm tra nếu nhân viên được chuyển sang taxi
+      const taxiEmp = taxiEmployees.find(taxi => 
+        taxi.HoTen === emp.HoTen && taxi.TramXe === emp.TramXe
+      );
+      
+      if (taxiEmp) {
+        return taxiEmp;
+      }
+      
+      // Kiểm tra nếu nhân viên được chuyển sang BH
+      const bhEmp = bhEmployees.find(bh => 
+        bh.HoTen === emp.HoTen && bh.TramXe === emp.TramXe
+      );
+      
+      if (bhEmp) {
+        return bhEmp;
+      }
+      
+      return emp;
+    });
+
+    return updatedEmployees;
+  }
+
+  /**
+   * Sắp xếp nhân viên theo tối ưu chi phí (trạm gần nhất)
+   */
+  private sortEmployeesByCostOptimization(employees: NhanVien[]): NhanVien[] {
+    // Thứ tự ưu tiên từ gần đến xa (theo chi phí vận chuyển)
+    const costOptimizationOrder = [
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân', 
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh',
+      'bà chiểu',
+      'chợ gò vấp',
+      'hóc môn',
+      'đinh tiên hoàng',
+      'hai bà trưng',
+      'bv hòa hảo',
+      'trường lý tự trọng'
+    ];
+
+    return employees.sort((a, b) => {
+      const stationA = (a.TramXe || '').toLowerCase();
+      const stationB = (b.TramXe || '').toLowerCase();
+      
+      const indexA = costOptimizationOrder.findIndex(order => 
+        stationA.includes(order) || order.includes(stationA)
+      );
+      const indexB = costOptimizationOrder.findIndex(order => 
+        stationB.includes(order) || order.includes(stationB)
+      );
+      
+      // Nếu không tìm thấy trong danh sách, đặt cuối
+      const finalIndexA = indexA === -1 ? 999 : indexA;
+      const finalIndexB = indexB === -1 ? 999 : indexB;
+      
+      return finalIndexA - finalIndexB;
+    });
+  }
+
+  /**
+   * Chuyển nhân viên sang tuyến BH gần nhất
+   */
+  private async moveEmployeesToNearestBHRoute(employees: NhanVien[]): Promise<NhanVien[]> {
+    return employees.map(emp => {
+      // Tìm tuyến BH có trạm gần nhất với trạm của nhân viên
+      const nearestBHRoute = this.findNearestBHRoute(emp.TramXe || '');
+      
+      return {
+        ...emp,
+        MaTuyenXe: nearestBHRoute
+      };
+    });
+  }
+
+  /**
+   * Tìm tuyến BH gần nhất với trạm của nhân viên
+   */
+  private findNearestBHRoute(station: string): string {
+    if (!station) return 'BH01';
+
+    const stationLower = station.toLowerCase();
+    
+    // Mapping trạm HCM sang tuyến BH gần nhất
+    const stationToBHRouteMapping: { [key: string]: string } = {
+      'ngã 3 bến gỗ': 'BH03',
+      'ngã 3 long bình tân': 'BH03', 
+      'rmk': 'BH01',
+      'ngã 3 cát lái': 'BH01',
+      'hàng xanh': 'BH01',
+      'bà chiểu': 'BH02',
+      'chợ gò vấp': 'BH02',
+      'hóc môn': 'BH02',
+      'đinh tiên hoàng': 'BH01',
+      'hai bà trưng': 'BH01',
+      'bv hòa hảo': 'BH01',
+      'trường lý tự trọng': 'BH02'
+    };
+
+    // Tìm mapping phù hợp
+    for (const [stationPattern, bhRoute] of Object.entries(stationToBHRouteMapping)) {
+      if (stationLower.includes(stationPattern) || stationPattern.includes(stationLower)) {
+        return bhRoute;
+      }
+    }
+
+    // Mặc định trả về BH01 nếu không tìm thấy
+    return 'BH01';
+  }
   private async applyHCMStationMatchingLogic(
     allEmployees: NhanVien[], 
     hcmEmployees: NhanVien[], 
@@ -685,7 +864,28 @@ export class PdfExportEmployeeStationService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
+   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   */
+  private isHCM01PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm01PriorityStations = [
+      'đinh tiên hoàng', 'dinh tien hoang',
+      'hai bà trưng', 'hai ba trung',
+      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'
+    ];
+    
+    return hcm01PriorityStations.some(priorityStation =>
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   * Cập nhật theo hình ảnh: HCM02 bao gồm Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private isHCM02PriorityStation(station: string): boolean {
     if (!station) return false;
@@ -693,11 +893,11 @@ export class PdfExportEmployeeStationService {
     const stationLower = station.toLowerCase();
     
     const hcm02PriorityStations = [
-      'ngã 3 long bình tân', 'nga 3 long binh tan',
       'bà chiểu', 'ba chieu',
-      'chợ gò vấp', 'cho go vap',
+      'chợ gò vấp', 'cho go vap', 'gò vấp', 'go vap',
       'hóc môn', 'hoc mon',
-      'chùa hoằng pháp', 'chua hoang phap'
+      'chùa hoằng pháp', 'chua hoang phap',
+      'trường lý tự trọng', 'truong ly tu trong'
     ];
     
     return hcm02PriorityStations.some(priorityStation =>

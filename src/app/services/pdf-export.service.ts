@@ -242,21 +242,29 @@ export class PdfExportService {
 
   /**
    * Gom nhóm theo tuyến với thông tin xe được phân công
+   * Enhanced version with improved route assignment and sorting
    */
   private async groupRegistrationsByRouteWithVehicleAssignments(registrations: Registration[], vehicleAssignments: RouteVehicleAssignment[]): Promise<RouteInfo[]> {
     const routeMap = new Map<string, RouteInfo>();
 
+    // Ensure data cache is loaded
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
+    }
+
     for (const registration of registrations) {
       let finalRouteName = 'Chưa phân tuyến';
       
-      // Map từ tramXe sử dụng cache
+      // Enhanced route assignment based on station column
       if (registration.tramXe && registration.tramXe.trim() !== '') {
         const mappedRoute = this.dataCacheService.getRouteForStation(registration.tramXe);
         if (mappedRoute) {
           finalRouteName = mappedRoute;
           console.log(`PDF Export - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}"`);
         } else {
-          console.warn(`PDF Export - No route mapping found for station "${registration.tramXe}"`);
+          // Fallback: try to determine route from station name patterns
+          finalRouteName = this.determineRouteFromStationName(registration.tramXe);
+          console.log(`PDF Export - Fallback mapping for employee ${registration.hoTen} from station "${registration.tramXe}" to route "${finalRouteName}"`);
         }
       }
       
@@ -273,7 +281,7 @@ export class PdfExportService {
           registrations: [],
           driverInfo: undefined
         };
-
+        
         // Cập nhật thông tin xe và tài xế từ vehicle assignment
         if (vehicleAssignment && vehicleAssignment.assignedVehicle.vehicleId) {
           // Lấy thông tin xe chi tiết từ Firebase để có tên tài xế và số điện thoại
@@ -341,26 +349,37 @@ export class PdfExportService {
     // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với Excel export
     const processedRoutes = await this.applyHCMOverflowLogicForPDF(routes);
 
-    return processedRoutes;
+    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa
+    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+
+    return finalRoutes;
   }
 
   /**
    * Gom nhóm theo tuyến dựa trên mã tuyến xe
+   * Enhanced version with improved route assignment
    */
   private async groupRegistrationsByRoute(registrations: Registration[]): Promise<RouteInfo[]> {
     const routeMap = new Map<string, RouteInfo>();
 
+    // Ensure data cache is loaded
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
+    }
+
     for (const reg of registrations) {
       let finalRouteName = 'Chưa phân tuyến';
       
-      // Map từ tramXe sử dụng cache
+      // Enhanced route assignment based on station column
       if (reg.tramXe && reg.tramXe.trim() !== '') {
         const mappedRoute = this.dataCacheService.getRouteForStation(reg.tramXe);
         if (mappedRoute) {
           finalRouteName = mappedRoute;
           console.log(`PDF Export - Mapped employee ${reg.hoTen} from station "${reg.tramXe}" to route "${mappedRoute}"`);
         } else {
-          console.warn(`PDF Export - No route mapping found for station "${reg.tramXe}"`);
+          // Fallback: try to determine route from station name patterns
+          finalRouteName = this.determineRouteFromStationName(reg.tramXe);
+          console.log(`PDF Export - Fallback mapping for employee ${reg.hoTen} from station "${reg.tramXe}" to route "${finalRouteName}"`);
         }
       }
 
@@ -413,7 +432,10 @@ export class PdfExportService {
     // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với Excel export
     const processedRoutes = await this.applyHCMOverflowLogicForPDF(routes);
 
-    return processedRoutes;
+    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa
+    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+
+    return finalRoutes;
   }
 
 
@@ -430,12 +452,29 @@ export class PdfExportService {
    * - Thủ Đức: nếu chỉ có vài người thì cho đi taxi
    */
   /**
-   * Apply HCM grouping priority logic - distribute evenly among HCM routes
+   * Apply HCM grouping priority logic - Updated based on image data
+   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Nếu là "tự túc", giữ nguyên
     if (tramXe && tramXe.toLowerCase().includes('tự túc')) {
       return 'TỰ TÚC';
+    }
+
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH04';
+    }
+
+    // Kiểm tra nếu là trạm ưu tiên cho HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
+      return 'HCM02';
+    }
+
+    // Kiểm tra nếu là trạm ưu tiên cho HCM01
+    if (this.isHCM01PriorityStation(tramXe)) {
+      return 'HCM01';
     }
 
     // Nếu không phải HCM route, giữ nguyên
@@ -449,6 +488,7 @@ export class PdfExportService {
 
   /**
    * Apply HCM overflow logic for PDF export
+   * Cập nhật: Ưu tiên tách số dư từ trạm Thủ Đức và lấy trạm gần để tối ưu chi phí
    */
   private async applyHCMOverflowLogicForPDF(routes: RouteInfo[]): Promise<RouteInfo[]> {
     const hcmRoutes = routes.filter(route => route.routeName.startsWith('HCM'));
@@ -465,14 +505,218 @@ export class PdfExportService {
       return await this.distributeHCMEvenlyForPDF(routes, hcmRoutes);
     }
 
-    // Nếu tổng số nhân viên HCM > 30, áp dụng logic overflow
-    return routes; // TODO: Implement overflow logic if needed
+    // Nếu tổng số nhân viên HCM > 30, áp dụng logic overflow với ưu tiên Thủ Đức
+    return await this.applyHCMOverflowWithThuDucPriority(routes, hcmRoutes);
   }
 
   /**
-   * Distribute HCM employees evenly for PDF export - theo thứ tự trạm từ chiTietTuyenDuong
-   * Chuyển nhân viên từ các trạm đặc biệt từ HCM02 lên HCM01 và bù lại số lượng tương đồng
+   * Áp dụng logic overflow HCM với ưu tiên tách số dư từ trạm Thủ Đức
+   * Cập nhật: Thủ Đức dư thừa sẽ đi taxi thay vì phân bổ vào tuyến BH
    */
+  private async applyHCMOverflowWithThuDucPriority(routes: RouteInfo[], hcmRoutes: RouteInfo[]): Promise<RouteInfo[]> {
+    console.log('PDF Export - Applying HCM overflow logic with Thủ Đức priority (taxi for overflow)...');
+    
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(route => {
+      if (route.registrations) {
+        allHCMEmployees.push(...route.registrations);
+      }
+    });
+
+    const totalHCMEmployees = allHCMEmployees.length;
+    const maxCapacityPerRoute = 15; // Xe 16 chỗ, 15 nhân viên
+    const maxTotalCapacity = maxCapacityPerRoute * 2; // 2 tuyến HCM
+    const overflowCount = totalHCMEmployees - maxTotalCapacity;
+
+    console.log(`Total HCM employees: ${totalHCMEmployees}, Max capacity: ${maxTotalCapacity}, Overflow: ${overflowCount}`);
+
+    if (overflowCount <= 0) {
+      return await this.distributeHCMEvenlyForPDF(routes, hcmRoutes);
+    }
+
+    // Phân loại nhân viên theo trạm
+    const thuDucEmployees: Registration[] = [];
+    const otherEmployees: Registration[] = [];
+
+    allHCMEmployees.forEach(emp => {
+      if (this.isThuDucStation(emp.tramXe)) {
+        thuDucEmployees.push(emp);
+      } else {
+        otherEmployees.push(emp);
+      }
+    });
+
+    console.log(`Thủ Đức employees: ${thuDucEmployees.length}, Other employees: ${otherEmployees.length}`);
+
+    // Ưu tiên tách số dư từ trạm Thủ Đức trước - đi taxi
+    let employeesToMoveToTaxi: Registration[] = [];
+    let employeesToMoveToBH: Registration[] = [];
+    
+    if (thuDucEmployees.length >= overflowCount) {
+      // Đủ nhân viên Thủ Đức để tách - tất cả đi taxi
+      employeesToMoveToTaxi = thuDucEmployees.slice(0, overflowCount);
+      console.log(`Moving ${overflowCount} Thủ Đức employees to TAXI`);
+    } else {
+      // Tách tất cả nhân viên Thủ Đức đi taxi + một số nhân viên khác đi BH
+      employeesToMoveToTaxi = [...thuDucEmployees];
+      const remainingToMove = overflowCount - thuDucEmployees.length;
+      
+      // Ưu tiên các trạm gần để tối ưu chi phí cho BH routes
+      const sortedOtherEmployees = this.sortEmployeesByCostOptimization(otherEmployees);
+      employeesToMoveToBH = sortedOtherEmployees.slice(0, remainingToMove);
+      
+      console.log(`Moving ${thuDucEmployees.length} Thủ Đức to TAXI + ${remainingToMove} other employees to BH routes`);
+    }
+
+    // Chuyển nhân viên Thủ Đức sang taxi
+    const taxiEmployees = employeesToMoveToTaxi.map(emp => ({
+      ...emp,
+      maTuyenXe: 'TAXI'
+    }));
+
+    // Chuyển nhân viên khác sang tuyến BH gần nhất
+    const bhEmployees = await this.moveEmployeesToNearestBHRoute(employeesToMoveToBH);
+    
+    // Cập nhật routes
+    const updatedRoutes = routes.map(route => {
+      if (route.routeName.startsWith('HCM')) {
+        const updatedRegistrations = route.registrations?.filter(reg => 
+          !taxiEmployees.some(taxi => taxi.hoTen === reg.hoTen && taxi.tramXe === reg.tramXe) &&
+          !bhEmployees.some(bh => bh.hoTen === reg.hoTen && bh.tramXe === reg.tramXe)
+        ) || [];
+        
+        return {
+          ...route,
+          registrations: updatedRegistrations
+        };
+      }
+      return route;
+    });
+
+    // Thêm nhân viên taxi
+    if (taxiEmployees.length > 0) {
+      updatedRoutes.push({
+        routeName: 'TAXI',
+        vehicleType: 'Taxi',
+        registrations: taxiEmployees,
+        driverInfo: undefined
+      });
+    }
+
+    // Thêm nhân viên đã chuyển vào tuyến BH tương ứng
+    bhEmployees.forEach(emp => {
+      const targetRoute = emp.maTuyenXe || 'BH01';
+      const existingRoute = updatedRoutes.find(r => r.routeName === targetRoute);
+      
+      if (existingRoute) {
+        existingRoute.registrations = existingRoute.registrations || [];
+        existingRoute.registrations.push(emp);
+      } else {
+        updatedRoutes.push({
+          routeName: targetRoute,
+          vehicleType: '16chỗ',
+          registrations: [emp],
+          driverInfo: undefined
+        });
+      }
+    });
+
+    return updatedRoutes;
+  }
+
+  /**
+   * Sắp xếp nhân viên theo tối ưu chi phí (trạm gần nhất)
+   */
+  private sortEmployeesByCostOptimization(employees: Registration[]): Registration[] {
+    // Thứ tự ưu tiên từ gần đến xa (theo chi phí vận chuyển)
+    const costOptimizationOrder = [
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân', 
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh',
+      'bà chiểu',
+      'chợ gò vấp',
+      'hóc môn',
+      'đinh tiên hoàng',
+      'hai bà trưng',
+      'bv hòa hảo',
+      'trường lý tự trọng'
+    ];
+
+    return employees.sort((a, b) => {
+      const stationA = a.tramXe?.toLowerCase() || '';
+      const stationB = b.tramXe?.toLowerCase() || '';
+      
+      const indexA = costOptimizationOrder.findIndex(order => 
+        stationA.includes(order) || order.includes(stationA)
+      );
+      const indexB = costOptimizationOrder.findIndex(order => 
+        stationB.includes(order) || order.includes(stationB)
+      );
+      
+      // Nếu không tìm thấy trong danh sách, đặt cuối
+      const finalIndexA = indexA === -1 ? 999 : indexA;
+      const finalIndexB = indexB === -1 ? 999 : indexB;
+      
+      return finalIndexA - finalIndexB;
+    });
+  }
+
+  /**
+   * Chuyển nhân viên sang tuyến BH gần nhất
+   */
+  private async moveEmployeesToNearestBHRoute(employees: Registration[]): Promise<Registration[]> {
+    // Load Firebase mapping data để tìm tuyến BH phù hợp
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
+    }
+
+    return employees.map(emp => {
+      // Tìm tuyến BH có trạm gần nhất với trạm của nhân viên
+      const nearestBHRoute = this.findNearestBHRoute(emp.tramXe);
+      
+      return {
+        ...emp,
+        MaTuyenXe: nearestBHRoute
+      };
+    });
+  }
+
+  /**
+   * Tìm tuyến BH gần nhất với trạm của nhân viên
+   */
+  private findNearestBHRoute(station: string): string {
+    if (!station) return 'BH01';
+
+    const stationLower = station.toLowerCase();
+    
+    // Mapping trạm HCM sang tuyến BH gần nhất
+    const stationToBHRouteMapping: { [key: string]: string } = {
+      'ngã 3 bến gỗ': 'BH03',
+      'ngã 3 long bình tân': 'BH03', 
+      'rmk': 'BH01',
+      'ngã 3 cát lái': 'BH01',
+      'hàng xanh': 'BH01',
+      'bà chiểu': 'BH02',
+      'chợ gò vấp': 'BH02',
+      'hóc môn': 'BH02',
+      'đinh tiên hoàng': 'BH01',
+      'hai bà trưng': 'BH01',
+      'bv hòa hảo': 'BH01',
+      'trường lý tự trọng': 'BH02'
+    };
+
+    // Tìm mapping phù hợp
+    for (const [stationPattern, bhRoute] of Object.entries(stationToBHRouteMapping)) {
+      if (stationLower.includes(stationPattern) || stationPattern.includes(stationLower)) {
+        return bhRoute;
+      }
+    }
+
+    // Mặc định trả về BH01 nếu không tìm thấy
+    return 'BH01';
+  }
   private async distributeHCMEvenlyForPDF(routes: RouteInfo[], hcmRoutes: RouteInfo[]): Promise<RouteInfo[]> {
     console.log('PDF Export - Applying even distribution logic for HCM routes with specific station transfers...');
     const allHCMEmployees: Registration[] = [];
@@ -488,7 +732,6 @@ export class PdfExportService {
     console.log(`PDF Export - Sorted HCM employees by station order: ${sortedHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
     
     // Phân loại nhân viên theo trạm để xử lý chuyển đổi
-    const hcm01TargetStations = ['đinh tiên hoàng-đbp', 'hai bà trưng-đbp', 'bv hòa hảo'];
     const employeesToMoveToHCM01: Registration[] = [];
     const employeesToMoveToHCM02: Registration[] = [];
     const otherEmployees: Registration[] = [];
@@ -515,18 +758,26 @@ export class PdfExportService {
     const hcm02Employees: Registration[] = [];
     const maxEmployeesPerRoute = 15;
     
-    // Bước 1: Thêm nhân viên từ các trạm đặc biệt vào HCM01
-    console.log(`PDF Export - Step 1: Adding target station employees to HCM01`);
-    for (const employee of employeesToMoveToHCM01) {
+    // Bước 1: Thêm nhân viên từ các trạm đặc biệt vào HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 1: Adding target station employees to HCM01 in correct order`);
+    
+    // Sắp xếp lại nhân viên từ trạm đặc biệt theo thứ tự từ database
+    const sortedTargetEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM01);
+    
+    for (const employee of sortedTargetEmployees) {
       if (hcm01Employees.length < maxEmployeesPerRoute) {
         hcm01Employees.push(employee);
         console.log(`PDF Export - Added ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
       }
     }
     
-    // Bước 2: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01
-    console.log(`PDF Export - Step 2: Adding shared station employees to HCM01 to reach 15`);
-    for (const employee of employeesToMoveToHCM02) {
+    // Bước 2: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 2: Adding shared station employees to HCM01 to reach 15 in correct order`);
+    
+    // Sắp xếp lại nhân viên từ trạm chung theo thứ tự từ database
+    const sortedSharedEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
+    
+    for (const employee of sortedSharedEmployees) {
       if (hcm01Employees.length < maxEmployeesPerRoute) {
         hcm01Employees.push(employee);
         console.log(`PDF Export - Added shared station employee ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
@@ -535,9 +786,13 @@ export class PdfExportService {
       }
     }
     
-    // Bước 3: Thêm nhân viên khác để đủ 15 người cho HCM01
-    console.log(`PDF Export - Step 3: Adding other employees to HCM01 to reach 15`);
-    for (const employee of otherEmployees) {
+    // Bước 3: Thêm nhân viên khác để đủ 15 người cho HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 3: Adding other employees to HCM01 to reach 15 in correct order`);
+    
+    // Sắp xếp lại nhân viên khác theo thứ tự từ database
+    const sortedOtherEmployees = await this.sortEmployeesByStationOrder(otherEmployees);
+    
+    for (const employee of sortedOtherEmployees) {
       if (hcm01Employees.length < maxEmployeesPerRoute) {
         hcm01Employees.push(employee);
         console.log(`PDF Export - Added other employee ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
@@ -546,11 +801,14 @@ export class PdfExportService {
       }
     }
     
-    // Bước 4: Phân chia nhân viên còn lại cho HCM02
-    console.log(`PDF Export - Step 4: Distributing remaining employees to HCM02`);
-    const remainingEmployees = [...employeesToMoveToHCM02, ...otherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
+    // Bước 4: Phân chia nhân viên còn lại cho HCM02 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 4: Distributing remaining employees to HCM02 in correct order`);
+    const remainingEmployees = [...sortedSharedEmployees, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
     
-    for (const employee of remainingEmployees) {
+    // Sắp xếp lại nhân viên còn lại theo thứ tự từ database
+    const sortedRemainingEmployees = await this.sortEmployeesByStationOrder(remainingEmployees);
+    
+    for (const employee of sortedRemainingEmployees) {
       if (hcm02Employees.length < maxEmployeesPerRoute) {
         hcm02Employees.push(employee);
         console.log(`PDF Export - Added remaining employee ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
@@ -562,18 +820,21 @@ export class PdfExportService {
     
     console.log(`PDF Export - Final distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
     console.log(`PDF Export - Moved ${employeesToMoveToHCM01.length} employees from target stations to HCM01`);
+    
+    // Log thứ tự cuối cùng của HCM01 để kiểm tra
+    console.log(`PDF Export - HCM01 final order:`, hcm01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
 
     const updatedRoutes = [...routes];
     const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
     const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
-
+    
     if (hcm01Index >= 0) {
       updatedRoutes[hcm01Index].registrations = hcm01Employees;
     }
     if (hcm02Index >= 0) {
       updatedRoutes[hcm02Index].registrations = hcm02Employees;
     }
-
+    
     return updatedRoutes;
   }
 
@@ -630,15 +891,399 @@ export class PdfExportService {
     );
   }
 
+  /**
+   * Áp dụng logic phân chia cho các tuyến Biên Hòa dựa trên trạm thực tế từ database
+   */
+  private async applyBHDistributionLogic(routes: RouteInfo[]): Promise<RouteInfo[]> {
+    console.log('PDF Export - Applying BH distribution logic based on actual stations...');
+    
+    const bhRoutes = routes.filter(route => route.routeName.startsWith('BH'));
+    
+    if (bhRoutes.length === 0) {
+      console.log('PDF Export - No BH routes found, skipping BH distribution');
+      return routes;
+    }
+
+    console.log(`PDF Export - Found ${bhRoutes.length} BH routes: ${bhRoutes.map(r => r.routeName).join(', ')}`);
+
+    // Gom tất cả nhân viên BH
+    const allBHEmployees: Registration[] = [];
+    bhRoutes.forEach(route => {
+      if (route.registrations) {
+        allBHEmployees.push(...route.registrations);
+      }
+    });
+
+    console.log(`PDF Export - Total BH employees to distribute: ${allBHEmployees.length}`);
+
+    if (allBHEmployees.length === 0) {
+      console.log('PDF Export - No BH employees found, skipping BH distribution');
+      return routes;
+    }
+
+    // Sắp xếp nhân viên BH theo thứ tự trạm từ database để đảm bảo thứ tự đúng
+    const sortedBHEmployees = await this.sortEmployeesByStationOrder(allBHEmployees);
+    console.log(`PDF Export - Sorted BH employees by station order: ${sortedBHEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
+
+    // Phân chia nhân viên BH dựa trên trạm thực tế và thứ tự từ database
+    const bh01Employees: Registration[] = [];
+    const bh02Employees: Registration[] = [];
+    const bh03Employees: Registration[] = [];
+    const bh04Employees: Registration[] = [];
+    
+    const maxEmployeesBH01 = 45; // BH01 ưu tiên cho xe 45 chỗ
+    const maxEmployeesOtherBH = 15; // BH02, BH03, BH04 cho xe 16 chỗ
+
+    console.log(`PDF Export - BH01 priority: max ${maxEmployeesBH01} employees for 45-seat vehicle`);
+    console.log(`PDF Export - Other BH routes: max ${maxEmployeesOtherBH} employees for 16-seat vehicles`);
+
+    // Phân chia nhân viên với ưu tiên tất cả trạm BH01 vào xe 45 chỗ
+    // Bước 1: Ưu tiên TẤT CẢ nhân viên có trạm thuộc BH01 vào xe 45 chỗ
+    console.log(`PDF Export - Step 1: Prioritizing ALL employees from BH01 stations for 45-seat vehicle`);
+    
+    // Đếm số nhân viên có trạm thuộc BH01
+    const bh01StationEmployees = sortedBHEmployees.filter(employee => {
+      const station = employee.tramXe?.toLowerCase() || '';
+      const assignedRoute = this.getBHRouteForStation(station);
+      return assignedRoute === 'BH01';
+    });
+    
+    console.log(`PDF Export - Found ${bh01StationEmployees.length} employees from BH01 stations`);
+    
+    // Ưu tiên tất cả nhân viên từ trạm BH01 vào xe 45 chỗ
+    for (const employee of bh01StationEmployees) {
+      if (bh01Employees.length < maxEmployeesBH01) {
+        bh01Employees.push(employee);
+        console.log(`PDF Export - Added BH01 station employee ${employee.hoTen} from "${employee.tramXe}" to BH01 (45-seat vehicle) (${bh01Employees.length}/${maxEmployeesBH01})`);
+      } else {
+        console.log(`PDF Export - BH01 45-seat vehicle full, but BH01 station employee ${employee.hoTen} should still be in BH01`);
+        // Vẫn gán vào BH01 ngay cả khi đã đủ 45 người để đảm bảo nhân viên từ trạm BH01 không bị chuyển sang tuyến khác
+        bh01Employees.push(employee);
+      }
+    }
+    
+    // Bước 2: Nếu BH01 chưa đủ 45 người, bù thêm nhân viên từ trạm khác
+    console.log(`PDF Export - Step 2: Filling remaining BH01 capacity with other employees to maximize 45-seat vehicle usage`);
+    const remainingCapacity = maxEmployeesBH01 - bh01StationEmployees.length;
+    console.log(`PDF Export - BH01 has ${remainingCapacity} remaining capacity after BH01 station employees`);
+    
+    if (remainingCapacity > 0) {
+      for (const employee of sortedBHEmployees) {
+        const station = employee.tramXe?.toLowerCase() || '';
+        const assignedRoute = this.getBHRouteForStation(station);
+        
+        // Bỏ qua nhân viên đã được gán vào BH01
+        if (bh01Employees.includes(employee)) {
+          continue;
+        }
+        
+        // Nếu BH01 chưa đủ và nhân viên không thuộc BH01 cụ thể, ưu tiên thêm vào BH01
+        if (bh01Employees.length < maxEmployeesBH01 && assignedRoute !== 'BH01') {
+          bh01Employees.push(employee);
+          console.log(`PDF Export - Added non-BH01 employee ${employee.hoTen} to BH01 (filling capacity for 45-seat vehicle) (${bh01Employees.length}/${maxEmployeesBH01})`);
+        }
+      }
+    }
+    
+    // Bước 3: Phân chia nhân viên còn lại cho các tuyến BH khác
+    console.log(`PDF Export - Step 3: Distributing remaining employees to other BH routes`);
+    for (const employee of sortedBHEmployees) {
+      const station = employee.tramXe?.toLowerCase() || '';
+      const assignedRoute = this.getBHRouteForStation(station);
+      
+      // Bỏ qua nhân viên đã được gán vào BH01
+      if (bh01Employees.includes(employee)) {
+        continue;
+      }
+      
+      console.log(`PDF Export - Employee ${employee.hoTen} at station "${employee.tramXe}" assigned to ${assignedRoute}`);
+      
+      switch (assignedRoute) {
+        case 'BH02':
+          if (bh02Employees.length < maxEmployeesOtherBH) {
+            bh02Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH02 (${bh02Employees.length}/${maxEmployeesOtherBH})`);
+        } else {
+            console.log(`PDF Export - BH02 full, ${employee.hoTen} will be handled by overflow logic`);
+          }
+          break;
+        case 'BH03':
+          if (bh03Employees.length < maxEmployeesOtherBH) {
+            bh03Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH03 (${bh03Employees.length}/${maxEmployeesOtherBH})`);
+        } else {
+            console.log(`PDF Export - BH03 full, ${employee.hoTen} will be handled by overflow logic`);
+          }
+          break;
+        case 'BH04':
+          if (bh04Employees.length < maxEmployeesOtherBH) {
+            bh04Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH04 (${bh04Employees.length}/${maxEmployeesOtherBH})`);
+          } else {
+            console.log(`PDF Export - BH04 full, ${employee.hoTen} will be handled by overflow logic`);
+          }
+          break;
+        default:
+          // Nếu không xác định được tuyến cụ thể, ưu tiên BH01 trước, sau đó BH02
+          if (bh01Employees.length < maxEmployeesBH01) {
+            bh01Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH01 (default priority) (${bh01Employees.length}/${maxEmployeesBH01})`);
+          } else if (bh02Employees.length < maxEmployeesOtherBH) {
+            bh02Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH02 (default fallback) (${bh02Employees.length}/${maxEmployeesOtherBH})`);
+          } else {
+            console.log(`PDF Export - All BH routes full, ${employee.hoTen} will be handled by overflow logic`);
+          }
+          break;
+      }
+    }
+
+    console.log(`PDF Export - BH distribution result: BH01=${bh01Employees.length}, BH02=${bh02Employees.length}, BH03=${bh03Employees.length}, BH04=${bh04Employees.length}`);
+
+    // Sắp xếp lại nhân viên trong từng tuyến BH theo đúng thứ tự trạm từ database
+    console.log(`PDF Export - Sorting employees within each BH route by database order...`);
+    
+    const sortedBH01Employees = await this.sortEmployeesByStationOrder(bh01Employees);
+    const sortedBH02Employees = await this.sortEmployeesByStationOrder(bh02Employees);
+    const sortedBH03Employees = await this.sortEmployeesByStationOrder(bh03Employees);
+    const sortedBH04Employees = await this.sortEmployeesByStationOrder(bh04Employees);
+    
+    console.log(`PDF Export - BH01 sorted order:`, sortedBH01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
+    console.log(`PDF Export - BH02 sorted order:`, sortedBH02Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
+    console.log(`PDF Export - BH03 sorted order:`, sortedBH03Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
+    console.log(`PDF Export - BH04 sorted order:`, sortedBH04Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
+    
+    // Cập nhật routes
+    const updatedRoutes = [...routes];
+    
+    // Cập nhật từng tuyến BH với nhân viên đã sắp xếp theo thứ tự database
+    const bh01Index = updatedRoutes.findIndex(r => r.routeName === 'BH01');
+    const bh02Index = updatedRoutes.findIndex(r => r.routeName === 'BH02');
+    const bh03Index = updatedRoutes.findIndex(r => r.routeName === 'BH03');
+    const bh04Index = updatedRoutes.findIndex(r => r.routeName === 'BH04');
+
+    if (bh01Index >= 0) {
+      updatedRoutes[bh01Index].registrations = sortedBH01Employees;
+    }
+    if (bh02Index >= 0) {
+      updatedRoutes[bh02Index].registrations = sortedBH02Employees;
+    }
+    if (bh03Index >= 0) {
+      updatedRoutes[bh03Index].registrations = sortedBH03Employees;
+    }
+    if (bh04Index >= 0) {
+      updatedRoutes[bh04Index].registrations = sortedBH04Employees;
+    }
+
+    return updatedRoutes;
+  }
+
+  /**
+   * Xác định tuyến BH phù hợp cho trạm dựa trên danh sách trạm tuyến xe chính xác
+   * Xử lý các trạm thuộc nhiều tuyến với logic ưu tiên
+   */
+  private getBHRouteForStation(station: string): string {
+    if (!station) return 'BH01'; // Default fallback
+    
+    const stationLower = station.toLowerCase();
+    
+    // Ưu tiên sử dụng DataCacheService để lấy tuyến chính xác từ database
+    const actualRoute = this.dataCacheService.getRouteForStation(station);
+    if (actualRoute && actualRoute.startsWith('BH')) {
+      console.log(`PDF Export - Found route "${actualRoute}" for station "${station}" from database cache`);
+      
+      // Xử lý các trạm đặc biệt thuộc nhiều tuyến
+      const specialRoute = this.handleSpecialMultiRouteStations(station, actualRoute);
+      if (specialRoute) {
+        console.log(`PDF Export - Special handling: Station "${station}" redirected from ${actualRoute} to ${specialRoute}`);
+        return specialRoute;
+      }
+      
+      return actualRoute;
+    }
+    
+    // Fallback mapping cho các trạm không có trong cache
+    return this.getFallbackBHRoute(station);
+  }
+
+  /**
+   * Xử lý các trạm đặc biệt thuộc nhiều tuyến
+   */
+  private handleSpecialMultiRouteStations(station: string, currentRoute: string): string | null {
+    const stationLower = station.toLowerCase();
+    
+    // Ngã 3 Bến Gỗ: thuộc BH03, BH04, HCM01, HCM02
+    if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
+      // Ưu tiên BH03 trước, sau đó BH04
+      if (currentRoute === 'BH01' || currentRoute === 'BH02') {
+        console.log(`PDF Export - "Ngã 3 Bến Gỗ" should not be in ${currentRoute}, redirecting to BH03`);
+        return 'BH03';
+      }
+      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
+      return null;
+    }
+    
+    // Ngã 4 Vũng Tàu (Ajinomoto): thuộc BH03, BH04
+    if (stationLower.includes('ngã 4 vũng tàu') || stationLower.includes('nga 4 vung tau')) {
+      if (currentRoute === 'BH01' || currentRoute === 'BH02') {
+        console.log(`PDF Export - "Ngã 4 Vũng Tàu" should not be in ${currentRoute}, redirecting to BH03`);
+        return 'BH03';
+      }
+      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
+      return null;
+    }
+    
+    // Ngã 3 hãng dầu: thuộc BH04
+    if (stationLower.includes('ngã 3 hãng dầu') || stationLower.includes('nga 3 hang dau')) {
+      if (currentRoute !== 'BH04') {
+        console.log(`PDF Export - "Ngã 3 hãng dầu" should be in BH04, redirecting from ${currentRoute}`);
+        return 'BH04';
+      }
+      return null;
+    }
+    
+    // Ngã 3 An Bình: thuộc BH03
+    if (stationLower.includes('ngã 3 an bình') || stationLower.includes('nga 3 an binh')) {
+      if (currentRoute !== 'BH03') {
+        console.log(`PDF Export - "Ngã 3 An Bình" should be in BH03, redirecting from ${currentRoute}`);
+        return 'BH03';
+      }
+      return null;
+    }
+    
+    return null;
+  }
+
+  /**
+   * Fallback mapping cho các trạm không có trong cache
+   */
+  private getFallbackBHRoute(station: string): string {
+    const stationLower = station.toLowerCase();
+    
+    // BH01 stations (ưu tiên cho xe 45 chỗ) - chỉ các trạm chắc chắn thuộc BH01
+    const bh01Stations = [
+      'phước tân (cây xăng toàn dung)',
+      'phuoc tan (cay xang toan dung)',
+      'cổng 11 (cây xăng thành thái thịnh)',
+      'cong 11 (cay xang thanh thai thinh)',
+      'công viên tam hiệp',
+      'cong vien tam hiep',
+      'bv đồng nai',
+      'bv dong nai',
+      'bệnh viện đồng nai',
+      'benh vien dong nai',
+      'nhà trẻ hoa sen',
+      'nha tre hoa sen',
+      'bv tâm hồng phước',
+      'bv tam hong phuoc',
+      'bệnh viện tâm hồng phước',
+      'benh vien tam hong phuoc',
+      'giáo xứ lộc lâm',
+      'giao xu loc lam',
+      'giáo xứ đại lộ',
+      'giao xu dai lo'
+    ];
+    
+    // BH02 stations - chỉ các trạm chắc chắn thuộc BH02
+    const bh02Stations = [
+      'bv 7b',
+      'bv 7b'
+    ];
+    
+    // BH03 stations - chỉ các trạm chắc chắn thuộc BH03
+    const bh03Stations = [
+      'chùa long quang tự',
+      'chua long quang tu',
+      'ubnd p. bình đa',
+      'ubnd p. binh da',
+      'đầu đường trần quốc toản',
+      'dau duong tran quoc toan',
+      'trường tiểu học an bình',
+      'truong tieu hoc an binh',
+      'ngã 4 vincom',
+      'nga 4 vincom',
+      'cổng chào tân mai',
+      'cong chao tan mai'
+    ];
+    
+    // BH04 stations - chỉ các trạm chắc chắn thuộc BH04
+    const bh04Stations = [
+      'cầu hiệp hòa',
+      'cau hiep hoa',
+      'ngã 3 huỳnh văn lũy (đối diện metro)',
+      'nga 3 huynh van luy (doi dien metro)',
+      'bưu điện tỉnh',
+      'buu dien tinh',
+      'chung cư thanh bình',
+      'chung cu thanh binh'
+    ];
+    
+    // Kiểm tra BH01 trước (ưu tiên cao nhất)
+    if (bh01Stations.some(bh01Station => 
+      stationLower.includes(bh01Station) || bh01Station.includes(stationLower)
+    )) {
+      console.log(`PDF Export - Station "${station}" mapped to BH01 (fallback exact match)`);
+      return 'BH01';
+    }
+    
+    // Kiểm tra BH02
+    if (bh02Stations.some(bh02Station => 
+      stationLower.includes(bh02Station) || bh02Station.includes(stationLower)
+    )) {
+      console.log(`PDF Export - Station "${station}" mapped to BH02 (fallback exact match)`);
+      return 'BH02';
+    }
+    
+    // Kiểm tra BH03
+    if (bh03Stations.some(bh03Station => 
+      stationLower.includes(bh03Station) || bh03Station.includes(stationLower)
+    )) {
+      console.log(`PDF Export - Station "${station}" mapped to BH03 (fallback exact match)`);
+      return 'BH03';
+    }
+    
+    // Kiểm tra BH04
+    if (bh04Stations.some(bh04Station => 
+      stationLower.includes(bh04Station) || bh04Station.includes(stationLower)
+    )) {
+      console.log(`PDF Export - Station "${station}" mapped to BH04 (fallback exact match)`);
+      return 'BH04';
+    }
+    
+    // Default fallback - ưu tiên BH01
+    console.log(`PDF Export - No specific BH route found for station "${station}", defaulting to BH01 (priority)`);
+    return 'BH01';
+  }
+
+  /**
+   * Tìm tuyến BH thay thế cho các trạm không nên thuộc BH01
+   */
+  private findAlternativeBHRoute(station: string): string {
+    const stationLower = station.toLowerCase();
+    
+    // Ngã 3 Bến Gỗ nên thuộc BH02 hoặc tuyến khác
+    if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
+      console.log(`PDF Export - Redirecting "Ngã 3 Bến Gỗ" to BH02 (not BH01)`);
+      return 'BH02';
+    }
+    
+    // Các trạm khác có thể cần xử lý tương tự
+    // Có thể mở rộng logic này trong tương lai
+    
+    // Default fallback
+    return 'BH02';
+  }
+
 
   /**
    * Sắp xếp nhân viên theo thứ tự trạm trong tuyến từ cache
+   * Enhanced version with better station order handling
    */
   private async sortEmployeesByStationOrder(employees: Registration[]): Promise<Registration[]> {
     try {
       if (!this.dataCacheService.isDataLoaded()) {
-        console.warn('PDF Export - Data cache not loaded, returning employees without sorting');
-        return employees;
+        console.warn('PDF Export - Data cache not loaded, loading data first...');
+        await this.dataCacheService.loadAllData();
       }
 
       // Sắp xếp nhân viên theo thứ tự trạm từ cache
@@ -650,18 +1295,31 @@ export class PdfExportService {
         let orderA = 999;
         let orderB = 999;
         
-        // Tìm thứ tự trạm từ HCM01
-        const hcm01OrderA = this.dataCacheService.getStationOrderInRoute('HCM01', stationA);
-        const hcm01OrderB = this.dataCacheService.getStationOrderInRoute('HCM01', stationB);
-        if (hcm01OrderA !== null) orderA = hcm01OrderA;
-        if (hcm01OrderB !== null) orderB = hcm01OrderB;
+        // Tìm thứ tự trạm từ các tuyến theo thứ tự ưu tiên
+        const routes = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
         
-        // Nếu không tìm thấy trong HCM01, tìm trong HCM02
-        if (orderA === 999 || orderB === 999) {
-          const hcm02OrderA = this.dataCacheService.getStationOrderInRoute('HCM02', stationA);
-          const hcm02OrderB = this.dataCacheService.getStationOrderInRoute('HCM02', stationB);
-          if (hcm02OrderA !== null && orderA === 999) orderA = hcm02OrderA;
-          if (hcm02OrderB !== null && orderB === 999) orderB = hcm02OrderB;
+        for (const route of routes) {
+          if (orderA === 999) {
+            const routeOrderA = this.dataCacheService.getStationOrderInRoute(route, stationA);
+            if (routeOrderA !== null) orderA = routeOrderA;
+          }
+          if (orderB === 999) {
+            const routeOrderB = this.dataCacheService.getStationOrderInRoute(route, stationB);
+            if (routeOrderB !== null) orderB = routeOrderB;
+          }
+          
+          // Nếu cả hai đều tìm thấy, dừng lại
+          if (orderA !== 999 && orderB !== 999) {
+            break;
+          }
+        }
+        
+        // Enhanced fallback: try pattern matching if cache doesn't have the station
+        if (orderA === 999) {
+          orderA = this.getStationOrderFromPattern(stationA);
+        }
+        if (orderB === 999) {
+          orderB = this.getStationOrderFromPattern(stationB);
         }
         
         // Sắp xếp theo thứ tự trạm
@@ -674,12 +1332,84 @@ export class PdfExportService {
       });
 
       console.log(`PDF Export - Sorted ${sortedEmployees.length} employees by station order`);
+      console.log(`PDF Export - Sorted order:`, sortedEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
       return sortedEmployees;
       
     } catch (error) {
       console.error('PDF Export - Error sorting employees by station order:', error);
       return employees;
     }
+  }
+
+  /**
+   * Get station order from pattern matching based on route mapping
+   */
+  private getStationOrderFromPattern(stationName: string): number {
+    if (!stationName) return 999;
+    
+    const stationLower = stationName.toLowerCase().trim();
+    
+    // Define station orders based on the route mapping from images
+    const stationOrderMap = new Map<string, number>([
+      // HCM01/HCM02 common stations
+      ['ngã 3 bến gỗ', 1],
+      ['ngã 3 long bình tân', 2], 
+      ['ngã 4 thủ đức', 3],
+      ['rmk', 4],
+      ['ngã 3 cát lái', 5],
+      ['hàng xanh (gần văn thánh)', 6],
+      
+      // HCM01 specific
+      ['đinh tiên hoàng-đbp', 7],
+      ['hai bà trưng-đbp', 8],
+      ['bv hòa hảo', 9],
+      
+      // HCM02 specific
+      ['bà chiểu', 7],
+      ['chợ gò vấp', 8],
+      ['hóc môn (chùa hoằng pháp)', 9],
+      ['trường lý tự trọng', 10],
+      
+      // BH01 stations
+      ['phước tân (cây xăng toàn dung)', 1],
+      ['cổng 11 (cây xăng thành thái thịnh)', 2],
+      ['công viên tam hiệp', 3],
+      ['bv đồng nai', 4],
+      ['nhà trẻ hoa sen', 5],
+      ['bv tâm hồng phước', 6],
+      ['giáo xứ lộc lâm', 7],
+      ['giáo xứ đại lộ', 8],
+      
+      // BH02 stations
+      ['bv 7b', 6],
+      
+      // BH03 stations
+      ['ngã 4 vũng tàu (ajinomoto)', 4],
+      ['ngã 3 an bình', 5],
+      ['trường tiểu học an bình', 6],
+      ['ubnd p. bình đa', 7],
+      ['đầu đường trần quốc toản', 8],
+      ['chùa long quang tự', 9],
+      ['cổng chào tân mai', 10],
+      ['ngã 4 vincom', 11],
+      
+      // BH04 stations
+      ['cầu hiệp hòa', 4],
+      ['ngã 3 hãng dầu', 5],
+      ['chung cư thanh bình', 6],
+      ['ngã 3 huỳnh văn lũy (đối diện metro)', 7],
+      ['bưu điện tỉnh', 8]
+    ]);
+    
+    // Try exact match first
+    for (const [pattern, order] of stationOrderMap) {
+      if (stationLower.includes(pattern.toLowerCase()) || pattern.toLowerCase().includes(stationLower)) {
+        console.log(`Pattern matching: Station "${stationName}" matched with "${pattern}" -> Order ${order}`);
+        return order;
+      }
+    }
+    
+    return 999; // Default order for unknown stations
   }
 
   /**
@@ -791,6 +1521,48 @@ export class PdfExportService {
     
     return thuDucStations.some(stationName => 
       station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
+   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   */
+  private isHCM01PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm01PriorityStations = [
+      'đinh tiên hoàng', 'dinh tien hoang',
+      'hai bà trưng', 'hai ba trung',
+      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'
+    ];
+    
+    return hcm01PriorityStations.some(priorityStation =>
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   * Cập nhật theo hình ảnh: HCM02 bao gồm Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
+   */
+  private isHCM02PriorityStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const hcm02PriorityStations = [
+      'bà chiểu', 'ba chieu',
+      'chợ gò vấp', 'cho go vap', 'gò vấp', 'go vap',
+      'hóc môn', 'hoc mon',
+      'chùa hoằng pháp', 'chua hoang phap',
+      'trường lý tự trọng', 'truong ly tu trong'
+    ];
+    
+    return hcm02PriorityStations.some(priorityStation =>
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
     );
   }
 
@@ -1709,6 +2481,119 @@ export class PdfExportService {
     return yPosition;
   }
 
+
+  /**
+   * Determine route from station name with enhanced pattern matching
+   * Based on the route-station mapping from the images provided
+   */
+  private determineRouteFromStationName(stationName: string): string {
+    if (!stationName) return 'Chưa phân tuyến';
+    
+    const stationLower = stationName.toLowerCase().trim();
+    
+    // HCM01 stations (from the route mapping image)
+    const hcm01Stations = [
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân', 
+      'ngã 4 thủ đức',
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh (gần văn thánh)',
+      'đinh tiên hoàng-đbp',
+      'hai bà trưng-đbp',
+      'bv hòa hảo'
+    ];
+    
+    // HCM02 stations (from the route mapping image)
+    const hcm02Stations = [
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân',
+      'ngã 4 thủ đức', 
+      'rmk',
+      'ngã 3 cát lái',
+      'hàng xanh (gần văn thánh)',
+      'bà chiểu',
+      'chợ gò vấp',
+      'hóc môn (chùa hoằng pháp)',
+      'trường lý tự trọng'
+    ];
+    
+    // BH01 stations (from the route mapping image)
+    const bh01Stations = [
+      'phước tân (cây xăng toàn dung)',
+      'cổng 11 (cây xăng thành thái thịnh)',
+      'công viên tam hiệp',
+      'bv đồng nai',
+      'nhà trẻ hoa sen',
+      'bv tâm hồng phước',
+      'giáo xứ lộc lâm',
+      'giáo xứ đại lộ'
+    ];
+    
+    // BH02 stations (from the route mapping image)
+    const bh02Stations = [
+      'phước tân (cây xăng toàn dung)',
+      'cổng 11 (cây xăng thành thái thịnh)',
+      'công viên tam hiệp',
+      'bv đồng nai',
+      'nhà trẻ hoa sen',
+      'bv 7b'
+    ];
+    
+    // BH03 stations (from the route mapping image)
+    const bh03Stations = [
+      'phước tân (cây xăng toàn dung)',
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân',
+      'ngã 4 vũng tàu (ajinomoto)',
+      'ngã 3 an bình',
+      'trường tiểu học an bình',
+      'ubnd p. bình đa',
+      'đầu đường trần quốc toản',
+      'chùa long quang tự',
+      'cổng chào tân mai',
+      'ngã 4 vincom'
+    ];
+    
+    // BH04 stations (from the route mapping image)
+    const bh04Stations = [
+      'ngã 3 bến gỗ',
+      'ngã 3 long bình tân',
+      'ngã 4 vũng tàu (ajinomoto)',
+      'cầu hiệp hòa',
+      'ngã 3 hãng dầu',
+      'chung cư thanh bình',
+      'ngã 3 huỳnh văn lũy (đối diện metro)',
+      'bưu điện tỉnh'
+    ];
+    
+    // Check for exact matches first
+    const allStations = [
+      { stations: hcm01Stations, route: 'HCM01' },
+      { stations: hcm02Stations, route: 'HCM02' },
+      { stations: bh01Stations, route: 'BH01' },
+      { stations: bh02Stations, route: 'BH02' },
+      { stations: bh03Stations, route: 'BH03' },
+      { stations: bh04Stations, route: 'BH04' }
+    ];
+    
+    for (const routeGroup of allStations) {
+      for (const station of routeGroup.stations) {
+        if (stationLower.includes(station.toLowerCase()) || station.toLowerCase().includes(stationLower)) {
+          console.log(`Enhanced mapping: Station "${stationName}" matched with "${station}" -> Route "${routeGroup.route}"`);
+          return routeGroup.route;
+        }
+      }
+    }
+    
+    // Special handling for self-transport
+    if (stationLower.includes('tự túc') || stationLower.includes('tu tuc')) {
+      return 'TỰ TÚC';
+    }
+    
+    console.log(`No route mapping found for station "${stationName}", defaulting to BH01`);
+    return 'BH01';
+  }
 
   /**
    * Tìm tuyến BH phù hợp cho trạm từ DB
