@@ -125,6 +125,12 @@ export class DangKyXeComponent implements OnInit {
   async ngOnInit(): Promise<void> {
     console.log('Component initialized successfully!');
     
+    // Set default date filter to today
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    this.startDate = today;
+    this.endDate = today;
+    
     // Load data cache first
     try {
       await this.dataCacheService.loadAllData();
@@ -185,6 +191,34 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
+   * Get date in Vietnam timezone as YYYY-MM-DD string
+   */
+  private getVietnamDateString(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
+   * Convert Firebase Timestamp to Vietnam date string (YYYY-MM-DD)
+   * Firebase Timestamps are in UTC, so we need to convert to Vietnam timezone
+   */
+  private getVietnamDateStringFromTimestamp(timestamp: any): string {
+    if (!timestamp) return '';
+    
+    // Convert to Date object (in local timezone)
+    const date = timestamp.toDate ? timestamp.toDate() : new Date(timestamp);
+    
+    // Format in Vietnam timezone (UTC+7)
+    const vietnamDate = new Date(date.toLocaleString('en-US', { timeZone: 'Asia/Ho_Chi_Minh' }));
+    const year = vietnamDate.getFullYear();
+    const month = String(vietnamDate.getMonth() + 1).padStart(2, '0');
+    const day = String(vietnamDate.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
+  /**
    * Check if date is within the selected range
    */
   private isDateInRange(dateString: string): boolean {
@@ -196,25 +230,22 @@ export class DangKyXeComponent implements OnInit {
       return false; // No date in data
     }
     
-    const targetDate = new Date(dateString);
+    // Convert dateString (YYYY-MM-DD) to a comparable format
+    const targetDateStr = dateString.substring(0, 10); // Ensure we only use the date part
     
     if (this.startDate && this.endDate) {
       // Both dates selected - check if date is within range
-      const start = new Date(this.startDate);
-      const end = new Date(this.endDate);
-      start.setHours(0, 0, 0, 0);
-      end.setHours(23, 59, 59, 999);
-      return targetDate >= start && targetDate <= end;
+      const startStr = this.getVietnamDateString(this.startDate);
+      const endStr = this.getVietnamDateString(this.endDate);
+      return targetDateStr >= startStr && targetDateStr <= endStr;
     } else if (this.startDate) {
       // Only start date selected
-      const start = new Date(this.startDate);
-      start.setHours(0, 0, 0, 0);
-      return targetDate >= start;
+      const startStr = this.getVietnamDateString(this.startDate);
+      return targetDateStr >= startStr;
     } else if (this.endDate) {
       // Only end date selected
-      const end = new Date(this.endDate);
-      end.setHours(23, 59, 59, 999);
-      return targetDate <= end;
+      const endStr = this.getVietnamDateString(this.endDate);
+      return targetDateStr <= endStr;
     }
     
     return true;
@@ -309,7 +340,7 @@ export class DangKyXeComponent implements OnInit {
         hoTen: dangKy.HoTen || '',
         dienThoai: dangKy.DienThoai || '',
         phongBan: '',
-        ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
+        ngayDangKy: this.getVietnamDateStringFromTimestamp(dangKy.NgayDangKy),
         loaiCa: dangKy.LoaiCa || '',
         thoiGianBatDau: dangKy.ThoiGianBatDau || '',
         thoiGianKetThuc: dangKy.ThoiGianKetThuc || '',
@@ -335,13 +366,15 @@ export class DangKyXeComponent implements OnInit {
   }
 
   /**
-   * Clear date search and show all records
+   * Clear date search and reset to today
    */
   async clearDateSearch(): Promise<void> {
-    this.startDate = null;
-    this.endDate = null;
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    this.startDate = today;
+    this.endDate = today;
     await this.loadDataFromFirebase();
-    this.snackBar.open('Đã xóa bộ lọc ngày', 'Đóng', { duration: 2000 });
+    this.snackBar.open('Đã đặt lại bộ lọc về ngày hôm nay', 'Đóng', { duration: 2000 });
   }
 
   private loadMockData(): void {
@@ -1004,24 +1037,17 @@ export class DangKyXeComponent implements OnInit {
       
       let filteredRegistrations = dangKyList;
       
-      // For regular users, only show today's data
-      // For super_admin, show all data (can be filtered by date search)
-      if (!this.hasAdminRole()) {
-        // Get today's date in YYYY-MM-DD format
-        const today = new Date();
-        const todayString = today.toISOString().split('T')[0];
-        console.log('Filtering data for today:', todayString);
-        
-        // Filter data to only include today's registrations
+      // Filter by today's date on initial load if dates are set
+      if (this.startDate && this.endDate) {
+        const todayStr = this.getVietnamDateString(this.startDate);
         filteredRegistrations = dangKyList.filter(dangKy => {
           if (!dangKy.NgayDangKy) return false;
-          const registrationDate = dangKy.NgayDangKy.toISOString().split('T')[0];
-          return registrationDate === todayString;
+          const registrationDate = this.getVietnamDateStringFromTimestamp(dangKy.NgayDangKy);
+          return registrationDate === todayStr;
         });
-        
-        console.log(`Found ${filteredRegistrations.length} registrations for today out of ${dangKyList.length} total`);
+        console.log(`Filtered to ${filteredRegistrations.length} registrations for today (${todayStr}) out of ${dangKyList.length} total`);
       } else {
-        console.log(`Super admin: Loading all ${dangKyList.length} registrations`);
+        console.log(`Loading all ${dangKyList.length} registrations. No date filter applied.`);
       }
       
       // Convert DangKyPhanXe to Registration format for display
@@ -1039,7 +1065,7 @@ export class DangKyXeComponent implements OnInit {
           hoTen: dangKy.HoTen || '',
           dienThoai: dangKy.DienThoai || '',
           phongBan: '', // Remove phongBan field
-          ngayDangKy: dangKy.NgayDangKy ? dangKy.NgayDangKy.toISOString().split('T')[0] : '',
+          ngayDangKy: this.getVietnamDateStringFromTimestamp(dangKy.NgayDangKy),
           loaiCa: dangKy.LoaiCa || '',
           thoiGianBatDau: dangKy.ThoiGianBatDau || '',
           thoiGianKetThuc: dangKy.ThoiGianKetThuc || '',
@@ -1110,9 +1136,9 @@ export class DangKyXeComponent implements OnInit {
    */
   private async checkDuplicateNameAndStation(hoTen: string, tramXe: string, ngayDangKy: string): Promise<boolean> {
     try {
-      // Get today's date
+      // Get today's date in Vietnam timezone
       const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
+      const todayString = this.getVietnamDateString(today);
       
       // CHỈ CHECK DUPLICATE CHO NGÀY HÔM NAY
       // Nếu ngày đăng ký không phải hôm nay, coi như không trùng lặp
@@ -1125,7 +1151,7 @@ export class DangKyXeComponent implements OnInit {
       return allRegistrations.some(reg => 
         reg.HoTen?.toLowerCase().trim() === hoTen?.toLowerCase().trim() && 
         reg.TramXe?.toLowerCase().trim() === tramXe?.toLowerCase().trim() && 
-        reg.NgayDangKy.toISOString().split('T')[0] === ngayDangKy
+        this.getVietnamDateStringFromTimestamp(reg.NgayDangKy) === ngayDangKy
       );
     } catch (error) {
       console.error('Error checking duplicate name and station:', error);
@@ -1138,9 +1164,9 @@ export class DangKyXeComponent implements OnInit {
    */
   private async checkDuplicateNameAndStationForAdd(hoTen: string, tramXe: string, ngayDangKy: string): Promise<Registration[]> {
     try {
-      // Get today's date
+      // Get today's date in Vietnam timezone
       const today = new Date();
-      const todayString = today.toISOString().split('T')[0];
+      const todayString = this.getVietnamDateString(today);
       
       // CHỈ CHECK DUPLICATE CHO NGÀY HÔM NAY
       // Nếu ngày đăng ký không phải hôm nay, coi như không trùng lặp
@@ -1153,7 +1179,7 @@ export class DangKyXeComponent implements OnInit {
       const duplicates = allRegistrations.filter(reg => 
         reg.HoTen?.toLowerCase().trim() === hoTen?.toLowerCase().trim() && 
         reg.TramXe?.toLowerCase().trim() === tramXe?.toLowerCase().trim() && 
-        reg.NgayDangKy.toISOString().split('T')[0] === ngayDangKy
+        this.getVietnamDateStringFromTimestamp(reg.NgayDangKy) === ngayDangKy
       );
 
       // Convert to Registration format for display
@@ -1163,7 +1189,7 @@ export class DangKyXeComponent implements OnInit {
         hoTen: reg.HoTen || '',
         dienThoai: reg.DienThoai || '',
         phongBan: reg.PhongBan || '',
-        ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+        ngayDangKy: this.getVietnamDateStringFromTimestamp(reg.NgayDangKy),
         loaiCa: reg.LoaiCa || '',
         thoiGianBatDau: reg.ThoiGianBatDau || '',
         thoiGianKetThuc: reg.ThoiGianKetThuc || '',
@@ -1214,14 +1240,14 @@ export class DangKyXeComponent implements OnInit {
     const validData: Registration[] = [];
     const duplicateDetails: string[] = [];
     
-    // Get today's date in YYYY-MM-DD format
+    // Get today's date in YYYY-MM-DD format (Vietnam timezone)
     const today = new Date();
-    const todayString = today.toISOString().split('T')[0];
+    const todayString = this.getVietnamDateString(today);
     
     // Get existing registrations from Firebase for today only
     const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXe();
     const existingRegistrations = allRegistrations.filter(reg => 
-      reg.NgayDangKy.toISOString().split('T')[0] === todayString
+      this.getVietnamDateStringFromTimestamp(reg.NgayDangKy) === todayString
     );
     
     console.log(`Checking duplicates for today: ${todayString}`);
@@ -1682,7 +1708,7 @@ export class DangKyXeComponent implements OnInit {
         hoTen: reg.HoTen,
         dienThoai: reg.DienThoai,
         phongBan: reg.PhongBan,
-        ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+        ngayDangKy: this.getVietnamDateStringFromTimestamp(reg.NgayDangKy),
         loaiCa: reg.LoaiCa,
         thoiGianBatDau: reg.ThoiGianBatDau,
         thoiGianKetThuc: reg.ThoiGianKetThuc,
