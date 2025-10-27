@@ -215,9 +215,9 @@ export class EmployeeAllocationService {
       return 'TỰ TÚC';
     }
     
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
-      return 'BH04';
+      return 'BH03';
     }
     
     // Kiểm tra nếu là trạm ưu tiên cho HCM02
@@ -237,7 +237,7 @@ export class EmployeeAllocationService {
     }
     
     // Kiểm tra nếu là tuyến BH
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
       // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
       if (this.isStationBeforeOrAtHangXanh(tramXe)) {
         // Gom tất cả vào BH01

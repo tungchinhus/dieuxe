@@ -203,8 +203,8 @@ export class ExcelExportService {
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, BH04
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -243,9 +243,9 @@ export class ExcelExportService {
       return 'TỰ TÚC';
     }
 
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
-      return 'BH04';
+      return 'BH03';
     }
 
     // Kiểm tra nếu là trạm ưu tiên cho HCM02

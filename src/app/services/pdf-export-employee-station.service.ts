@@ -453,9 +453,9 @@ export class PdfExportEmployeeStationService {
       return 'TỰ TÚC';
     }
     
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
-      return 'BH04';
+      return 'BH03';
     }
     
     // Kiểm tra nếu là trạm ưu tiên cho HCM02
@@ -475,7 +475,7 @@ export class PdfExportEmployeeStationService {
     }
     
     // Kiểm tra nếu là tuyến BH
-    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03' || routeName === 'BH04') {
+    if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
       // Kiểm tra nếu trạm xe chứa "Hàng xanh" hoặc các trạm trước "Hàng xanh"
       if (this.isStationBeforeOrAtHangXanh(tramXe)) {
         // Gom tất cả vào BH01
@@ -966,7 +966,7 @@ export class PdfExportEmployeeStationService {
     // Nhân viên HCM02 dư thừa còn lại chuyển sang BH
     const hcm02RemainingOverflow = hcm02PriorityEmployees.slice(targetEmployeesPerHCMRoute + remainingHCM01Slots);
     
-    // Đặc biệt: Ưu tiên chuyển Ngã 3 Bến Gỗ và Ngã 3 Long Bình Tân sang BH03/BH04
+    // Đặc biệt: Ưu tiên chuyển Ngã 3 Bến Gỗ và Ngã 3 Long Bình Tân sang BH03
     const stationsToMoveToBH = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
     const employeesToMoveToBH: NhanVien[] = [];
     
@@ -1115,20 +1115,20 @@ export class PdfExportEmployeeStationService {
 
   /**
    * Tìm tuyến BH phù hợp nhất cho nhân viên
-   * Ưu tiên BH03/BH04 cho Ngã 3 Bến Gỗ và Ngã 3 Long Bình Tân
+   * Ưu tiên BH03 cho Ngã 3 Bến Gỗ và Ngã 3 Long Bình Tân
    */
   private findBestBHRouteForEmployee(employee: NhanVien, routeDetails: RouteDetail[]): string | null {
     const stationName = this.normalizeStationName(employee.TramXe || '');
     const stationLower = (employee.TramXe || '').toLowerCase();
     
-    // Ưu tiên BH03/BH04 cho các trạm cụ thể từ HCM02 overflow
-    const stationsForBH03BH04 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
-    const shouldUseBH03BH04 = stationsForBH03BH04.some(station => 
+    // Ưu tiên BH03 cho các trạm cụ thể từ HCM02 overflow
+    const stationsForBH03 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
+    const shouldUseBH03 = stationsForBH03.some(station => 
       stationLower.includes(station) || station.includes(stationLower)
     );
     
-    if (shouldUseBH03BH04) {
-      // Phân biệt cụ thể: Ngã 3 Bến Gỗ → BH03, Ngã 3 Long Bình Tân → BH04
+    if (shouldUseBH03) {
+      // Tất cả trạm này gom vào BH03
       if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
         const routeExists = routeDetails.some(detail => detail.maTuyenXe === 'BH03');
         if (routeExists) {
@@ -1138,15 +1138,15 @@ export class PdfExportEmployeeStationService {
       }
       
       if (stationLower.includes('ngã 3 long bình tân') || stationLower.includes('nga 3 long binh tan')) {
-        const routeExists = routeDetails.some(detail => detail.maTuyenXe === 'BH04');
+        const routeExists = routeDetails.some(detail => detail.maTuyenXe === 'BH03');
         if (routeExists) {
-          console.log(`Assigning employee ${employee.HoTen} from station ${employee.TramXe} to BH04`);
-          return 'BH04';
+          console.log(`Assigning employee ${employee.HoTen} from station ${employee.TramXe} to BH03`);
+          return 'BH03';
         }
       }
       
-      // Fallback: Ưu tiên BH03 trước, sau đó BH04
-      const preferredBHRoutes = ['BH03', 'BH04'];
+      // Fallback: Ưu tiên BH03
+      const preferredBHRoutes = ['BH03'];
       for (const bhRoute of preferredBHRoutes) {
         const routeExists = routeDetails.some(detail => detail.maTuyenXe === bhRoute);
         if (routeExists) {
@@ -1156,8 +1156,8 @@ export class PdfExportEmployeeStationService {
       }
     }
     
-    // Ưu tiên BH01, BH02, BH03, BH04 theo thứ tự cho các trạm khác
-    const bhRoutes = ['BH01', 'BH02', 'BH03', 'BH04'];
+    // Ưu tiên BH01, BH02, BH03 theo thứ tự cho các trạm khác
+    const bhRoutes = ['BH01', 'BH02', 'BH03'];
     
     for (const bhRoute of bhRoutes) {
       const routeExists = routeDetails.some(detail => detail.maTuyenXe === bhRoute);

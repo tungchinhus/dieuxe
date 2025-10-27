@@ -326,8 +326,8 @@ export class PdfExportService {
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, BH04
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -409,8 +409,8 @@ export class PdfExportService {
       route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
     );
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, BH04
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -462,9 +462,9 @@ export class PdfExportService {
       return 'TỰ TÚC';
     }
 
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
-      return 'BH04';
+      return 'BH03';
     }
 
     // Kiểm tra nếu là trạm ưu tiên cho HCM02
@@ -929,10 +929,9 @@ export class PdfExportService {
     const bh01Employees: Registration[] = [];
     const bh02Employees: Registration[] = [];
     const bh03Employees: Registration[] = [];
-    const bh04Employees: Registration[] = [];
     
     const maxEmployeesBH01 = 45; // BH01 ưu tiên cho xe 45 chỗ
-    const maxEmployeesOtherBH = 15; // BH02, BH03, BH04 cho xe 16 chỗ
+    const maxEmployeesOtherBH = 15; // BH02, BH03 cho xe 16 chỗ
 
     console.log(`PDF Export - BH01 priority: max ${maxEmployeesBH01} employees for 45-seat vehicle`);
     console.log(`PDF Export - Other BH routes: max ${maxEmployeesOtherBH} employees for 16-seat vehicles`);
@@ -999,25 +998,23 @@ export class PdfExportService {
           }
           break;
         case 'BH04':
-          if (bh04Employees.length < maxEmployeesOtherBH) {
-            bh04Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH04 (${bh04Employees.length}/${maxEmployeesOtherBH})`);
+          // BH04 is redirected to BH03
+          if (bh03Employees.length < maxEmployeesOtherBH) {
+            bh03Employees.push(employee);
+            console.log(`PDF Export - Added ${employee.hoTen} to BH03 (redirected from BH04) (${bh03Employees.length}/${maxEmployeesOtherBH})`);
           } else {
-            console.log(`PDF Export - BH04 full, ${employee.hoTen} will be handled by overflow logic`);
+            console.log(`PDF Export - BH03 full, ${employee.hoTen} will be handled by overflow logic`);
           }
           break;
         default:
           // Nếu không xác định được tuyến cụ thể, KHÔNG thêm vào BH01
-          // Ưu tiên BH02, sau đó BH03, BH04
+          // Ưu tiên BH02, sau đó BH03
           if (bh02Employees.length < maxEmployeesOtherBH) {
             bh02Employees.push(employee);
             console.log(`PDF Export - Added ${employee.hoTen} to BH02 (default fallback) (${bh02Employees.length}/${maxEmployeesOtherBH})`);
           } else if (bh03Employees.length < maxEmployeesOtherBH) {
             bh03Employees.push(employee);
             console.log(`PDF Export - Added ${employee.hoTen} to BH03 (default fallback) (${bh03Employees.length}/${maxEmployeesOtherBH})`);
-          } else if (bh04Employees.length < maxEmployeesOtherBH) {
-            bh04Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH04 (default fallback) (${bh04Employees.length}/${maxEmployeesOtherBH})`);
           } else {
             console.log(`PDF Export - All BH routes full, ${employee.hoTen} will be handled by overflow logic`);
           }
@@ -1025,7 +1022,7 @@ export class PdfExportService {
       }
     }
 
-    console.log(`PDF Export - BH distribution result: BH01=${bh01Employees.length}, BH02=${bh02Employees.length}, BH03=${bh03Employees.length}, BH04=${bh04Employees.length}`);
+    console.log(`PDF Export - BH distribution result: BH01=${bh01Employees.length}, BH02=${bh02Employees.length}, BH03=${bh03Employees.length}`);
 
     // Sắp xếp lại nhân viên trong từng tuyến BH theo đúng thứ tự trạm từ database
     console.log(`PDF Export - Sorting employees within each BH route by database order...`);
@@ -1033,12 +1030,10 @@ export class PdfExportService {
     const sortedBH01Employees = await this.sortEmployeesByStationOrder(bh01Employees);
     const sortedBH02Employees = await this.sortEmployeesByStationOrder(bh02Employees);
     const sortedBH03Employees = await this.sortEmployeesByStationOrder(bh03Employees);
-    const sortedBH04Employees = await this.sortEmployeesByStationOrder(bh04Employees);
     
     console.log(`PDF Export - BH01 sorted order:`, sortedBH01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
     console.log(`PDF Export - BH02 sorted order:`, sortedBH02Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
     console.log(`PDF Export - BH03 sorted order:`, sortedBH03Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
-    console.log(`PDF Export - BH04 sorted order:`, sortedBH04Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
     
     // Cập nhật routes
     const updatedRoutes = [...routes];
@@ -1047,7 +1042,6 @@ export class PdfExportService {
     const bh01Index = updatedRoutes.findIndex(r => r.routeName === 'BH01');
     const bh02Index = updatedRoutes.findIndex(r => r.routeName === 'BH02');
     const bh03Index = updatedRoutes.findIndex(r => r.routeName === 'BH03');
-    const bh04Index = updatedRoutes.findIndex(r => r.routeName === 'BH04');
 
     if (bh01Index >= 0) {
       updatedRoutes[bh01Index].registrations = sortedBH01Employees;
@@ -1057,9 +1051,6 @@ export class PdfExportService {
     }
     if (bh03Index >= 0) {
       updatedRoutes[bh03Index].registrations = sortedBH03Employees;
-    }
-    if (bh04Index >= 0) {
-      updatedRoutes[bh04Index].registrations = sortedBH04Employees;
     }
 
     return updatedRoutes;
@@ -1099,32 +1090,32 @@ export class PdfExportService {
   private handleSpecialMultiRouteStations(station: string, currentRoute: string): string | null {
     const stationLower = station.toLowerCase();
     
-    // Ngã 3 Bến Gỗ: thuộc BH03, BH04, HCM01, HCM02
+    // Ngã 3 Bến Gỗ: thuộc BH03, HCM01, HCM02
     if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
-      // Ưu tiên BH03 trước, sau đó BH04
+      // Ưu tiên BH03
       if (currentRoute === 'BH01' || currentRoute === 'BH02') {
         console.log(`PDF Export - "Ngã 3 Bến Gỗ" should not be in ${currentRoute}, redirecting to BH03`);
         return 'BH03';
       }
-      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
+      // Nếu đã đúng BH03, giữ nguyên
       return null;
     }
     
-    // Ngã 4 Vũng Tàu (Ajinomoto): thuộc BH03, BH04
+    // Ngã 4 Vũng Tàu (Ajinomoto): thuộc BH03
     if (stationLower.includes('ngã 4 vũng tàu') || stationLower.includes('nga 4 vung tau')) {
       if (currentRoute === 'BH01' || currentRoute === 'BH02') {
         console.log(`PDF Export - "Ngã 4 Vũng Tàu" should not be in ${currentRoute}, redirecting to BH03`);
         return 'BH03';
       }
-      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
+      // Nếu đã đúng BH03, giữ nguyên
       return null;
     }
     
-    // Ngã 3 hãng dầu: thuộc BH04
+    // Ngã 3 hãng dầu: thuộc BH03
     if (stationLower.includes('ngã 3 hãng dầu') || stationLower.includes('nga 3 hang dau')) {
-      if (currentRoute !== 'BH04') {
-        console.log(`PDF Export - "Ngã 3 hãng dầu" should be in BH04, redirecting from ${currentRoute}`);
-        return 'BH04';
+      if (currentRoute !== 'BH03') {
+        console.log(`PDF Export - "Ngã 3 hãng dầu" should be in BH03, redirecting from ${currentRoute}`);
+        return 'BH03';
       }
       return null;
     }
@@ -1193,7 +1184,7 @@ export class PdfExportService {
       'cong chao tan mai'
     ];
     
-    // BH04 stations - chỉ các trạm chắc chắn thuộc BH04
+    // BH03 stations (redirected from BH04)
     const bh04Stations = [
       'cầu hiệp hòa',
       'cau hiep hoa',
@@ -1229,17 +1220,17 @@ export class PdfExportService {
       return 'BH03';
     }
     
-    // Kiểm tra BH04
+    // Kiểm tra BH04 - redirect to BH03
     if (bh04Stations.some(bh04Station => 
       stationLower.includes(bh04Station) || bh04Station.includes(stationLower)
     )) {
-      console.log(`PDF Export - Station "${station}" mapped to BH04 (fallback exact match)`);
-      return 'BH04';
+      console.log(`PDF Export - Station "${station}" mapped to BH03 (redirected from BH04)`);
+      return 'BH03';
     }
     
-    // Default fallback - ưu tiên BH01
-    console.log(`PDF Export - No specific BH route found for station "${station}", defaulting to BH01 (priority)`);
-    return 'BH01';
+    // Default fallback - ưu tiên BH03
+    console.log(`PDF Export - No specific BH route found for station "${station}", defaulting to BH03 (priority)`);
+    return 'BH03';
   }
 
   /**
@@ -1283,7 +1274,7 @@ export class PdfExportService {
         let orderB = 999;
         
         // Tìm thứ tự trạm từ các tuyến theo thứ tự ưu tiên
-        const routes = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
+        const routes = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
         
         for (const route of routes) {
           if (orderA === 999) {
@@ -1380,7 +1371,7 @@ export class PdfExportService {
       ['cổng chào tân mai', 10],
       ['ngã 4 vincom', 11],
       
-      // BH04 stations
+      // BH03 stations (formerly BH04)
       ['cầu hiệp hòa', 4],
       ['ngã 3 hãng dầu', 5],
       ['chung cư thanh bình', 6],
@@ -1581,7 +1572,7 @@ export class PdfExportService {
   /**
    * Sắp xếp các tuyến xe theo thứ tự ưu tiên:
    * HCM01, HCM02 (chỉ 2 tuyến chính)
-   * BH01, BH02, BH03, BH04
+   * BH01, BH02, BH03
    * THU_DUC_TAXI (taxi cho Thủ Đức)
    * Các tuyến khác theo thứ tự alphabet
    */
@@ -1589,7 +1580,7 @@ export class PdfExportService {
     // Định nghĩa thứ tự ưu tiên
     const priorityOrder = [
       'HCM01', 'HCM02', // Chỉ 2 tuyến HCM chính
-      'BH01', 'BH02', 'BH03', 'BH04',
+      'BH01', 'BH02', 'BH03',
       'THU_DUC_TAXI' // Taxi cho Thủ Đức
     ];
 
@@ -1714,15 +1705,14 @@ export class PdfExportService {
       'BH1': 'BH01',
       'BH2': 'BH02',
       'BH3': 'BH03',
-      'BH4': 'BH04',
+      'BH4': 'BH03',
       'BH 1': 'BH01',
       'BH 2': 'BH02',
       'BH 3': 'BH03',
-      'BH 4': 'BH04',
+      'BH 4': 'BH03',
       'TUYẾN BH01': 'BH01',
       'TUYẾN BH02': 'BH02',
-      'TUYẾN BH03': 'BH03',
-      'TUYẾN BH04': 'BH04'
+      'TUYẾN BH03': 'BH03'
     };
     
     return routeMapping[cleaned] || cleaned;
@@ -1906,7 +1896,7 @@ export class PdfExportService {
 
     /* Bảng */
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 0.5px solid #000; padding: 2px 6px; vertical-align: middle; }
+    th, td { border: 0.3px solid #666; padding: 2px 6px; vertical-align: middle; }
     thead th { background: #fff; color:#000; font-weight: 700; }
     
     /* Dòng tên tuyến đường */
@@ -2329,7 +2319,7 @@ export class PdfExportService {
 
     /* Bảng */
     table { width: 100%; border-collapse: collapse; }
-    th, td { border: 0.5px solid #000; padding: 2px 6px; vertical-align: middle; }
+    th, td { border: 0.3px solid #666; padding: 2px 6px; vertical-align: middle; }
     thead th { background: #fff; color:#000; font-weight: 700; }
     
     /* Dòng tên tuyến đường */
@@ -2544,14 +2534,7 @@ export class PdfExportService {
       'đầu đường trần quốc toản',
       'chùa long quang tự',
       'cổng chào tân mai',
-      'ngã 4 vincom'
-    ];
-    
-    // BH04 stations (from the route mapping image)
-    const bh04Stations = [
-      'ngã 3 bến gỗ',
-      'ngã 3 long bình tân',
-      'ngã 4 vũng tàu (ajinomoto)',
+      'ngã 4 vincom',
       'cầu hiệp hòa',
       'ngã 3 hãng dầu',
       'chung cư thanh bình',
@@ -2566,7 +2549,7 @@ export class PdfExportService {
       { stations: bh01Stations, route: 'BH01' },
       { stations: bh02Stations, route: 'BH02' },
       { stations: bh03Stations, route: 'BH03' },
-      { stations: bh04Stations, route: 'BH04' }
+      { stations: bh03Stations, route: 'BH03' }
     ];
     
     for (const routeGroup of allStations) {

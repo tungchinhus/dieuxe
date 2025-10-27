@@ -1753,8 +1753,8 @@ export class DangKyXeComponent implements OnInit {
 
     console.log('Dialog - Routes before sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, BH04
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'BH04'];
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -1794,9 +1794,9 @@ export class DangKyXeComponent implements OnInit {
       return 'TỰ TÚC';
     }
     
-    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03
     if (this.isNga3HangDauStation(tramXe)) {
-      return 'BH04';
+      return 'BH03';
     }
     
     // Kiểm tra nếu là trạm ưu tiên cho HCM02
@@ -2669,14 +2669,14 @@ export class DangKyXeComponent implements OnInit {
     const stationName = this.normalizeStationName(employee.tramXe);
     const stationLower = employee.tramXe.toLowerCase();
     
-    // Ưu tiên BH03/BH04 cho các trạm cụ thể từ HCM02 overflow
-    const stationsForBH03BH04 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
-    const shouldUseBH03BH04 = stationsForBH03BH04.some(station => 
+    // Ưu tiên BH03 cho các trạm cụ thể từ HCM02 overflow
+    const stationsForBH03 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
+    const shouldUseBH03 = stationsForBH03.some(station => 
       stationLower.includes(station) || station.includes(stationLower)
     );
     
-    if (shouldUseBH03BH04) {
-      // Phân biệt cụ thể: Ngã 3 Bến Gỗ → BH03, Ngã 3 Long Bình Tân → BH04
+    if (shouldUseBH03) {
+      // Tất cả trạm này gom vào BH03
       if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
         const routeExists = routes.some(r => r.routeName === 'BH03');
         if (routeExists) {
@@ -2686,15 +2686,15 @@ export class DangKyXeComponent implements OnInit {
       }
       
       if (stationLower.includes('ngã 3 long bình tân') || stationLower.includes('nga 3 long binh tan')) {
-        const routeExists = routes.some(r => r.routeName === 'BH04');
+        const routeExists = routes.some(r => r.routeName === 'BH03');
         if (routeExists) {
-          console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to BH04`);
-          return 'BH04';
+          console.log(`Dialog - Assigning employee ${employee.hoTen} from station ${employee.tramXe} to BH03`);
+          return 'BH03';
         }
       }
       
-      // Fallback: Ưu tiên BH03 trước, sau đó BH04
-      const preferredBHRoutes = ['BH03', 'BH04'];
+      // Fallback: Ưu tiên BH03
+      const preferredBHRoutes = ['BH03'];
       for (const bhRoute of preferredBHRoutes) {
         const routeExists = routes.some(r => r.routeName === bhRoute);
         if (routeExists) {
@@ -2704,8 +2704,8 @@ export class DangKyXeComponent implements OnInit {
       }
     }
     
-    // Ưu tiên BH01, BH02, BH03, BH04 theo thứ tự cho các trạm khác
-    const bhRoutes = ['BH01', 'BH02', 'BH03', 'BH04'];
+    // Ưu tiên BH01, BH02, BH03 theo thứ tự cho các trạm khác
+    const bhRoutes = ['BH01', 'BH02', 'BH03'];
     
     for (const bhRoute of bhRoutes) {
       const routeExists = routes.some(r => r.routeName === bhRoute);
