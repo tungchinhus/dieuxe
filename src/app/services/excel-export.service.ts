@@ -82,18 +82,12 @@ export class ExcelExportService {
         return;
       }
 
-      // 3) Tạo Excel workbook
+      // 3) Tạo Excel workbook với ONE sheet chứa tất cả tuyến
       const workbook = XLSX.utils.book_new();
+      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups);
 
-      // Tạo worksheet cho mỗi tuyến
-      for (let i = 0; i < routeGroups.length; i++) {
-        const route = routeGroups[i];
-        const worksheet = this.createRouteWorksheet(route, i + 1);
-        
-        // Thêm worksheet vào workbook
-        const sheetName = route.routeName || `Tuyen_${i + 1}`;
-        XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
-      }
+      // Thêm worksheet vào workbook
+      XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh Sach Phu Troi');
 
       // 4) Xuất file Excel
       const fileName = `Phieu_Bao_Lam_Them_Gio_${new Date().toISOString().split('T')[0]}.xlsx`;
@@ -232,16 +226,36 @@ export class ExcelExportService {
     // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với PDF export
     const processedRoutes = await this.applyHCMOverflowLogicForExcel(routes);
 
-    return processedRoutes;
+    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa (like PDF)
+    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+
+    return finalRoutes;
   }
 
   /**
-   * Apply HCM grouping priority logic - distribute evenly among HCM routes
+   * Apply HCM grouping priority logic - Updated to match PDF logic
+   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-Đ,R, BV Hòa Hảo
+   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Nếu là "tự túc", giữ nguyên
     if (tramXe && tramXe.toLowerCase().includes('tự túc')) {
       return 'TỰ TÚC';
+    }
+
+    // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH04, không phân biệt tuyến gốc
+    if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH04';
+    }
+
+    // Kiểm tra nếu là trạm ưu tiên cho HCM02
+    if (this.isHCM02PriorityStation(tramXe)) {
+      return 'HCM02';
+    }
+
+    // Kiểm tra nếu là trạm ưu tiên cho HCM01
+    if (this.isHCM01PriorityStation(tramXe)) {
+      return 'HCM01';
     }
 
     // Nếu không phải HCM route, giữ nguyên
@@ -279,7 +293,8 @@ export class ExcelExportService {
    * Distribute HCM employees evenly for Excel export - theo thứ tự trạm từ chiTietTuyenDuong
    */
   private async distributeHCMEvenlyForExcel(routes: RouteInfo[], hcmRoutes: RouteInfo[]): Promise<RouteInfo[]> {
-    console.log('Excel Export - Applying even distribution logic for HCM routes...');
+    // Use the same logic as PDF export to ensure consistency
+    console.log('Excel Export - Applying even distribution logic for HCM routes with specific station transfers...');
     const allHCMEmployees: Registration[] = [];
     hcmRoutes.forEach(route => {
       if (route.registrations) {
@@ -292,34 +307,70 @@ export class ExcelExportService {
     const sortedHCMEmployees = await this.sortEmployeesByStationOrder(allHCMEmployees);
     console.log(`Excel Export - Sorted HCM employees by station order: ${sortedHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
     
+    // Phân loại nhân viên theo trạm để xử lý chuyển đổi
+    const employeesToMoveToHCM01: Registration[] = [];
+    const employeesToMoveToHCM02: Registration[] = [];
+    const otherEmployees: Registration[] = [];
+    
+    sortedHCMEmployees.forEach(employee => {
+      const station = employee.tramXe?.toLowerCase() || '';
+      if (this.isTargetStationForHCM01(station)) {
+        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM01`);
+        employeesToMoveToHCM01.push(employee);
+      } else if (this.isSharedStation(station)) {
+        employeesToMoveToHCM02.push(employee);
+      } else {
+        otherEmployees.push(employee);
+      }
+    });
+    
+    console.log(`Excel Export - Employee classification: To HCM01=${employeesToMoveToHCM01.length}, To HCM02=${employeesToMoveToHCM02.length}, Other=${otherEmployees.length}`);
+    
     const hcm01Employees: Registration[] = [];
     const hcm02Employees: Registration[] = [];
     const maxEmployeesPerRoute = 15;
-    let currentRoute = 'HCM01';
-
-    for (let i = 0; i < sortedHCMEmployees.length; i++) {
-      const employee = sortedHCMEmployees[i];
-      if (currentRoute === 'HCM01') {
-        if (hcm01Employees.length < maxEmployeesPerRoute) {
-          hcm01Employees.push(employee);
-          console.log(`Excel Export - Assigned ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
-        } else {
-          currentRoute = 'HCM02';
-          hcm02Employees.push(employee);
-          console.log(`Excel Export - HCM01 full, assigned ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
-        }
-      } else if (currentRoute === 'HCM02') {
-        if (hcm02Employees.length < maxEmployeesPerRoute) {
-          hcm02Employees.push(employee);
-          console.log(`Excel Export - Assigned ${employee.hoTen} to HCM02 (${hcm02Employees.length}/${maxEmployeesPerRoute})`);
-        } else {
-          console.log(`Excel Export - Both HCM routes full, employee ${employee.hoTen} will be handled by overflow logic`);
-          break;
-        }
+    
+    // Bước 1: Thêm nhân viên từ các trạm đặc biệt vào HCM01
+    const sortedTargetEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM01);
+    for (const employee of sortedTargetEmployees) {
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+      }
+    }
+    
+    // Bước 2: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01
+    const sortedSharedEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
+    for (const employee of sortedSharedEmployees) {
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+      } else {
+        break;
+      }
+    }
+    
+    // Bước 3: Thêm nhân viên khác để đủ 15 người cho HCM01
+    const sortedOtherEmployees = await this.sortEmployeesByStationOrder(otherEmployees);
+    for (const employee of sortedOtherEmployees) {
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+      } else {
+        break;
+      }
+    }
+    
+    // Bước 4: Phân chia nhân viên còn lại cho HCM02
+    const remainingEmployees = [...sortedSharedEmployees, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
+    const sortedRemainingEmployees = await this.sortEmployeesByStationOrder(remainingEmployees);
+    for (const employee of sortedRemainingEmployees) {
+      if (hcm02Employees.length < maxEmployeesPerRoute) {
+        hcm02Employees.push(employee);
+      } else {
+        break;
       }
     }
 
-    console.log(`Excel Export - Even distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
+    console.log(`Excel Export - Final distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
+    console.log(`Excel Export - HCM01 final order:`, hcm01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
 
     const updatedRoutes = [...routes];
     const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
@@ -407,6 +458,145 @@ export class ExcelExportService {
   }
 
   /**
+   * Create single sheet with all routes and stations grouped (like PDF)
+   */
+  private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[]): Promise<XLSX.WorkSheet> {
+    const data: any[][] = [];
+    
+    // Header
+    data.push(['PHIẾU BÁO LÀM THÊM GIỜ']);
+    data.push([`Ngày ${new Date().toLocaleDateString('vi-VN')}`]);
+    data.push([]);
+    
+    // Table header simple
+    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', 'Từ...', 'Đến...', 'Ghi chú']);
+    
+    let globalSttCounter = 1;
+    
+    // Iterate through each route
+    for (const route of routeGroups) {
+      if (!route.registrations || route.registrations.length === 0) {
+        continue;
+      }
+      
+      // Group employees by station
+      const groupedByStation = await this.groupRegistrationsByStation(route.registrations);
+      
+      // Add route header
+      data.push([]);
+      const routeHeaderText = `TUYẾN: ${route.routeName}`;
+      if (route.driverInfo) {
+        data.push([`${routeHeaderText} | Tài xế: ${route.driverInfo.name} | SĐT: ${route.driverInfo.phone} | Xe: ${route.driverInfo.vehicleNumber}`, '', '', '', '', '', '']);
+      } else {
+        data.push([routeHeaderText, '', '', '', '', '', '']);
+      }
+      
+      // Iterate through stations
+      for (const [station, employees] of Object.entries(groupedByStation)) {
+        // Keep employees in their original order (already sorted by station order from database)
+        // DO NOT sort alphabetically - use the original order as provided
+        for (const emp of employees) {
+          data.push([
+            globalSttCounter++,
+            emp.hoTen,
+            station, // Show station name for all employees to match PDF data arrangement
+            emp.dienThoai,
+            emp.thoiGianBatDau,
+            emp.thoiGianKetThuc,
+            ''
+          ]);
+        }
+      }
+    }
+    
+    // Create worksheet
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    
+    // Set column widths
+    const colWidths = [
+      { wch: 5 },   // STT
+      { wch: 25 },  // Họ và tên
+      { wch: 20 },  // Trạm xe
+      { wch: 15 },  // Điện thoại
+      { wch: 12 },  // Từ...
+      { wch: 12 },  // Đến...
+      { wch: 15 }   // Ghi chú
+    ];
+    worksheet['!cols'] = colWidths;
+    
+    return worksheet;
+  }
+  
+  /**
+   * Group registrations by station
+   */
+  private async groupRegistrationsByStation(registrations: Registration[]): Promise<{ [station: string]: Registration[] }> {
+    const grouped: { [station: string]: Registration[] } = {};
+    
+    for (const reg of registrations) {
+      const station = reg.tramXe || 'Chưa phân trạm';
+      
+      if (!grouped[station]) {
+        grouped[station] = [];
+      }
+      grouped[station].push(reg);
+    }
+    
+    // Sort stations within the route
+    const sortedGrouped = await this.sortStationsByOrder(grouped);
+    
+    return sortedGrouped;
+  }
+  
+  /**
+   * Sort stations by order (similar to PDF logic)
+   */
+  private async sortStationsByOrder(grouped: { [station: string]: Registration[] }): Promise<{ [station: string]: Registration[] }> {
+    try {
+      if (!this.dataCacheService.isDataLoaded()) {
+        return grouped;
+      }
+      
+      // Get route details from cache
+      const routeDetails = this.dataCacheService.getRouteDetails();
+      
+      if (!routeDetails || routeDetails.length === 0) {
+        return grouped;
+      }
+      
+      // Create station order map from cache
+      const stationOrderMap = new Map<string, number>();
+      
+      routeDetails.forEach((detail: any) => {
+        const stationName = detail.tenDiemDon;
+        const order = detail.thuTu;
+        stationOrderMap.set(stationName, order);
+        // Also store normalized name
+        stationOrderMap.set(this.normalizeStationName(stationName), order);
+      });
+      
+      // Sort stations by their order
+      const sortedEntries = Object.entries(grouped).sort(([stationA], [stationB]) => {
+        const orderA = stationOrderMap.get(stationA) || stationOrderMap.get(this.normalizeStationName(stationA)) || 999;
+        const orderB = stationOrderMap.get(stationB) || stationOrderMap.get(this.normalizeStationName(stationB)) || 999;
+        return orderA - orderB;
+      });
+      
+      // Convert back to object
+      const sortedGrouped: { [station: string]: Registration[] } = {};
+      sortedEntries.forEach(([station, registrations]) => {
+        sortedGrouped[station] = registrations;
+      });
+      
+      return sortedGrouped;
+      
+    } catch (error) {
+      console.error('Error sorting stations:', error);
+      return grouped;
+    }
+  }
+
+  /**
    * Create worksheet for a specific route
    */
   private createRouteWorksheet(route: RouteInfo, routeNumber: number): XLSX.WorkSheet {
@@ -458,5 +648,95 @@ export class ExcelExportService {
     worksheet['!cols'] = colWidths;
 
     return worksheet;
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm cần chuyển lên HCM01 không
+   */
+  private isTargetStationForHCM01(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const targetStations = [
+      'đinh tiên hoàng-đbp',
+      'dinh tien hoang-dbp',
+      'hai bà trưng-đbp',
+      'hai ba trung-dbp',
+      'bv hòa hảo',
+      'bv hoa hao',
+      'bệnh viện hòa hảo',
+      'benh vien hoa hao'
+    ];
+    
+    return targetStations.some(targetStation => 
+      stationLower.includes(targetStation) || targetStation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm chung giữa 2 tuyến không
+   */
+  private isSharedStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const sharedStations = [
+      'ngã 3 bến gỗ',
+      'nga 3 ben go',
+      'ngã 3 long bình tân',
+      'nga 3 long binh tan',
+      'ngã 4 thủ đức',
+      'nga 4 thu duc',
+      'rmk',
+      'ngã 3 cát lái',
+      'nga 3 cat lai',
+      'hàng xanh',
+      'hang xanh',
+      'hàng xanh (gần văn thánh)',
+      'hang xanh (gan van thanh)'
+    ];
+    
+    return sharedStations.some(sharedStation => 
+      stationLower.includes(sharedStation) || sharedStation.includes(stationLower)
+    );
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là Ngã 3 Hãng dầu không
+   */
+  private isNga3HangDauStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const variations = ['ngã 3 hãng dầu', 'nga 3 hang dau', 'ngã 3 hàng dầu', 'nga 3 hang dau', 'hãng dầu', 'hang dau', 'hàng dầu', 'hang dau'];
+    return variations.some(v => stationLower.includes(v) || v.includes(stationLower));
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
+   */
+  private isHCM01PriorityStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
+    return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM02 không
+   */
+  private isHCM02PriorityStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const priorities = ['bà chiểu', 'ba chieu', 'chợ gò vấp', 'cho go vap', 'gò vấp', 'go vap', 'hóc môn', 'hoc mon', 'chùa hoằng pháp', 'chua hoang phap', 'trường lý tự trọng', 'truong ly tu trong'];
+    return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
+  }
+
+  /**
+   * Apply BH distribution logic
+   */
+  private async applyBHDistributionLogic(routes: RouteInfo[]): Promise<RouteInfo[]> {
+    return routes; // Stub - returns routes as-is for now
   }
 }

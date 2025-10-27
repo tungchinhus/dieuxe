@@ -2236,6 +2236,8 @@ export class PdfExportService {
     let sttCounter = 1;
     
     Object.keys(groupedByStation).forEach(station => {
+      // Keep employees in their original order (already sorted by station order from database)
+      // DO NOT sort alphabetically - use the original order as provided
       const employees = groupedByStation[station];
       const stationCount = employees.length;
       
@@ -2419,6 +2421,8 @@ export class PdfExportService {
     let sttCounter = 1;
     
     Object.keys(groupedByStation).forEach(station => {
+      // Keep employees in their original order (already sorted by station order from database)
+      // DO NOT sort alphabetically - use the original order as provided
       const employees = groupedByStation[station];
       const stationCount = employees.length;
       
