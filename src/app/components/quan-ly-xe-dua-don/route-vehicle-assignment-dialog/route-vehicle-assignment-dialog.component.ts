@@ -101,26 +101,40 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
   }
 
   private initializeAssignments(): void {
-    this.routeAssignments = this.data.routes.map(route => ({
-      routeId: route.routeId,
-      routeName: route.routeName,
-      routeCode: route.routeCode,
-      employeeCount: route.employeeCount,
-      assignedVehicle: {
-        vehicleId: '',
-        licensePlate: '',
-        vehicleType: '',
-        capacity: 0,
-        garageId: '',
-        garageName: ''
-      },
-      assignedDriver: {
-        driverName: '',
-        phoneNumber: ''
-      },
-      assignedAt: new Date(),
-      thuTu: route.thuTu || 0 // Include order field if available
-    }));
+    this.routeAssignments = this.data.routes.map(route => {
+      // Xác định loại xe mặc định dựa trên số nhân viên
+      let defaultVehicleType = '';
+      if (route.employeeCount < 7) {
+        defaultVehicleType = 'TAXI';
+      } else if (route.employeeCount >= 7 && route.employeeCount <= 15) {
+        defaultVehicleType = '16C';
+      } else if (route.employeeCount >= 16 && route.employeeCount <= 28) {
+        defaultVehicleType = '29C';
+      } else if (route.employeeCount > 28) {
+        defaultVehicleType = '45C';
+      }
+
+      return {
+        routeId: route.routeId,
+        routeName: route.routeName,
+        routeCode: route.routeCode,
+        employeeCount: route.employeeCount,
+        assignedVehicle: {
+          vehicleId: '',
+          licensePlate: '',
+          vehicleType: defaultVehicleType,
+          capacity: 0,
+          garageId: '',
+          garageName: ''
+        },
+        assignedDriver: {
+          driverName: '',
+          phoneNumber: ''
+        },
+        assignedAt: new Date(),
+        thuTu: route.thuTu || 0 // Include order field if available
+      };
+    });
   }
 
   onVehicleChange(routeId: string, vehicleId: string): void {
@@ -130,7 +144,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       if (assignment) {
         assignment.assignedVehicle = {
           vehicleId: selectedVehicle.MaXe,
-          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount),
+          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount, selectedVehicle.LoaiXe),
           vehicleType: selectedVehicle.LoaiXe,
           capacity: this.getVehicleCapacity(selectedVehicle.LoaiXe),
           garageId: selectedVehicle.MaNhaXe || '',
@@ -161,7 +175,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         // Nếu tìm thấy xe trong danh sách, cập nhật thông tin đầy đủ
         assignment.assignedVehicle = {
           vehicleId: selectedVehicle.MaXe,
-          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount),
+          licensePlate: this.formatLicensePlateForRoute(selectedVehicle.BienSoXe, assignment.employeeCount, selectedVehicle.LoaiXe),
           vehicleType: selectedVehicle.LoaiXe,
           capacity: this.getVehicleCapacity(selectedVehicle.LoaiXe),
           garageId: selectedVehicle.MaNhaXe || '',
@@ -172,7 +186,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         this.loadDriverInfoForVehicle(assignment, selectedVehicle);
       } else {
         // Nếu không tìm thấy xe trong danh sách, chỉ cập nhật biển số với format phù hợp
-        assignment.assignedVehicle.licensePlate = this.formatLicensePlateForRoute(originalLicensePlate, assignment.employeeCount);
+        assignment.assignedVehicle.licensePlate = this.formatLicensePlateForRoute(originalLicensePlate, assignment.employeeCount, assignment.assignedVehicle.vehicleType);
         assignment.assignedVehicle.vehicleId = '';
         assignment.assignedVehicle.vehicleType = '';
         assignment.assignedVehicle.capacity = 0;
@@ -187,20 +201,25 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
   }
 
   /**
-   * Format biển số xe dựa trên số nhân viên của tuyến
+   * Format biển số xe dựa trên số nhân viên của tuyến hoặc vehicle type
    */
-  private formatLicensePlateForRoute(licensePlate: string, employeeCount: number): string {
+  private formatLicensePlateForRoute(licensePlate: string, employeeCount: number, vehicleType?: string): string {
     let prefix = '';
     
-    // Logic chọn xe dựa trên số nhân viên
-    if (employeeCount < 7) {
-      prefix = 'TAXI - '; // Dưới 7 nhân viên: Taxi
-    } else if (employeeCount >= 7 && employeeCount <= 15) {
-      prefix = '16C - '; // 7 đến 15 nhân viên: Xe 16 chỗ
-    } else if (employeeCount >= 16 && employeeCount <= 28) {
-      prefix = '29C - '; // 16 đến 28 nhân viên: Xe 29 chỗ
-    } else if (employeeCount > 28) {
-      prefix = '45C - '; // Trên 28 nhân viên: Xe 45 chỗ
+    // Nếu có vehicleType, sử dụng nó
+    if (vehicleType) {
+      prefix = `${vehicleType} - `;
+    } else {
+      // Logic chọn xe dựa trên số nhân viên
+      if (employeeCount < 7) {
+        prefix = 'TAXI - '; // Dưới 7 nhân viên: Taxi
+      } else if (employeeCount >= 7 && employeeCount <= 15) {
+        prefix = '16C - '; // 7 đến 15 nhân viên: Xe 16 chỗ
+      } else if (employeeCount >= 16 && employeeCount <= 28) {
+        prefix = '29C - '; // 16 đến 28 nhân viên: Xe 29 chỗ
+      } else if (employeeCount > 28) {
+        prefix = '45C - '; // Trên 28 nhân viên: Xe 45 chỗ
+      }
     }
     
     // Thêm prefix nếu chưa có
@@ -226,6 +245,36 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     }
     return '';
   }
+
+  getVehicleType(assignment: RouteVehicleAssignment): string {
+    if (assignment.assignedVehicle.vehicleType) {
+      return assignment.assignedVehicle.vehicleType;
+    }
+    // Fallback: determine vehicle type from employee count
+    if (assignment.employeeCount < 7) {
+      return 'TAXI';
+    } else if (assignment.employeeCount >= 7 && assignment.employeeCount <= 15) {
+      return '16C';
+    } else if (assignment.employeeCount >= 16 && assignment.employeeCount <= 28) {
+      return '29C';
+    } else if (assignment.employeeCount > 28) {
+      return '45C';
+    }
+    return '16C'; // default fallback
+  }
+
+  onVehicleTypeChange(routeId: string, vehicleType: string): void {
+    const assignment = this.routeAssignments.find(a => a.routeId === routeId);
+    if (assignment) {
+      // Update vehicle type
+      assignment.assignedVehicle.vehicleType = vehicleType;
+      
+      // Rebuild full license plate with new type
+      const licensePlateNumber = this.getLicensePlateNumber(assignment);
+      assignment.assignedVehicle.licensePlate = `${vehicleType} - ${licensePlateNumber}`;
+    }
+  }
+
   getLicensePlateNumber(assignment: RouteVehicleAssignment): string {
     const licensePlate = assignment.assignedVehicle.licensePlate;
     
@@ -247,7 +296,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     const assignment = this.routeAssignments.find(a => a.routeId === routeId);
     if (assignment) {
       // Tạo biển số đầy đủ với prefix dựa trên số nhân viên
-      const fullLicensePlate = this.formatLicensePlateForRoute(licensePlateNumber, assignment.employeeCount);
+      const fullLicensePlate = this.formatLicensePlateForRoute(licensePlateNumber, assignment.employeeCount, assignment.assignedVehicle.vehicleType);
 
       // Tìm xe theo biển số gốc (không có prefix)
       const selectedVehicle = this.data.vehicles.find(v => 
@@ -646,7 +695,7 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     if (assignment) {
       assignment.assignedVehicle = {
         vehicleId: vehicle.MaXe,
-        licensePlate: this.formatLicensePlateForRoute(vehicle.BienSoXe, assignment.employeeCount),
+        licensePlate: this.formatLicensePlateForRoute(vehicle.BienSoXe, assignment.employeeCount, assignment.assignedVehicle.vehicleType),
         vehicleType: vehicle.LoaiXe,
         capacity: this.getVehicleCapacity(vehicle.LoaiXe),
         garageId: vehicle.MaNhaXe || '',

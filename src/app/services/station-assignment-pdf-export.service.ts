@@ -901,6 +901,32 @@ export class StationAssignmentPdfExportService {
         routeName: 'Tuyến BH03',
         employeeCount: 10,
         thuTu: 3
+      },
+
+      // BH04 - Tuyến Biên Hòa 4
+      {
+        stationId: 'BH04_001',
+        stationName: 'BV 7B',
+        routeCode: 'BH04',
+        routeName: 'Tuyến BH04',
+        employeeCount: 9,
+        thuTu: 1
+      },
+      {
+        stationId: 'BH04_002',
+        stationName: 'KCN Hiệp Phước',
+        routeCode: 'BH04',
+        routeName: 'Tuyến BH04',
+        employeeCount: 17,
+        thuTu: 2
+      },
+      {
+        stationId: 'BH04_003',
+        stationName: 'Metro An Phú',
+        routeCode: 'BH04',
+        routeName: 'Tuyến BH04',
+        employeeCount: 12,
+        thuTu: 3
       }
     ];
   }

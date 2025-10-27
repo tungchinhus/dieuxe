@@ -34,7 +34,7 @@
 
 .route-item {
   display: grid;
-  grid-template-columns: 1fr 1.5fr 1fr 1fr;
+  grid-template-columns: 1fr 2fr 1fr 1fr;
   gap: 16px;
   padding: 16px;
   background-color: transparent;
@@ -65,8 +65,17 @@
   color: #666;
 }
 
+.vehicle-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.vehicle-type {
+  width: 120px;
+}
+
 .vehicle-select {
-  width: 100%;
+  flex: 1;
 }
 
 .vehicle-select .mat-mdc-form-field-infix {

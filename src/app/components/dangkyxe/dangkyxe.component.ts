@@ -2669,14 +2669,14 @@ export class DangKyXeComponent implements OnInit {
     const stationName = this.normalizeStationName(employee.tramXe);
     const stationLower = employee.tramXe.toLowerCase();
     
-    // Ưu tiên BH03 cho các trạm cụ thể từ HCM02 overflow
-    const stationsForBH03 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
-    const shouldUseBH03 = stationsForBH03.some(station => 
+    // Ưu tiên BH03/BH04 cho các trạm cụ thể từ HCM02 overflow
+    const stationsForBH03BH04 = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
+    const shouldUseBH03BH04 = stationsForBH03BH04.some(station => 
       stationLower.includes(station) || station.includes(stationLower)
     );
     
-    if (shouldUseBH03) {
-      // Tất cả trạm này gom vào BH03
+    if (shouldUseBH03BH04) {
+      // Phân biệt cụ thể: Ngã 3 Bến Gỗ → BH03, Ngã 3 Long Bình Tân → BH04
       if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
         const routeExists = routes.some(r => r.routeName === 'BH03');
         if (routeExists) {

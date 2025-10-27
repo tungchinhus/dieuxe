@@ -199,8 +199,14 @@ export class PdfExportService {
         
         if (i > 0) pdf.addPage();
 
-        const htmlContent = await this.generateOvertimeReportHTMLTemplate(route);
-        await this.convertHTMLToPDF(pdf, htmlContent);
+        // Kiểm tra nếu số nhân viên > 36 thì chia thành nhiều trang
+        const maxEmployeesPerPage = 36;
+        if (route.registrations.length > maxEmployeesPerPage) {
+          await this.exportMultiplePagesForRoute(pdf, route, maxEmployeesPerPage);
+        } else {
+          const htmlContent = await this.generateOvertimeReportHTMLTemplate(route);
+          await this.convertHTMLToPDF(pdf, htmlContent);
+        }
       }
 
       // 4) Lưu file
@@ -1090,24 +1096,24 @@ export class PdfExportService {
   private handleSpecialMultiRouteStations(station: string, currentRoute: string): string | null {
     const stationLower = station.toLowerCase();
     
-    // Ngã 3 Bến Gỗ: thuộc BH03, HCM01, HCM02
+    // Ngã 3 Bến Gỗ: thuộc BH03, BH04, HCM01, HCM02
     if (stationLower.includes('ngã 3 bến gỗ') || stationLower.includes('nga 3 ben go')) {
-      // Ưu tiên BH03
+      // Ưu tiên BH03 trước, sau đó BH04
       if (currentRoute === 'BH01' || currentRoute === 'BH02') {
         console.log(`PDF Export - "Ngã 3 Bến Gỗ" should not be in ${currentRoute}, redirecting to BH03`);
         return 'BH03';
       }
-      // Nếu đã đúng BH03, giữ nguyên
+      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
       return null;
     }
     
-    // Ngã 4 Vũng Tàu (Ajinomoto): thuộc BH03
+    // Ngã 4 Vũng Tàu (Ajinomoto): thuộc BH03, BH04
     if (stationLower.includes('ngã 4 vũng tàu') || stationLower.includes('nga 4 vung tau')) {
       if (currentRoute === 'BH01' || currentRoute === 'BH02') {
         console.log(`PDF Export - "Ngã 4 Vũng Tàu" should not be in ${currentRoute}, redirecting to BH03`);
         return 'BH03';
       }
-      // Nếu đã đúng BH03, giữ nguyên
+      // Nếu đã đúng BH03 hoặc BH04, giữ nguyên
       return null;
     }
     
@@ -1184,7 +1190,7 @@ export class PdfExportService {
       'cong chao tan mai'
     ];
     
-    // BH03 stations (redirected from BH04)
+    // BH04 stations - chỉ các trạm chắc chắn thuộc BH04
     const bh04Stations = [
       'cầu hiệp hòa',
       'cau hiep hoa',
@@ -2252,6 +2258,53 @@ export class PdfExportService {
     });
     
     return tableRows;
+  }
+
+  /**
+   * Xuất nhiều trang khi số nhân viên > 36
+   */
+  private async exportMultiplePagesForRoute(pdf: jsPDF, route: RouteInfo, maxEmployeesPerPage: number): Promise<void> {
+    // Gom nhóm theo trạm xe
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
+    const stations = Object.keys(groupedByStation);
+    
+    let currentPageEmployees: Registration[] = [];
+    let currentEmployeeCount = 0;
+    
+    for (let stationIndex = 0; stationIndex < stations.length; stationIndex++) {
+      const station = stations[stationIndex];
+      const employees = groupedByStation[station];
+      
+      // Nếu thêm nhóm nhân viên này vượt quá 36, xuất trang hiện tại và bắt đầu trang mới
+      if (currentEmployeeCount + employees.length > maxEmployeesPerPage && currentEmployeeCount > 0) {
+        // Xuất trang hiện tại
+        const pageRoute: RouteInfo = {
+          ...route,
+          registrations: currentPageEmployees
+        };
+        const htmlContent = await this.generateOvertimeReportHTMLTemplate(pageRoute);
+        await this.convertHTMLToPDF(pdf, htmlContent);
+        
+        // Bắt đầu trang mới
+        pdf.addPage();
+        currentPageEmployees = [];
+        currentEmployeeCount = 0;
+      }
+      
+      // Thêm nhóm nhân viên vào trang hiện tại
+      currentPageEmployees = currentPageEmployees.concat(employees);
+      currentEmployeeCount += employees.length;
+    }
+    
+    // Xuất trang cuối cùng nếu còn dữ liệu
+    if (currentPageEmployees.length > 0) {
+      const pageRoute: RouteInfo = {
+        ...route,
+        registrations: currentPageEmployees
+      };
+      const htmlContent = await this.generateOvertimeReportHTMLTemplate(pageRoute);
+      await this.convertHTMLToPDF(pdf, htmlContent);
+    }
   }
 
   /**
