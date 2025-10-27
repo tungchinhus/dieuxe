@@ -1624,27 +1624,6 @@ export class DangKyXeComponent implements OnInit {
         let orderA = routeOrderMap.get(stationA) || routeOrderMap.get(this.normalizeStationName(stationA)) || 999;
         let orderB = routeOrderMap.get(stationB) || routeOrderMap.get(this.normalizeStationName(stationB)) || 999;
 
-        // Special handling for HCM02: ensure Bà Chiểu comes after Ngã 4 Thủ Đức and RMK
-        if (routeCode === 'HCM02') {
-          if (this.isBaChieuStation(stationA)) {
-            // Bà Chiểu should come after Ngã 4 Thủ Đức and RMK
-            // Find the highest order among stations that should come before Bà Chiểu
-            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
-            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
-            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
-            orderA = maxOrderBeforeBaChieu + 1; // Set to be after both stations
-            console.log(`🔄 Bà Chiểu order adjusted: ${stationA} -> ${orderA} (after Ngã 4 Thủ Đức: ${nga4ThuDucOrder}, RMK: ${rmkOrder})`);
-          }
-          if (this.isBaChieuStation(stationB)) {
-            // Bà Chiểu should come after Ngã 4 Thủ Đức and RMK
-            // Find the highest order among stations that should come before Bà Chiểu
-            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
-            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
-            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
-            orderB = maxOrderBeforeBaChieu + 1; // Set to be after both stations
-            console.log(`🔄 Bà Chiểu order adjusted: ${stationB} -> ${orderB} (after Ngã 4 Thủ Đức: ${nga4ThuDucOrder}, RMK: ${rmkOrder})`);
-          }
-        }
 
         return orderA - orderB;
       });

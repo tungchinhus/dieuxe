@@ -2069,8 +2069,18 @@ export class PdfExportService {
       grouped[displayStationName].push(reg);
     });
     
+    // Get route code from data cache based on the first station
+    let routeCode = '';
+    const firstStation = Object.keys(grouped)[0];
+    if (firstStation) {
+      // Try to get route from data cache
+      if (this.dataCacheService.isDataLoaded()) {
+        routeCode = this.dataCacheService.getRouteForStation(firstStation) || '';
+      }
+    }
+    
     // Sắp xếp các trạm theo thuTu từ RouteDetail
-    const sortedGrouped = await this.sortStationsByThuTu(grouped);
+    const sortedGrouped = await this.sortStationsByThuTu(grouped, routeCode);
     
     return sortedGrouped;
   }
@@ -2098,8 +2108,10 @@ export class PdfExportService {
 
   /**
    * Sort stations by thuTu from RouteDetail
+   * @param grouped - Grouped registrations by station
+   * @param routeCode - The route code to use for sorting (optional, will be looked up if not provided)
    */
-  private async sortStationsByThuTu(grouped: { [station: string]: Registration[] }): Promise<{ [station: string]: Registration[] }> {
+  private async sortStationsByThuTu(grouped: { [station: string]: Registration[] }, routeCode?: string): Promise<{ [station: string]: Registration[] }> {
     try {
       // Get route details to determine station order from cache
       const routeDetails = this.dataCacheService.getRouteDetails();
@@ -2121,17 +2133,34 @@ export class PdfExportService {
         stationOrderMap.get(detail.maTuyenXe)!.set(this.normalizeStationName(detail.tenDiemDon), detail.thuTu);
       });
 
-      // Get the route code from the first registration (assuming all registrations in this group are from the same route)
-      const firstRegistration = Object.values(grouped)[0]?.[0];
-      if (!firstRegistration) {
-        return grouped;
+      // If routeCode is not provided, try to find it from the stations
+      if (!routeCode) {
+        const firstRegistration = Object.values(grouped)[0]?.[0];
+        if (!firstRegistration) {
+          return grouped;
+        }
+
+        // Try to get route from data cache using the first station
+        const firstStation = firstRegistration.tramXe;
+        if (this.dataCacheService.isDataLoaded()) {
+          routeCode = this.dataCacheService.getRouteForStation(firstStation) || '';
+        }
+        
+        // If still no route code, search for it in station order map
+        if (!routeCode) {
+          for (const [route, stationMap] of stationOrderMap.entries()) {
+            if (stationMap.has(firstStation) || stationMap.has(this.normalizeStationName(firstStation))) {
+              routeCode = route;
+              break;
+            }
+          }
+        }
       }
 
-      const routeCode = firstRegistration.maTuyenXe;
-      const routeOrderMap = stationOrderMap.get(routeCode);
+      const routeOrderMap = routeCode ? stationOrderMap.get(routeCode) : undefined;
 
       if (!routeOrderMap) {
-        console.warn(`No route details found for route ${routeCode}, returning stations without sorting`);
+        console.warn(`No route details found for route "${routeCode || 'unknown'}", returning stations without sorting`);
         return grouped;
       }
 
@@ -2149,35 +2178,7 @@ export class PdfExportService {
           orderB = routeOrderMap.get(this.normalizeStationName(stationB));
         }
         
-        // Special handling for BV Hòa Hảo - ensure it's always last
-        if (this.isBVHoaHaoStation(stationA)) {
-          orderA = 9999; // Highest priority to be last
-        }
-        if (this.isBVHoaHaoStation(stationB)) {
-          orderB = 9999; // Highest priority to be last
-        }
-        
-        // Special handling for HCM02: ensure Bà Chiểu comes after Ngã 4 Thủ Đức and RMK
-        if (routeCode === 'HCM02') {
-          if (this.isBaChieuStation(stationA)) {
-            // Bà Chiểu should come after Ngã 4 Thủ Đức (order 3) and RMK (order 4)
-            // Find the highest order among stations that should come before Bà Chiểu
-            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
-            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
-            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
-            orderA = maxOrderBeforeBaChieu + 1; // Set to be after both stations
-          }
-          if (this.isBaChieuStation(stationB)) {
-            // Bà Chiểu should come after Ngã 4 Thủ Đức (order 3) and RMK (order 4)
-            // Find the highest order among stations that should come before Bà Chiểu
-            const nga4ThuDucOrder = routeOrderMap.get('Ngã 4 Thủ Đức') || routeOrderMap.get(this.normalizeStationName('Ngã 4 Thủ Đức')) || 3;
-            const rmkOrder = routeOrderMap.get('RMK') || routeOrderMap.get(this.normalizeStationName('RMK')) || 4;
-            const maxOrderBeforeBaChieu = Math.max(nga4ThuDucOrder, rmkOrder);
-            orderB = maxOrderBeforeBaChieu + 1; // Set to be after both stations
-          }
-        }
-        
-        // Use found order or default to 999
+        // Use found order or default to 999 (sorts strictly by database order)
         orderA = orderA || 999;
         orderB = orderB || 999;
         
