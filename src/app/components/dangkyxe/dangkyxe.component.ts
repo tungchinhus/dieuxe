@@ -1776,7 +1776,10 @@ export class DangKyXeComponent implements OnInit {
     console.log('Dialog - Routes after sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
 
     // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với PDF export
-    const processedRoutes = await this.applyHCMOverflowLogicForDialog(routes);
+    let processedRoutes = await this.applyHCMOverflowLogicForDialog(routes);
+
+    // Áp dụng logic phân chia Biên Hòa giống PDF export
+    processedRoutes = await this.applyBHDistributionLogicForDialog(processedRoutes);
 
     console.log('Dialog - Final processed routes:', processedRoutes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
 
@@ -2860,6 +2863,130 @@ export class DangKyXeComponent implements OnInit {
     console.log(`HCM01: ${sortedHCM01Employees.length} employees`);
     console.log(`HCM02: ${sortedHCM02Employees.length} employees`);
     
+    return updatedRoutes;
+  }
+
+  /**
+   * Apply BH distribution logic for dialog - same as PDF export
+   */
+  private async applyBHDistributionLogicForDialog(routes: any[]): Promise<any[]> {
+    // Find BH routes
+    const bhRoutes = routes.filter(r => r.routeName === 'BH01' || r.routeName === 'BH02' || r.routeName === 'BH03');
+    if (bhRoutes.length === 0) {
+      return routes;
+    }
+
+    // Collect all BH employees
+    const allBHEmployees: Registration[] = [];
+    bhRoutes.forEach(route => {
+      if (route.registrations) {
+        allBHEmployees.push(...route.registrations);
+      }
+    });
+
+    console.log(`Dialog - Total BH employees to redistribute: ${allBHEmployees.length}`);
+
+    // Get stations for each BH route
+    const bh01Stations = this.dataCacheService.getStationsForRoute('BH01');
+    const bh02Stations = this.dataCacheService.getStationsForRoute('BH02');
+    const bh03Stations = this.dataCacheService.getStationsForRoute('BH03');
+
+    const bh01Employees: Registration[] = [];
+    const bh02Employees: Registration[] = [];
+    const bh03Employees: Registration[] = [];
+
+    const maxEmployeesBH01 = 45;
+    const maxEmployeesBH02 = 45;
+    const maxEmployeesBH03 = 15;
+
+    // BƯỚC 1: Gom nhân viên vào BH01
+    console.log('Dialog - BH Step 1: Grouping into BH01');
+    for (const employee of allBHEmployees) {
+      const station = employee.tramXe || '';
+      const stationLower = station.toLowerCase();
+
+      const inBH01 = bh01Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH02 = bh02Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+
+      const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
+      const shouldAddToBH01 = (inBH01 && inBH02 && inBH03) || (inBH01 && routeCount === 1);
+
+      if (shouldAddToBH01 && bh01Employees.length < maxEmployeesBH01) {
+        bh01Employees.push(employee);
+      }
+    }
+
+    // BƯỚC 2: Gom nhân viên vào BH02
+    console.log('Dialog - BH Step 2: Grouping into BH02');
+    for (const employee of allBHEmployees) {
+      if (bh01Employees.includes(employee)) continue;
+
+      const station = employee.tramXe || '';
+      const stationLower = station.toLowerCase();
+
+      const inBH02 = bh02Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+
+      const routeCount = [inBH02, inBH03].filter(Boolean).length;
+      const shouldAddToBH02 = (inBH02 && inBH03) || (inBH02 && routeCount === 1);
+
+      if (shouldAddToBH02 && bh02Employees.length < maxEmployeesBH02) {
+        bh02Employees.push(employee);
+      }
+    }
+
+    // BƯỚC 3: Gom nhân viên vào BH03
+    console.log('Dialog - BH Step 3: Grouping into BH03');
+    for (const employee of allBHEmployees) {
+      if (bh01Employees.includes(employee) || bh02Employees.includes(employee)) continue;
+
+      const station = employee.tramXe || '';
+      const stationLower = station.toLowerCase();
+
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+
+      if (inBH03 && bh03Employees.length < maxEmployeesBH03) {
+        bh03Employees.push(employee);
+      } else if (inBH03 && bh01Employees.length < maxEmployeesBH01) {
+        bh01Employees.push(employee);
+      }
+    }
+
+    console.log(`Dialog - BH distribution: BH01=${bh01Employees.length}, BH02=${bh02Employees.length}, BH03=${bh03Employees.length}`);
+
+    // Update routes
+    const updatedRoutes = routes.map(route => {
+      if (route.routeName === 'BH01') {
+        return { ...route, registrations: bh01Employees };
+      }
+      if (route.routeName === 'BH02') {
+        return { ...route, registrations: bh02Employees };
+      }
+      if (route.routeName === 'BH03') {
+        return { ...route, registrations: bh03Employees };
+      }
+      return route;
+    });
+
     return updatedRoutes;
   }
 }
