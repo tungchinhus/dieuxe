@@ -295,26 +295,38 @@ export class PdfExportService {
             const vehicleDetails = await this.firestoreService.getXeDuaDonById(vehicleAssignment.assignedVehicle.vehicleId);
             
             if (vehicleDetails) {
+              const vehicleType = vehicleAssignment.assignedVehicle.vehicleType || '';
+              const licensePlate = vehicleDetails.BienSoXe || vehicleAssignment.assignedVehicle.licensePlate || '';
+              const vehicleNumber = vehicleType ? `${vehicleType} - ${licensePlate}` : licensePlate;
+              
               routeInfo.driverInfo = {
                 name: vehicleDetails.TenTaiXe || 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
                 phone: vehicleDetails.SoDienThoaiTaiXe || '0900000000',
-                vehicleNumber: vehicleDetails.BienSoXe || vehicleAssignment.assignedVehicle.licensePlate
+                vehicleNumber: vehicleNumber
               };
             } else {
               // Fallback nếu không tìm thấy thông tin xe
+              const vehicleType = vehicleAssignment.assignedVehicle.vehicleType || '';
+              const licensePlate = vehicleAssignment.assignedVehicle.licensePlate || '';
+              const vehicleNumber = vehicleType ? `${vehicleType} - ${licensePlate}` : licensePlate;
+              
               routeInfo.driverInfo = {
                 name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
                 phone: '0900000000',
-                vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+                vehicleNumber: vehicleNumber
               };
             }
           } catch (error) {
             console.error('Error getting vehicle details:', error);
             // Fallback nếu có lỗi
+            const vehicleType = vehicleAssignment.assignedVehicle.vehicleType || '';
+            const licensePlate = vehicleAssignment.assignedVehicle.licensePlate || '';
+            const vehicleNumber = vehicleType ? `${vehicleType} - ${licensePlate}` : licensePlate;
+            
             routeInfo.driverInfo = {
               name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
               phone: '0900000000',
-              vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+              vehicleNumber: vehicleNumber
             };
           }
         }
