@@ -108,9 +108,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         defaultVehicleType = 'TAXI';
       } else if (route.employeeCount >= 7 && route.employeeCount <= 15) {
         defaultVehicleType = '16C';
-      } else if (route.employeeCount >= 16 && route.employeeCount <= 28) {
+      } else if (route.employeeCount >= 16 && route.employeeCount <= 29) {
         defaultVehicleType = '29C';
-      } else if (route.employeeCount > 28) {
+      } else if (route.employeeCount > 29) {
         defaultVehicleType = '45C';
       }
 
@@ -215,10 +215,10 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         prefix = 'TAXI - '; // Dưới 7 nhân viên: Taxi
       } else if (employeeCount >= 7 && employeeCount <= 15) {
         prefix = '16C - '; // 7 đến 15 nhân viên: Xe 16 chỗ
-      } else if (employeeCount >= 16 && employeeCount <= 28) {
-        prefix = '29C - '; // 16 đến 28 nhân viên: Xe 29 chỗ
-      } else if (employeeCount > 28) {
-        prefix = '45C - '; // Trên 28 nhân viên: Xe 45 chỗ
+      } else if (employeeCount >= 16 && employeeCount <= 29) {
+        prefix = '29C - '; // 16 đến 29 nhân viên: Xe 29 chỗ
+      } else if (employeeCount > 29) {
+        prefix = '45C - '; // Trên 29 nhân viên: Xe 45 chỗ
       }
     }
     
@@ -238,9 +238,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return 'TAXI - ';
     } else if (employeeCount >= 7 && employeeCount <= 15) {
       return '16C - ';
-    } else if (employeeCount >= 16 && employeeCount <= 28) {
+    } else if (employeeCount >= 16 && employeeCount <= 29) {
       return '29C - ';
-    } else if (employeeCount > 28) {
+    } else if (employeeCount > 29) {
       return '45C - ';
     }
     return '';
@@ -255,9 +255,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return 'TAXI';
     } else if (assignment.employeeCount >= 7 && assignment.employeeCount <= 15) {
       return '16C';
-    } else if (assignment.employeeCount >= 16 && assignment.employeeCount <= 28) {
+    } else if (assignment.employeeCount >= 16 && assignment.employeeCount <= 29) {
       return '29C';
-    } else if (assignment.employeeCount > 28) {
+    } else if (assignment.employeeCount > 29) {
       return '45C';
     }
     return '16C'; // default fallback

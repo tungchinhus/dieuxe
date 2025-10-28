@@ -936,97 +936,146 @@ export class PdfExportService {
     const bh02Employees: Registration[] = [];
     const bh03Employees: Registration[] = [];
     
-    const maxEmployeesBH01 = 45; // BH01 ưu tiên cho xe 45 chỗ
-    const maxEmployeesOtherBH = 15; // BH02, BH03 cho xe 16 chỗ
+    const maxEmployeesBH01 = 45; // BH01 xe 45 chỗ
+    const maxEmployeesBH02 = 45; // BH02 xe 45 chỗ
+    const maxEmployeesBH03 = 15; // BH03 xe 16 chỗ
 
-    console.log(`PDF Export - BH01 priority: max ${maxEmployeesBH01} employees for 45-seat vehicle`);
-    console.log(`PDF Export - Other BH routes: max ${maxEmployeesOtherBH} employees for 16-seat vehicles`);
+    console.log(`PDF Export - BH01: max ${maxEmployeesBH01} employees for 45-seat vehicle`);
+    console.log(`PDF Export - BH02: max ${maxEmployeesBH02} employees for 45-seat vehicle`);
+    console.log(`PDF Export - BH03: max ${maxEmployeesBH03} employees for 16-seat vehicle`);
 
-    // Phân chia nhân viên BH01: CHỈ lấy nhân viên từ trạm thuộc tuyến BH01
-    // Ưu tiên trạm trùng nhau giữa các tuyến BH vào xe 45 chỗ (BH01)
-    console.log(`PDF Export - Step 1: Filtering ONLY employees from BH01 stations for 45-seat vehicle`);
+    // BƯỚC 1: Gom nhân viên vào BH01
+    // - Nhân viên có trạm xuất hiện ở nhiều tuyến (BH01, BH02, BH03 cùng lúc)
+    // - Nhân viên từ trạm riêng của BH01
+    console.log(`PDF Export - Step 1: Grouping employees into BH01 (45-seat vehicle)`);
     
-    // Lấy danh sách trạm thuộc BH01 từ cache
     const bh01Stations = this.dataCacheService.getStationsForRoute('BH01');
-    console.log(`PDF Export - BH01 stations from cache: ${bh01Stations.join(', ')}`);
+    const bh02Stations = this.dataCacheService.getStationsForRoute('BH02');
+    const bh03Stations = this.dataCacheService.getStationsForRoute('BH03');
     
-    // Đếm số nhân viên có trạm thuộc BH01
-    const bh01StationEmployees = sortedBHEmployees.filter(employee => {
+    console.log(`PDF Export - BH01 stations: ${bh01Stations.join(', ')}`);
+    console.log(`PDF Export - BH02 stations: ${bh02Stations.join(', ')}`);
+    console.log(`PDF Export - BH03 stations: ${bh03Stations.join(', ')}`);
+    
+    for (const employee of sortedBHEmployees) {
       const station = employee.tramXe || '';
-      const isBH01Station = bh01Stations.some(bh01Station => 
-        bh01Station.toLowerCase() === station.toLowerCase() ||
-        this.normalizeStationName(bh01Station) === this.normalizeStationName(station)
+      const stationLower = station.toLowerCase();
+      
+      // Check if station appears in multiple routes or belongs exclusively to BH01
+      const inBH01 = bh01Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
       );
-      return isBH01Station;
-    });
-    
-    console.log(`PDF Export - Found ${bh01StationEmployees.length} employees from BH01 stations (out of ${sortedBHEmployees.length} total BH employees)`);
-    
-    // CHỈ sắp nhân viên từ trạm BH01 vào xe 45 chỗ (không lấy nhân viên trạm khác)
-    for (const employee of bh01StationEmployees) {
-      if (bh01Employees.length < maxEmployeesBH01) {
-        bh01Employees.push(employee);
-        console.log(`PDF Export - Added BH01 station employee ${employee.hoTen} from "${employee.tramXe}" to BH01 (45-seat vehicle) (${bh01Employees.length}/${maxEmployeesBH01})`);
-      } else {
-        console.log(`PDF Export - BH01 45-seat vehicle full, employee ${employee.hoTen} from BH01 station will be assigned to next available route`);
-        // Nếu BH01 đã đủ, không bỏ qua mà sẽ được phân vào tuyến khác dựa trên trạm
+      const inBH02 = bh02Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      
+      // Count how many routes this station appears in
+      const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
+      
+      // Add to BH01 if:
+      // 1. Station appears in ALL 3 routes (trùng tất cả)
+      // 2. Station appears in BH01 only (trạm riêng BH01)
+      const shouldAddToBH01 = (inBH01 && inBH02 && inBH03) || (inBH01 && routeCount === 1);
+      
+      if (shouldAddToBH01) {
+        if (bh01Employees.length < maxEmployeesBH01) {
+          bh01Employees.push(employee);
+          const reason = (inBH01 && inBH02 && inBH03) ? 'overlapping all routes' : 'BH01 exclusive';
+          console.log(`PDF Export - Added ${employee.hoTen} to BH01 (${reason}) (${bh01Employees.length}/${maxEmployeesBH01})`);
+        }
       }
     }
     
-    // Bước 3: Phân chia nhân viên còn lại cho các tuyến BH khác
-    console.log(`PDF Export - Step 3: Distributing remaining employees to other BH routes`);
+    console.log(`PDF Export - BH01 now has ${bh01Employees.length} employees`);
+    
+    // BƯỚC 2: Gom nhân viên vào BH02 từ nhân viên còn lại
+    // - Nhân viên có trạm xuất hiện ở cả BH02 và BH03 (trùng)
+    // - Nhân viên từ trạm riêng của BH02
+    console.log(`PDF Export - Step 2: Grouping remaining employees into BH02`);
+    
     for (const employee of sortedBHEmployees) {
-      const station = employee.tramXe?.toLowerCase() || '';
-      const assignedRoute = this.getBHRouteForStation(station);
-      
       // Bỏ qua nhân viên đã được gán vào BH01
       if (bh01Employees.includes(employee)) {
         continue;
       }
       
-      console.log(`PDF Export - Employee ${employee.hoTen} at station "${employee.tramXe}" assigned to ${assignedRoute}`);
+      const station = employee.tramXe || '';
+      const stationLower = station.toLowerCase();
       
-      switch (assignedRoute) {
-        case 'BH02':
-          if (bh02Employees.length < maxEmployeesOtherBH) {
-            bh02Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH02 (${bh02Employees.length}/${maxEmployeesOtherBH})`);
+      // Check station routes
+      const inBH02 = bh02Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      
+      // Count how many routes this station appears in (excluding BH01 already assigned)
+      const routeCount = [inBH02, inBH03].filter(Boolean).length;
+      
+      // Add to BH02 if:
+      // 1. Station appears in both BH02 and BH03 (trùng BH02-BH03)
+      // 2. Station appears in BH02 only (trạm riêng BH02)
+      const shouldAddToBH02 = (inBH02 && inBH03) || (inBH02 && routeCount === 1);
+      
+      if (shouldAddToBH02) {
+        if (bh02Employees.length < maxEmployeesBH02) {
+          bh02Employees.push(employee);
+          const reason = (inBH02 && inBH03) ? 'overlapping BH02-BH03' : 'BH02 exclusive';
+          console.log(`PDF Export - Added ${employee.hoTen} to BH02 (${reason}) (${bh02Employees.length}/${maxEmployeesBH02})`);
         } else {
-            console.log(`PDF Export - BH02 full, ${employee.hoTen} will be handled by overflow logic`);
+          // BH02 full, add to BH01 if space available
+          if (bh01Employees.length < maxEmployeesBH01) {
+            bh01Employees.push(employee);
+            console.log(`PDF Export - BH02 full, moved ${employee.hoTen} to BH01 (overflow)`);
           }
-          break;
-        case 'BH03':
-          if (bh03Employees.length < maxEmployeesOtherBH) {
-            bh03Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH03 (${bh03Employees.length}/${maxEmployeesOtherBH})`);
-        } else {
-            console.log(`PDF Export - BH03 full, ${employee.hoTen} will be handled by overflow logic`);
-          }
-          break;
-        case 'BH04':
-          // BH04 is redirected to BH03
-          if (bh03Employees.length < maxEmployeesOtherBH) {
-            bh03Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH03 (redirected from BH04) (${bh03Employees.length}/${maxEmployeesOtherBH})`);
-          } else {
-            console.log(`PDF Export - BH03 full, ${employee.hoTen} will be handled by overflow logic`);
-          }
-          break;
-        default:
-          // Nếu không xác định được tuyến cụ thể, KHÔNG thêm vào BH01
-          // Ưu tiên BH02, sau đó BH03
-          if (bh02Employees.length < maxEmployeesOtherBH) {
-            bh02Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH02 (default fallback) (${bh02Employees.length}/${maxEmployeesOtherBH})`);
-          } else if (bh03Employees.length < maxEmployeesOtherBH) {
-            bh03Employees.push(employee);
-            console.log(`PDF Export - Added ${employee.hoTen} to BH03 (default fallback) (${bh03Employees.length}/${maxEmployeesOtherBH})`);
-          } else {
-            console.log(`PDF Export - All BH routes full, ${employee.hoTen} will be handled by overflow logic`);
-          }
-          break;
+        }
       }
     }
+    
+    console.log(`PDF Export - BH02 now has ${bh02Employees.length} employees`);
+    
+    // BƯỚC 3: Còn lại là các nhân viên từ trạm riêng của BH03
+    console.log(`PDF Export - Step 3: Adding remaining employees to BH03`);
+    
+    for (const employee of sortedBHEmployees) {
+      // Bỏ qua nhân viên đã được gán vào BH01 hoặc BH02
+      if (bh01Employees.includes(employee) || bh02Employees.includes(employee)) {
+        continue;
+      }
+      
+      const station = employee.tramXe || '';
+      const stationLower = station.toLowerCase();
+      
+      // Check if station is in BH03
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      
+      if (inBH03) {
+        if (bh03Employees.length < maxEmployeesBH03) {
+          bh03Employees.push(employee);
+          console.log(`PDF Export - Added ${employee.hoTen} to BH03 (BH03 exclusive) (${bh03Employees.length}/${maxEmployeesBH03})`);
+        } else {
+          // BH03 full, add to BH01 if space available
+          if (bh01Employees.length < maxEmployeesBH01) {
+            bh01Employees.push(employee);
+            console.log(`PDF Export - BH03 full, moved ${employee.hoTen} to BH01 (overflow)`);
+          }
+        }
+      }
+    }
+    
+    console.log(`PDF Export - BH03 now has ${bh03Employees.length} employees`);
 
     console.log(`PDF Export - BH distribution result: BH01=${bh01Employees.length}, BH02=${bh02Employees.length}, BH03=${bh03Employees.length}`);
 

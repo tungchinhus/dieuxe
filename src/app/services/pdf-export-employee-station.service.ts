@@ -486,6 +486,16 @@ export class PdfExportEmployeeStationService {
       }
     }
     
+    // Xử lý "Chưa phân tuyến" - cố gắng xác định tuyến dựa trên tên trạm
+    if (routeName === 'Chưa phân tuyến') {
+      // Kiểm tra các trạm đặc biệt để xác định tuyến
+      if (this.isStationBeforeOrAtHangXanh(tramXe)) {
+        return 'BH01';
+      }
+      // Mặc định cho các trạm chưa xác định
+      return 'BH03';
+    }
+    
     // Các tuyến khác không thay đổi
     return routeName;
   }
@@ -1188,7 +1198,7 @@ export class PdfExportEmployeeStationService {
       stationLower.includes(variation) || variation.includes(stationLower)
     );
   }
-
+  
   /**
    * Kiểm tra xem trạm có phải là trạm "tự túc" không
    */
