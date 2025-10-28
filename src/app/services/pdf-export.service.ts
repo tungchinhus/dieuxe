@@ -987,6 +987,15 @@ export class PdfExportService {
         this.normalizeStationName(s) === this.normalizeStationName(station)
       );
       
+      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" luôn gom vào BH01 khi trùng nhiều tuyến
+      if (this.isPhuocTanToanDung(station) && inBH01) {
+        if (bh01Employees.length < maxEmployeesBH01 && !bh01Employees.includes(employee)) {
+          bh01Employees.push(employee);
+          console.log(`PDF Export - Added ${employee.hoTen} to BH01 (special: Phước Tân - Cây xăng Toàn Dung)`);
+          continue;
+        }
+      }
+
       // Count how many routes this station appears in
       const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
       
@@ -1020,6 +1029,16 @@ export class PdfExportService {
       const station = employee.tramXe || '';
       const stationLower = station.toLowerCase();
       
+      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" không được gom BH02 nếu đã có trong BH01
+      if (this.isPhuocTanToanDung(station)) {
+        // Nếu BH01 còn chỗ thì đưa vào BH01, tránh BH02
+        if (bh01Employees.length < maxEmployeesBH01) {
+          bh01Employees.push(employee);
+          console.log(`PDF Export - Redirected ${employee.hoTen} to BH01 (special: Phước Tân - Cây xăng Toàn Dung)`);
+          continue;
+        }
+      }
+
       // Check station routes
       const inBH02 = bh02Stations.some(s => 
         s.toLowerCase() === stationLower || 
@@ -1121,6 +1140,20 @@ export class PdfExportService {
     }
 
     return updatedRoutes;
+  }
+
+  /**
+   * Kiểm tra trạm "Phước Tân (Cây xăng Toàn Dung)" với dạng chuẩn hóa để so khớp ổn định
+   */
+  private isPhuocTanToanDung(station: string): boolean {
+    if (!station) return false;
+    const normalized = this.normalizeStationName(station);
+    const targets = [
+      'phuoc tan cay xang toan dung',
+      'phuoc tan (cay xang toan dung)',
+      'phước tân (cây xăng toàn dung)'
+    ].map(s => this.normalizeStationName(s));
+    return targets.includes(normalized);
   }
 
   /**
