@@ -2918,6 +2918,14 @@ export class DangKyXeComponent implements OnInit {
         this.normalizeStationName(s) === this.normalizeStationName(station)
       );
 
+      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" luôn gom về BH01 khi trùng nhiều tuyến
+      if (this.isPhuocTanToanDung(station) && inBH01) {
+        if (bh01Employees.length < maxEmployeesBH01 && !bh01Employees.includes(employee)) {
+          bh01Employees.push(employee);
+          continue;
+        }
+      }
+
       const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
       const shouldAddToBH01 = (inBH01 && inBH02 && inBH03) || (inBH01 && routeCount === 1);
 
@@ -2933,6 +2941,14 @@ export class DangKyXeComponent implements OnInit {
 
       const station = employee.tramXe || '';
       const stationLower = station.toLowerCase();
+
+      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" không đưa vào BH02 nếu BH01 còn chỗ
+      if (this.isPhuocTanToanDung(station)) {
+        if (bh01Employees.length < maxEmployeesBH01) {
+          bh01Employees.push(employee);
+          continue;
+        }
+      }
 
       const inBH02 = bh02Stations.some(s => 
         s.toLowerCase() === stationLower || 
@@ -2988,5 +3004,19 @@ export class DangKyXeComponent implements OnInit {
     });
 
     return updatedRoutes;
+  }
+
+  /**
+   * Kiểm tra trạm "Phước Tân (Cây xăng Toàn Dung)" (chuẩn hóa trước khi so khớp)
+   */
+  private isPhuocTanToanDung(station: string): boolean {
+    if (!station) return false;
+    const normalized = this.normalizeStationName(station);
+    const targets = [
+      'phuoc tan cay xang toan dung',
+      'phuoc tan (cay xang toan dung)',
+      'phước tân (cây xăng toàn dung)'
+    ].map(s => this.normalizeStationName(s));
+    return targets.includes(normalized);
   }
 }
