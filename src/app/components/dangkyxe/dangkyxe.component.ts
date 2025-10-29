@@ -1425,6 +1425,7 @@ export class DangKyXeComponent implements OnInit {
           routeCode: routeGroup.routeName,
           employeeCount: routeGroup.registrations?.length || 0
         }))
+        .filter(route => route.employeeCount > 0) // Bỏ qua tuyến không có nhân viên
         .sort((a, b) => {
           // Sắp xếp: HCM01, HCM02 trước, sau đó các tuyến BH
           if (a.routeCode === 'HCM01') return -1;
@@ -1511,6 +1512,7 @@ export class DangKyXeComponent implements OnInit {
           routeCode: routeGroup.routeName,
           employeeCount: routeGroup.registrations?.length || 0
         }))
+        .filter(route => route.employeeCount > 0) // Bỏ qua tuyến không có nhân viên
         .sort((a, b) => {
           // Sắp xếp: HCM01, HCM02 trước, sau đó các tuyến BH
           if (a.routeCode === 'HCM01') return -1;
