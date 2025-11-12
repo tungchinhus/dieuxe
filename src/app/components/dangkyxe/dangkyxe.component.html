@@ -30,6 +30,17 @@
             <mat-icon>clear</mat-icon>
           </button>
         </mat-form-field>
+
+        <!-- Date picker to choose display date for PDF/export -->
+        <mat-form-field appearance="outline" class="date-field" style="margin-left: 12px; min-width: 220px;">
+          <mat-label>Chọn ngày hiển thị</mat-label>
+          <input matInput [matDatepicker]="displayDatePicker" [(ngModel)]="displayDate" (dateChange)="onDisplayDateChange()" placeholder="Chọn ngày">
+          <mat-datepicker-toggle matSuffix [for]="displayDatePicker"></mat-datepicker-toggle>
+          <mat-datepicker #displayDatePicker></mat-datepicker>
+        </mat-form-field>
+
+        <!-- Toggle to load HC data set -->
+        <mat-checkbox [(ngModel)]="useHC" (change)="onHCCheckboxChange()">Giờ HC</mat-checkbox>
       </div>
       
       <div class="button-container">
@@ -44,11 +55,22 @@
         <button mat-raised-button 
                 color="primary" 
                 [disabled]="isImportingExcel"
-                (click)="openFileUploadDialog()"
+                [matMenuTriggerFor]="importMenu"
                 class="action-button">
           <mat-icon>upload_file</mat-icon>
           Import từ Excel
         </button>
+
+        <mat-menu #importMenu="matMenu">
+          <button mat-menu-item (click)="openFileUploadDialog()">
+            <mat-icon>upload_file</mat-icon>
+            <span>Import từ Excel(PT)</span>
+          </button>
+          <button mat-menu-item (click)="openFileUploadDialogHC()">
+            <mat-icon>upload_file</mat-icon>
+            <span>Import từ Excel(HC)</span>
+          </button>
+        </mat-menu>
         
         <button mat-raised-button 
                 color="warn" 

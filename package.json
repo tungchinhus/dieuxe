@@ -9,7 +9,9 @@
     "test": "ng test",
     "increment-build": "node scripts/increment-build.js",
     "build:prod": "npm run increment-build && ng build --configuration production",
-    "deploy": "npm run build:prod && firebase deploy"
+    "deploy": "npm run build:prod && node scripts/deploy.js",
+    "deploy:ci": "npm run build:prod && node scripts/deploy.js",
+    "deploy:only": "node scripts/deploy.js"
   },
   "prettier": {
     "overrides": [

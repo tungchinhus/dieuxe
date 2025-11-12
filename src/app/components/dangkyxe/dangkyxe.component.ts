@@ -99,6 +99,12 @@ export class DangKyXeComponent implements OnInit {
   // Time filter properties
   startDate: Date | null = null;
   endDate: Date | null = null;
+  
+  // Single date picker for display/export near search
+  displayDate: Date | null = null;
+  
+  // Whether to use HC dataset
+  useHC: boolean = false;
 
   constructor(
     private sidenavService: SidenavService,
@@ -147,6 +153,25 @@ export class DangKyXeComponent implements OnInit {
   ngAfterViewInit(): void {
     this.dataSource.paginator = this.paginator;
     this.dataSource.sort = this.sort;
+  }
+
+  // When user picks a display date, sync it to the existing date filter and search
+  onDisplayDateChange(): void {
+    if (this.displayDate) {
+      const selected = new Date(this.displayDate);
+      selected.setHours(0, 0, 0, 0);
+      this.startDate = selected;
+      this.endDate = selected;
+      this.searchByDate();
+    } else {
+      this.clearDateSearch();
+    }
+  }
+
+  // When toggling HC data, reload for the current selected date (or today)
+  onHCCheckboxChange(): void {
+    // Do not load data here. Only switch dataset flag.
+    // Data will be reloaded when the date is changed via calendar.
   }
 
   /**
@@ -286,7 +311,7 @@ export class DangKyXeComponent implements OnInit {
    * If no dates are provided, search all records
    */
   async searchByDate(): Promise<void> {
-    // If no dates are provided, show all records
+    // If no dates are provided, show all records for today (default behavior)
     if (!this.startDate && !this.endDate) {
       await this.loadDataFromFirebase();
       this.snackBar.open('Hiển thị tất cả bản ghi', 'Đóng', { duration: 2000 });
@@ -297,8 +322,10 @@ export class DangKyXeComponent implements OnInit {
       // Show loading
       const loadingSnackBar = this.snackBar.open('Đang tìm kiếm dữ liệu...', '', { duration: 0 });
       
-      // Load all data from Firebase
-      const dangKyList = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      // Load all data from Firebase (PT or HC)
+      const dangKyList = this.useHC
+        ? await this.vehicleDataService.layDanhSachDangKyPhanXeHC()
+        : await this.vehicleDataService.layDanhSachDangKyPhanXe();
       
       if (!dangKyList || dangKyList.length === 0) {
         this.dataSource.data = [];
@@ -307,29 +334,28 @@ export class DangKyXeComponent implements OnInit {
         return;
       }
 
-      // Filter by date range
+      // Filter by NgayDangKy. If startDate == endDate -> match exactly that day.
+      const startStr = this.startDate ? this.getVietnamDateString(this.startDate) : null;
+      const endStr = this.endDate ? this.getVietnamDateString(this.endDate) : null;
+
       const filteredRegistrations = dangKyList.filter(dangKy => {
         if (!dangKy.NgayDangKy) return false;
-        
-        const registrationDate = new Date(dangKy.NgayDangKy);
-        const startDate = this.startDate ? new Date(this.startDate) : null;
-        const endDate = this.endDate ? new Date(this.endDate) : null;
-        
-        // If only start date is provided
-        if (startDate && !endDate) {
-          return registrationDate >= startDate;
+        const regStr = this.getVietnamDateStringFromTimestamp(dangKy.NgayDangKy);
+
+        if (startStr && endStr && startStr === endStr) {
+          // Exact day filter
+          return regStr === startStr;
         }
-        
-        // If only end date is provided
-        if (!startDate && endDate) {
-          return registrationDate <= endDate;
+
+        if (startStr && !endStr) {
+          return regStr >= startStr;
         }
-        
-        // If both dates are provided
-        if (startDate && endDate) {
-          return registrationDate >= startDate && registrationDate <= endDate;
+        if (!startStr && endStr) {
+          return regStr <= endStr;
         }
-        
+        if (startStr && endStr) {
+          return regStr >= startStr && regStr <= endStr;
+        }
         return true;
       });
 
@@ -357,7 +383,10 @@ export class DangKyXeComponent implements OnInit {
       loadingSnackBar.dismiss();
       
       const count = registrations.length;
-      this.snackBar.open(`Tìm thấy ${count} bản ghi trong khoảng thời gian đã chọn`, 'Đóng', { duration: 3000 });
+      const message = (startStr && endStr && startStr === endStr)
+        ? `Tìm thấy ${count} bản ghi cho ngày ${startStr}`
+        : `Tìm thấy ${count} bản ghi trong khoảng thời gian đã chọn`;
+      this.snackBar.open(message, 'Đóng', { duration: 3000 });
       
     } catch (error) {
       console.error('Error searching by date:', error);
@@ -475,7 +504,11 @@ export class DangKyXeComponent implements OnInit {
         };
 
         // Save to Firebase
-        await this.vehicleDataService.dangKyPhanXe(dangKyPhanXe);
+        if (this.useHC) {
+          await this.vehicleDataService.dangKyPhanXeHC(dangKyPhanXe);
+        } else {
+          await this.vehicleDataService.dangKyPhanXe(dangKyPhanXe);
+        }
         
         // Refresh data from Firebase
         await this.loadDataFromFirebase();
@@ -529,6 +562,246 @@ export class DangKyXeComponent implements OnInit {
       }
     };
     input.click();
+  }
+
+  // File upload for HC collection
+  openFileUploadDialogHC(): void {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.accept = '.xlsx,.xls';
+    input.onchange = (event: any) => {
+      const file = event.target.files[0];
+      if (file) {
+        this.handleFileUploadHC(file);
+      }
+    };
+    input.click();
+  }
+
+  private async handleFileUploadHC(file: File): Promise<void> {
+    try {
+      console.log('HC File selected:', file.name);
+      
+      // Set loading state
+      this.isImportingExcel = true;
+
+      // Read and process Excel file (only T7 and CN sheets)
+      const registrations = await this.excelService.readExcelFileHC(file);
+      console.log('HC Excel data processed:', registrations);
+
+      if (registrations.length > 0) {
+        // Check for duplicates
+        const duplicateCheck = await this.checkDuplicatesInImportDataHC(registrations);
+        
+        if (duplicateCheck.duplicates.length > 0) {
+          // Show duplicate notification dialog
+          const dialogRef = this.dialog.open(DuplicateDataDialogComponent, {
+            width: '600px',
+            data: {
+              duplicates: duplicateCheck.duplicates,
+              validData: duplicateCheck.validData,
+              duplicateDetails: duplicateCheck.duplicateDetails,
+              totalRecords: registrations.length,
+              allDuplicates: duplicateCheck.allDuplicates
+            }
+          });
+
+          // Auto-save valid data while showing dialog
+          if (duplicateCheck.validData.length > 0) {
+            const result = await this.saveRegistrationsToFirebaseHC(duplicateCheck.validData);
+            
+            // Note: HC data is saved to separate collection, so we don't refresh the main table
+            // The main table shows PT data only
+            
+            // Show detailed import results if there are any failures
+            if (result.failedData.length > 0) {
+              const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+                width: '1000px',
+                data: {
+                  totalProcessed: duplicateCheck.validData.length,
+                  savedCount: result.savedCount,
+                  failedData: result.failedData
+                }
+              });
+            }
+          }
+
+          dialogRef.afterClosed().subscribe(async (result) => {
+            // Dialog closed - no additional notification needed
+            // The dialog already shows all the necessary information
+          });
+        } else {
+          // No duplicates, save all data
+          const result = await this.saveRegistrationsToFirebaseHC(registrations);
+          
+          if (result.savedCount > 0) {
+            // Show success message
+            const snackBarRef = this.snackBar.open(
+              `Đã import và lưu ${result.savedCount}/${registrations.length} đăng ký HC vào hệ thống!`, 
+              '', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+          } else {
+            this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase HC!', 'Đóng', {
+              duration: 3000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          }
+          
+          // Show detailed import results if there are any failures
+          if (result.failedData.length > 0) {
+            const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+              width: '1000px',
+              data: {
+                totalProcessed: registrations.length,
+                savedCount: result.savedCount,
+                failedData: result.failedData
+              }
+            });
+          }
+        }
+      } else {
+        this.snackBar.open('Không tìm thấy dữ liệu hợp lệ trong file Excel HC!', 'Đóng', {
+          duration: 3000,
+          horizontalPosition: 'right',
+          verticalPosition: 'top'
+        });
+      }
+
+    } catch (error) {
+      console.error('HC import error:', error);
+      this.snackBar.open(`Lỗi khi xử lý file Excel HC: ${error}`, 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } finally {
+      // Reset loading state
+      this.isImportingExcel = false;
+    }
+  }
+
+  private async saveRegistrationsToFirebaseHC(registrations: Registration[], allowOverwrite: boolean = false): Promise<{savedCount: number, failedData: Array<{registration: Registration, reason: string}>}> {
+    let savedCount = 0;
+    const failedData: Array<{registration: Registration, reason: string}> = [];
+    
+    console.log(`[HC Import] Starting to save ${registrations.length} registrations to Firebase HC collection`);
+
+    for (const reg of registrations) {
+      try {
+        console.log(`[HC Import] Processing registration: ${reg.hoTen} - ${reg.tramXe} - ${reg.ngayDangKy}`);
+        
+        const dangKyPhanXe: Omit<DangKyPhanXe, 'ID' | 'createdAt' | 'updatedAt'> = {
+          MaNhanVien: reg.maNhanVien,
+          HoTen: reg.hoTen,
+          DienThoai: reg.dienThoai,
+          PhongBan: '',
+          NgayDangKy: this.createVietnamDate(reg.ngayDangKy),
+          ThoiGianBatDau: reg.thoiGianBatDau,
+          ThoiGianKetThuc: reg.thoiGianKetThuc,
+          LoaiCa: this.mapLoaiCa(reg.loaiCa),
+          NoiDungCongViec: reg.noiDungCongViec || '',
+          DangKyCom: reg.dangKyCom,
+          TramXe: reg.tramXe || '',
+          MaTuyenXe: ''
+        };
+
+        console.log(`[HC Import] Converted data:`, dangKyPhanXe);
+
+        const errors = this.vehicleDataService.validateDangKyPhanXe(dangKyPhanXe);
+        if (errors.length > 0) {
+          console.warn(`[HC Import] Validation errors for ${reg.hoTen}:`, errors);
+          failedData.push({ registration: reg, reason: `Lỗi validation: ${errors.join(', ')}` });
+          continue;
+        }
+
+        const isDuplicate = await this.checkDuplicateNameAndStationHC(reg.hoTen, reg.tramXe, reg.ngayDangKy);
+        if (isDuplicate && !allowOverwrite) {
+          console.warn(`[HC Import] Duplicate found: ${reg.hoTen} at ${reg.tramXe} for ${reg.ngayDangKy}`);
+          failedData.push({ registration: reg, reason: `Trùng lặp: đã đăng ký tại trạm ${reg.tramXe} cho ngày ${reg.ngayDangKy}` });
+          continue;
+        }
+
+        const docId = await this.vehicleDataService.dangKyPhanXeHC(dangKyPhanXe);
+        console.log(`[HC Import] Successfully saved ${reg.hoTen} with document ID: ${docId}`);
+        savedCount++;
+      } catch (error: any) {
+        console.error(`[HC Import] Error saving ${reg.hoTen}:`, error);
+        const errorMessage = error?.message || String(error);
+        failedData.push({ 
+          registration: reg, 
+          reason: `Lỗi khi lưu vào Firebase HC: ${errorMessage}` 
+        });
+        continue;
+      }
+    }
+
+    console.log(`[HC Import] Completed: ${savedCount} saved, ${failedData.length} failed`);
+    return { savedCount, failedData };
+  }
+
+  private async checkDuplicateNameAndStationHC(hoTen: string, tramXe: string, ngayDangKy: string): Promise<boolean> {
+    try {
+      const today = new Date();
+      const todayString = this.getVietnamDateString(today);
+      if (ngayDangKy !== todayString) {
+        return false;
+      }
+      const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXeHC();
+      return allRegistrations.some(reg => 
+        reg.HoTen?.toLowerCase().trim() === hoTen?.toLowerCase().trim() && 
+        reg.TramXe?.toLowerCase().trim() === tramXe?.toLowerCase().trim() && 
+        this.getVietnamDateStringFromTimestamp(reg.NgayDangKy) === ngayDangKy
+      );
+    } catch (error) {
+      console.error('Error checking duplicates HC:', error);
+      return false;
+    }
+  }
+
+  private async checkDuplicatesInImportDataHC(registrations: Registration[]): Promise<{
+    duplicates: Registration[];
+    validData: Registration[];
+    duplicateDetails: string[];
+    allDuplicates: boolean;
+  }> {
+    const today = new Date();
+    const todayString = this.getVietnamDateString(today);
+    const allRegistrations = await this.vehicleDataService.layDanhSachDangKyPhanXeHC();
+
+    const duplicates: Registration[] = [];
+    const validData: Registration[] = [];
+    const duplicateDetails: string[] = [];
+
+    for (const reg of registrations) {
+      if (reg.ngayDangKy !== todayString) {
+        validData.push(reg);
+        continue;
+      }
+      const dup = allRegistrations.find(item =>
+        item.HoTen?.toLowerCase().trim() === reg.hoTen?.toLowerCase().trim() &&
+        item.TramXe?.toLowerCase().trim() === reg.tramXe?.toLowerCase().trim() &&
+        this.getVietnamDateStringFromTimestamp(item.NgayDangKy) === reg.ngayDangKy
+      );
+      if (dup) {
+        duplicates.push(reg);
+        duplicateDetails.push(`${reg.hoTen} - ${reg.tramXe} (${reg.ngayDangKy})`);
+      } else {
+        validData.push(reg);
+      }
+    }
+
+    return {
+      duplicates,
+      validData,
+      duplicateDetails,
+      allDuplicates: validData.length === 0 && duplicates.length > 0
+    };
   }
 
   // Direct upload to Google Drive - one click upload (DISABLED - Google Drive services removed)
@@ -800,7 +1073,11 @@ export class DangKyXeComponent implements OnInit {
         try {
           // Use the document ID directly from registration.id
           if (registration.id && !registration.id.startsWith('temp_')) {
-            await this.vehicleDataService.huyDangKyPhanXe(registration.id);
+            if (this.useHC) {
+              await this.vehicleDataService.huyDangKyPhanXeHC(registration.id);
+            } else {
+              await this.vehicleDataService.huyDangKyPhanXe(registration.id);
+            }
             deletedCount++;
           } else {
             errors.push(`Không có ID hợp lệ cho đăng ký ${registration.maNhanVien}`);
@@ -1025,7 +1302,9 @@ export class DangKyXeComponent implements OnInit {
    */
   async loadDataFromFirebase(): Promise<void> {
     try {
-      const dangKyList = await this.vehicleDataService.layDanhSachDangKyPhanXe();
+      const dangKyList = this.useHC
+        ? await this.vehicleDataService.layDanhSachDangKyPhanXeHC()
+        : await this.vehicleDataService.layDanhSachDangKyPhanXe();
       
       console.log('Raw data from Firebase:', dangKyList);
       
@@ -1342,7 +1621,7 @@ export class DangKyXeComponent implements OnInit {
       // Set loading state
       this.isExportingPDF = true;
 
-      // Open vehicle assignment dialog first
+      // Open vehicle assignment dialog first for selected day
       await this.openRouteVehicleAssignmentDialog();
 
     } catch (error) {
@@ -1375,7 +1654,7 @@ export class DangKyXeComponent implements OnInit {
       // Set loading state
       this.isExportingExcel = true;
 
-      // Open vehicle assignment dialog first
+      // Open vehicle assignment dialog first for selected day
       await this.openRouteVehicleAssignmentDialogForExcel();
 
     } catch (error) {
@@ -1396,11 +1675,13 @@ export class DangKyXeComponent implements OnInit {
    */
   async openRouteVehicleAssignmentDialogForExcel(): Promise<void> {
     try {
-      // Get real data from today's registrations
-      const todayRegistrations = await this.getTodayRegistrations();
+      // Get real data from selected day's registrations
+      const todayRegistrations = await this.getSelectedDateRegistrations();
       
       if (todayRegistrations.length === 0) {
-        this.snackBar.open('Không có dữ liệu đăng ký cho ngày hôm nay!', 'Đóng', {
+        const base = this.displayDate || this.startDate || new Date();
+        const dateStr = this.getVietnamDateString(base);
+        this.snackBar.open(`Không có dữ liệu đăng ký cho ngày ${dateStr}!`, 'Đóng', {
           duration: 3000,
           horizontalPosition: 'right',
           verticalPosition: 'top'
@@ -1484,7 +1765,7 @@ export class DangKyXeComponent implements OnInit {
   async openRouteVehicleAssignmentDialog(): Promise<void> {
     try {
       // Get real data from today's registrations
-      const todayRegistrations = await this.getTodayRegistrations();
+      const todayRegistrations = await this.getSelectedDateRegistrations();
       
       if (todayRegistrations.length === 0) {
         this.snackBar.open('Không có dữ liệu đăng ký cho ngày hôm nay!', 'Đóng', {
@@ -1674,13 +1955,15 @@ export class DangKyXeComponent implements OnInit {
   /**
    * Get today's registrations from Firebase
    */
-  private async getTodayRegistrations(): Promise<Registration[]> {
+  private async getSelectedDateRegistrations(): Promise<Registration[]> {
     try {
-      const today = new Date();
-      const startOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate());
-      const endOfDay = new Date(today.getFullYear(), today.getMonth(), today.getDate(), 23, 59, 59);
+      const base = this.displayDate || this.startDate || new Date();
+      const startOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+      const endOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
 
-      const registrations = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
+      const registrations = this.useHC
+        ? await this.firestoreService.getDangKyPhanXeHCByDateRange(startOfDay, endOfDay)
+        : await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
 
       // Map DangKyPhanXe -> Registration
       return registrations.map(reg => ({
@@ -1938,8 +2221,9 @@ export class DangKyXeComponent implements OnInit {
    */
   private async exportOvertimeReportPDFWithVehicleAssignment(result: any): Promise<void> {
     try {
-      // Pass vehicle assignment data to PDF export service
-      await this.pdfExportService.exportOvertimeReportPDFWithVehicleAssignments(result.routeAssignments);
+      // Pass vehicle assignment data and selected date to PDF export service
+      const base = this.displayDate || this.startDate || new Date();
+      await this.pdfExportService.exportOvertimeReportPDFWithVehicleAssignments(result.routeAssignments, base);
       
       // Show success message
       this.snackBar.open('File PDF đã được tạo thành công với thông tin phân công xe!', 'Đóng', {
@@ -1963,8 +2247,9 @@ export class DangKyXeComponent implements OnInit {
    */
   private async exportOvertimeReportExcelWithVehicleAssignment(result: any): Promise<void> {
     try {
-      // Pass vehicle assignment data to Excel export service
-      await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(result.routeAssignments);
+      // Pass vehicle assignment data and selected date to Excel export service
+      const base = this.displayDate || this.startDate || new Date();
+      await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(result.routeAssignments, base);
       
       // Show success message
       this.snackBar.open('File Excel đã được tạo thành công với thông tin phân công xe!', 'Đóng', {

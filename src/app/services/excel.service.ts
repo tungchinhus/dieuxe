@@ -74,6 +74,64 @@ export class ExcelService {
   }
 
   /**
+   * Read Excel file for HC collection - only read sheets "T7" and "CN"
+   * @param file - Excel file
+   * @returns Promise with array of Registration objects from both sheets
+   */
+  async readExcelFileHC(file: File): Promise<Registration[]> {
+    return new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      
+      reader.onload = async (e: any) => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          
+          const allRegistrations: Registration[] = [];
+          const sheetNamesToRead = ['T7', 'CN'];
+          
+          // Read only T7 and CN sheets
+          for (const sheetName of sheetNamesToRead) {
+            if (workbook.SheetNames.includes(sheetName)) {
+              const worksheet = workbook.Sheets[sheetName];
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+              const registrations = await this.convertToRegistrations(jsonData);
+              
+              // Update ngày đăng ký based on sheet name
+              // T7: today + 1 day
+              // CN: today + 2 days
+              const registrationDate = this.getRegistrationDateForSheet(sheetName);
+              registrations.forEach(reg => {
+                reg.ngayDangKy = registrationDate;
+              });
+              
+              allRegistrations.push(...registrations);
+              console.log(`Read ${registrations.length} registrations from sheet "${sheetName}" with registration date: ${registrationDate}`);
+            } else {
+              console.warn(`Sheet "${sheetName}" not found in Excel file`);
+            }
+          }
+          
+          if (allRegistrations.length === 0) {
+            reject(new Error('Không tìm thấy sheet T7 hoặc CN trong file Excel'));
+          } else {
+            console.log(`Total registrations from HC sheets: ${allRegistrations.length}`);
+            resolve(allRegistrations);
+          }
+        } catch (error) {
+          reject(new Error('Error reading Excel file HC: ' + error));
+        }
+      };
+      
+      reader.onerror = () => {
+        reject(new Error('Error reading file'));
+      };
+      
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  /**
    * Convert Excel data to Registration objects
    * @param data - Raw Excel data
    * @returns Promise with array of Registration objects
@@ -106,8 +164,8 @@ export class ExcelService {
       // Skip empty rows
       if (!row || row.length === 0) continue;
       
-      // Skip rows that don't have employee name
-      if (!this.getStringValue(row[1])) continue;
+      // Skip rows that don't have both employee name and station
+      if (!this.getStringValue(row[1]) || !this.getStringValue(row[2])) continue;
       
       try {
         console.log(`Processing Excel row ${i}:`, row);
@@ -116,19 +174,11 @@ export class ExcelService {
         console.log(`Row ${i} data:`, row);
         console.log(`Row ${i} length:`, row.length);
         
-        // Extract basic information based on overtime report form structure:
-        // Column A (0): STT - Serial Number
-        // Column B (1): Họ và tên - Full Name
-        // Column C (2): Trạm xe - Station/Location
-        // Column D (3): Điện thoại - Phone Number
-        // Column F (5): Thời gian làm việc (Từ...) - Working Hours (From...)
-        // Column G (6): Thời gian làm việc (Đến...) - Working Hours (To...)
-        
         const hoTen = this.getStringValue(row[1]) || ''; // Column B: Họ và tên
         const tramXe = this.getStringValue(row[2]) || ''; // Column C: Trạm xe
         const dienThoai = this.getStringValue(row[3]) || ''; // Column D: Điện thoại
-        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[5])) || ''; // Column F: Từ...
-        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[6])) || ''; // Column G: Đến...
+        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[6])) || ''; // Column F: Từ...
+        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[7])) || ''; // Column G: Đến...
         
         // Get route information using database lookup
         const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen);
@@ -745,6 +795,36 @@ export class ExcelService {
     const today = new Date();
     const vietnamDate = new Date(today.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
     return vietnamDate.toISOString().split('T')[0];
+  }
+
+  /**
+   * Get registration date based on sheet name for HC import
+   * T7: today + 1 day
+   * CN: today + 2 days
+   * @param sheetName - Sheet name (T7 or CN)
+   * @returns Registration date in YYYY-MM-DD format
+   */
+  private getRegistrationDateForSheet(sheetName: string): string {
+    const today = new Date();
+    const vietnamDate = new Date(today.toLocaleString("en-US", {timeZone: "Asia/Ho_Chi_Minh"}));
+    
+    let daysToAdd = 0;
+    if (sheetName === 'T7') {
+      daysToAdd = 1; // Thứ 7: hôm nay + 1 ngày
+    } else if (sheetName === 'CN') {
+      daysToAdd = 2; // Chủ nhật: hôm nay + 2 ngày
+    }
+    
+    // Add days
+    const registrationDate = new Date(vietnamDate);
+    registrationDate.setDate(registrationDate.getDate() + daysToAdd);
+    
+    // Format as YYYY-MM-DD
+    const year = registrationDate.getFullYear();
+    const month = String(registrationDate.getMonth() + 1).padStart(2, '0');
+    const day = String(registrationDate.getDate()).padStart(2, '0');
+    
+    return `${year}-${month}-${day}`;
   }
 
   /**

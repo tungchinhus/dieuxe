@@ -64,10 +64,12 @@ export class ExcelExportService {
   /**
    * Export overtime report Excel with vehicle assignments
    */
-  async exportOvertimeReportExcelWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[]): Promise<void> {
+  async exportOvertimeReportExcelWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[], selectedDate?: Date): Promise<void> {
     try {
-      // 1) Lấy dữ liệu hôm nay từ Firebase
-      const todayRegistrations = await this.getTodayRegistrations();
+      // 1) Lấy dữ liệu theo ngày đã chọn (fallback hôm nay)
+      const todayRegistrations = selectedDate
+        ? await this.getRegistrationsByDate(selectedDate)
+        : await this.getTodayRegistrations();
       if (todayRegistrations.length === 0) {
         alert('Không có dữ liệu đăng ký cho ngày hôm nay');
         return;
@@ -121,6 +123,29 @@ export class ExcelExportService {
       dangKyCom: reg.DangKyCom,
       tramXe: reg.TramXe,
       maTuyenXe: reg.MaTuyenXe
+    }));
+  }
+
+  private async getRegistrationsByDate(date: Date): Promise<Registration[]> {
+    const base = new Date(date);
+    const startOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const endOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+
+    const registrations = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
+    return registrations.map(reg => ({
+      id: reg.ID || '0',
+      maNhanVien: reg.MaNhanVien,
+      hoTen: reg.HoTen,
+      dienThoai: reg.DienThoai,
+      phongBan: reg.PhongBan,
+      ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+      loaiCa: reg.LoaiCa,
+      thoiGianBatDau: reg.ThoiGianBatDau,
+      thoiGianKetThuc: reg.ThoiGianKetThuc,
+      maTuyenXe: reg.MaTuyenXe,
+      tramXe: reg.TramXe,
+      noiDungCongViec: reg.NoiDungCongViec,
+      dangKyCom: reg.DangKyCom
     }));
   }
 
@@ -340,7 +365,12 @@ export class ExcelExportService {
     
     // Bước 2: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01
     const sortedSharedEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
-    for (const employee of sortedSharedEmployees) {
+    // Ưu tiên đặc biệt: Ngã 3 Bến Gỗ phải được đưa vào HCM01 trước khi HCM01 đủ 15
+    const isBenGo = (s: string | undefined) => (s || '').toLowerCase().includes('ngã 3 bến gỗ') || (s || '').toLowerCase().includes('nga 3 ben go');
+    const benGoShared = sortedSharedEmployees.filter(emp => isBenGo(emp.tramXe));
+    const otherShared = sortedSharedEmployees.filter(emp => !isBenGo(emp.tramXe));
+
+    for (const employee of [...benGoShared, ...otherShared]) {
       if (hcm01Employees.length < maxEmployeesPerRoute) {
         hcm01Employees.push(employee);
       } else {
@@ -359,7 +389,7 @@ export class ExcelExportService {
     }
     
     // Bước 4: Phân chia nhân viên còn lại cho HCM02
-    const remainingEmployees = [...sortedSharedEmployees, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
+    const remainingEmployees = [...otherShared, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
     const sortedRemainingEmployees = await this.sortEmployeesByStationOrder(remainingEmployees);
     for (const employee of sortedRemainingEmployees) {
       if (hcm02Employees.length < maxEmployeesPerRoute) {
@@ -719,7 +749,7 @@ export class ExcelExportService {
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
     const stationLower = station.toLowerCase();
-    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
+    const priorities = ['ngã 3 bến gỗ', 'nga 3 ben go', 'đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
     return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
   }
 

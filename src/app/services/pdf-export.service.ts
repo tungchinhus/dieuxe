@@ -107,10 +107,12 @@ export class PdfExportService {
   /**
    * Export overtime report PDF with vehicle assignments
    */
-  async exportOvertimeReportPDFWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[]): Promise<void> {
+  async exportOvertimeReportPDFWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[], selectedDate?: Date): Promise<void> {
     try {
-      // 1) Lấy dữ liệu hôm nay từ Firebase
-      const todayRegistrations = await this.getTodayRegistrations();
+      // 1) Lấy dữ liệu theo ngày đã chọn (fallback hôm nay)
+      const todayRegistrations = selectedDate
+        ? await this.getRegistrationsByDate(selectedDate)
+        : await this.getTodayRegistrations();
       if (todayRegistrations.length === 0) {
         alert('Không có dữ liệu đăng ký cho ngày hôm nay');
         return;
@@ -229,6 +231,33 @@ export class PdfExportService {
     const registrations = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
 
     // Map DangKyPhanXe -> Registration
+    return registrations.map(reg => ({
+      id: reg.ID || '0',
+      maNhanVien: reg.MaNhanVien,
+      hoTen: reg.HoTen,
+      dienThoai: reg.DienThoai,
+      phongBan: reg.PhongBan,
+      ngayDangKy: reg.NgayDangKy.toISOString().split('T')[0],
+      loaiCa: reg.LoaiCa,
+      thoiGianBatDau: reg.ThoiGianBatDau,
+      thoiGianKetThuc: reg.ThoiGianKetThuc,
+      maTuyenXe: reg.MaTuyenXe,
+      tramXe: reg.TramXe,
+      noiDungCongViec: reg.NoiDungCongViec,
+      dangKyCom: reg.DangKyCom
+    }));
+  }
+
+  /**
+   * Lấy đăng ký theo một ngày cụ thể từ Firestore
+   */
+  private async getRegistrationsByDate(date: Date): Promise<Registration[]> {
+    const base = new Date(date);
+    const startOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
+    const endOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
+
+    const registrations = await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
+
     return registrations.map(reg => ({
       id: reg.ID || '0',
       maNhanVien: reg.MaNhanVien,
@@ -795,7 +824,13 @@ export class PdfExportService {
     // Sắp xếp lại nhân viên từ trạm chung theo thứ tự từ database
     const sortedSharedEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
     
-    for (const employee of sortedSharedEmployees) {
+    // Ưu tiên đặc biệt: Ngã 3 Bến Gỗ phải được đưa vào HCM01 trước khi HCM01 đủ 15
+    const isBenGo = (s: string | undefined) => (s || '').toLowerCase().includes('ngã 3 bến gỗ') || (s || '').toLowerCase().includes('nga 3 ben go');
+    const benGoShared = sortedSharedEmployees.filter(emp => isBenGo(emp.tramXe));
+    const otherShared = sortedSharedEmployees.filter(emp => !isBenGo(emp.tramXe));
+
+    // Đưa Bến Gỗ vào trước
+    for (const employee of [...benGoShared, ...otherShared]) {
       if (hcm01Employees.length < maxEmployeesPerRoute) {
         hcm01Employees.push(employee);
         console.log(`PDF Export - Added shared station employee ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
@@ -821,7 +856,7 @@ export class PdfExportService {
     
     // Bước 4: Phân chia nhân viên còn lại cho HCM02 (theo thứ tự từ database)
     console.log(`PDF Export - Step 4: Distributing remaining employees to HCM02 in correct order`);
-    const remainingEmployees = [...sortedSharedEmployees, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
+    const remainingEmployees = [...otherShared, ...sortedOtherEmployees].slice(hcm01Employees.length - employeesToMoveToHCM01.length);
     
     // Sắp xếp lại nhân viên còn lại theo thứ tự từ database
     const sortedRemainingEmployees = await this.sortEmployeesByStationOrder(remainingEmployees);
@@ -1612,6 +1647,7 @@ export class PdfExportService {
     const stationLower = station.toLowerCase();
     
     const hcm01PriorityStations = [
+      'ngã 3 bến gỗ', 'nga 3 ben go',
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
       'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'

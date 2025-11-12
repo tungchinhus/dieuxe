@@ -36,6 +36,7 @@ export class FirestoreService {
     LICH_TRINH_XE: 'lichTrinhXe',
     CHI_TIET_TUYEN_DUONG: 'chiTietTuyenDuong',
     DANG_KY_PHAN_XE: 'dangKyPhanXe',
+    DANG_KY_PHAN_XE_HC: 'dangKyPhanXe-HC',
     NHAN_VIEN: 'nhanVien',
     NHA_XE: 'nhaXe'
   };
@@ -216,6 +217,40 @@ export class FirestoreService {
   async getAllDangKyPhanXe(): Promise<DangKyPhanXe[]> {
     const q = query(
       collection(this.firestore, this.COLLECTIONS.DANG_KY_PHAN_XE),
+      orderBy('NgayDangKy', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => this.convertFirestoreDocToDangKyPhanXe(doc));
+  }
+
+  // ====== HC variants ======
+  async createDangKyPhanXeHC(dangKy: Omit<DangKyPhanXe, 'ID' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    const docRef = await addDoc(collection(this.firestore, this.COLLECTIONS.DANG_KY_PHAN_XE_HC), {
+      ...dangKy,
+      createdAt: Timestamp.now(),
+      updatedAt: Timestamp.now()
+    });
+    return docRef.id;
+  }
+
+  async getAllDangKyPhanXeHC(): Promise<DangKyPhanXe[]> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.DANG_KY_PHAN_XE_HC),
+      orderBy('NgayDangKy', 'desc')
+    );
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => this.convertFirestoreDocToDangKyPhanXe(doc));
+  }
+
+  async deleteDangKyPhanXeHC(id: string): Promise<void> {
+    await deleteDoc(doc(this.firestore, this.COLLECTIONS.DANG_KY_PHAN_XE_HC, id));
+  }
+
+  async getDangKyPhanXeHCByDateRange(startDate: Date, endDate: Date): Promise<DangKyPhanXe[]> {
+    const q = query(
+      collection(this.firestore, this.COLLECTIONS.DANG_KY_PHAN_XE_HC),
+      where('NgayDangKy', '>=', Timestamp.fromDate(startDate)),
+      where('NgayDangKy', '<=', Timestamp.fromDate(endDate)),
       orderBy('NgayDangKy', 'desc')
     );
     const querySnapshot = await getDocs(q);

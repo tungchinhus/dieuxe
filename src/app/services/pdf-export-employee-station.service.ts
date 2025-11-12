@@ -793,9 +793,13 @@ export class PdfExportEmployeeStationService {
     const maxEmployeesPerRoute = 15;
     let currentRoute = 'HCM01'; // Bắt đầu với HCM01
     
+    // Ưu tiên đặc biệt: Đưa nhân viên trạm "Ngã 3 Bến Gỗ" lên trước để gán vào HCM01 nếu còn chỗ
+    const isBenGo = (s: string | undefined) => (s || '').toLowerCase().includes('ngã 3 bến gỗ') || (s || '').toLowerCase().includes('nga 3 ben go');
+    const benGoFirst = [...allHCMEmployees.filter(e => isBenGo(e.TramXe)), ...allHCMEmployees.filter(e => !isBenGo(e.TramXe))];
+
     // Vòng lặp tuần tự gán nhân viên
-    for (let i = 0; i < allHCMEmployees.length; i++) {
-      const employee = allHCMEmployees[i];
+    for (let i = 0; i < benGoFirst.length; i++) {
+      const employee = benGoFirst[i];
       
       if (currentRoute === 'HCM01') {
         if (hcm01Employees.length < maxEmployeesPerRoute) {
@@ -820,7 +824,7 @@ export class PdfExportEmployeeStationService {
     }
     
     // Nhân viên HCM còn dư sau khi sắp cho HCM01 và HCM02
-    const hcmOverflowEmployees = allHCMEmployees.slice(hcm01Employees.length + hcm02Employees.length);
+    const hcmOverflowEmployees = benGoFirst.slice(hcm01Employees.length + hcm02Employees.length);
     
     // Chuyển nhân viên dư thừa sang tuyến Biên Hòa dựa trên tên trạm từ DB
     hcmOverflowEmployees.forEach(employee => {
@@ -883,6 +887,7 @@ export class PdfExportEmployeeStationService {
     const stationLower = station.toLowerCase();
     
     const hcm01PriorityStations = [
+      'ngã 3 bến gỗ', 'nga 3 ben go',
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
       'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'

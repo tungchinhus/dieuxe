@@ -114,6 +114,19 @@ export class VehicleDataService {
     return await this.firestoreService.deleteDangKyPhanXe(id);
   }
 
+  // ==================== DANG KY PHAN XE - HC ====================
+  async dangKyPhanXeHC(dangKy: Omit<DangKyPhanXe, 'ID' | 'createdAt' | 'updatedAt'>): Promise<string> {
+    return await this.firestoreService.createDangKyPhanXeHC(dangKy);
+  }
+
+  async layDanhSachDangKyPhanXeHC(): Promise<DangKyPhanXe[]> {
+    return await this.firestoreService.getAllDangKyPhanXeHC();
+  }
+
+  async huyDangKyPhanXeHC(id: string): Promise<void> {
+    return await this.firestoreService.deleteDangKyPhanXeHC(id);
+  }
+
   // ==================== BUSINESS LOGIC METHODS ====================
   
   /**
