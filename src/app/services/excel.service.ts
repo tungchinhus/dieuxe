@@ -175,10 +175,11 @@ export class ExcelService {
         console.log(`Row ${i} length:`, row.length);
         
         const hoTen = this.getStringValue(row[1]) || ''; // Column B: Họ và tên
-        const tramXe = this.getStringValue(row[2]) || ''; // Column C: Trạm xe
+        const tramXe = this.getStringValue(row[2]) || ''; // Column C: Trạm xe        
         const dienThoai = this.getStringValue(row[3]) || ''; // Column D: Điện thoại
-        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[6])) || ''; // Column F: Từ...
-        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[7])) || ''; // Column G: Đến...
+        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[4])) || ''; // Column F: Từ...
+        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[5])) || ''; // Column G: Đến...
+        
         
         // Get route information using database lookup
         const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen);

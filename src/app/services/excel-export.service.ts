@@ -258,9 +258,9 @@ export class ExcelExportService {
   }
 
   /**
-   * Apply HCM grouping priority logic - Updated to match PDF logic
-   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-Đ,R, BV Hòa Hảo
-   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
+   * Apply HCM grouping priority logic - Updated: Ưu tiên "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa
+   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Nếu là "tự túc", giữ nguyên
@@ -270,6 +270,16 @@ export class ExcelExportService {
 
     // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH03';
+    }
+
+    // ƯU TIÊN: "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa để tối ưu chi phí
+    if (this.isBenGoOrLongBinhTanStation(tramXe)) {
+      // Nếu đã là tuyến BH, giữ nguyên
+      if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+        return routeName;
+      }
+      // Nếu là tuyến HCM hoặc chưa phân tuyến, chuyển sang BH03
       return 'BH03';
     }
 
@@ -744,12 +754,25 @@ export class ExcelExportService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là "Ngã 3 Bến Gỗ" hoặc "Ngã 3 Long Bình Tân" không
+   * Các trạm này được ưu tiên vào tuyến Biên Hòa để tối ưu chi phí
+   */
+  private isBenGoOrLongBinhTanStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const priorityStations = ['ngã 3 bến gỗ', 'nga 3 ben go', 'ngã 3 long bình tân', 'nga 3 long binh tan'];
+    return priorityStations.some(p => stationLower.includes(p) || p.includes(stationLower));
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
+   * Cập nhật: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo, Ngã 4 Thủ Đức
+   * (Đã loại bỏ "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" - ưu tiên vào BH)
    */
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
     const stationLower = station.toLowerCase();
-    const priorities = ['ngã 3 bến gỗ', 'nga 3 ben go', 'đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
+    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao', 'ngã 4 thủ đức', 'nga 4 thu duc'];
     return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
   }
 

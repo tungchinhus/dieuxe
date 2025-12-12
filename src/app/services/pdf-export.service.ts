@@ -499,9 +499,9 @@ export class PdfExportService {
    * - Thủ Đức: nếu chỉ có vài người thì cho đi taxi
    */
   /**
-   * Apply HCM grouping priority logic - Updated based on image data
-   * HCM01: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
-   * HCM02: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
+   * Apply HCM grouping priority logic - Updated: Ưu tiên "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa
+   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Nếu là "tự túc", giữ nguyên
@@ -511,6 +511,16 @@ export class PdfExportService {
 
     // Đặc biệt: "Ngã 3 Hãng dầu" luôn thuộc BH03, không phân biệt tuyến gốc
     if (this.isNga3HangDauStation(tramXe)) {
+      return 'BH03';
+    }
+
+    // ƯU TIÊN: "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa để tối ưu chi phí
+    if (this.isBenGoOrLongBinhTanStation(tramXe)) {
+      // Nếu đã là tuyến BH, giữ nguyên
+      if (routeName === 'BH01' || routeName === 'BH02' || routeName === 'BH03') {
+        return routeName;
+      }
+      // Nếu là tuyến HCM hoặc chưa phân tuyến, chuyển sang BH03
       return 'BH03';
     }
 
@@ -1638,8 +1648,28 @@ export class PdfExportService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là "Ngã 3 Bến Gỗ" hoặc "Ngã 3 Long Bình Tân" không
+   * Các trạm này được ưu tiên vào tuyến Biên Hòa để tối ưu chi phí
+   */
+  private isBenGoOrLongBinhTanStation(station: string): boolean {
+    if (!station) return false;
+    
+    const stationLower = station.toLowerCase();
+    
+    const priorityStations = [
+      'ngã 3 bến gỗ', 'nga 3 ben go',
+      'ngã 3 long bình tân', 'nga 3 long binh tan'
+    ];
+    
+    return priorityStations.some(priorityStation =>
+      stationLower.includes(priorityStation) || priorityStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
-   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * Cập nhật: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo, Ngã 4 Thủ Đức
+   * (Đã loại bỏ "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" - ưu tiên vào BH)
    */
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
@@ -1647,10 +1677,10 @@ export class PdfExportService {
     const stationLower = station.toLowerCase();
     
     const hcm01PriorityStations = [
-      'ngã 3 bến gỗ', 'nga 3 ben go',
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
-      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'
+      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao',
+      'ngã 4 thủ đức', 'nga 4 thu duc'
     ];
     
     return hcm01PriorityStations.some(priorityStation =>
@@ -1977,7 +2007,8 @@ export class PdfExportService {
         .toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
     // Gom nhóm nhân viên theo trạm xe để merge cell
-    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
+    // Sử dụng routeName như routeCode để sắp xếp theo thứ tự từ Quản lý tuyến đường
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || [], route.routeName);
     
     // Tạo hàng dữ liệu với merge cell
     const tableRows = await this.generateTableRowsWithMergedCells(groupedByStation);
@@ -2152,8 +2183,10 @@ export class PdfExportService {
 
   /**
    * Gom nhóm đăng ký theo trạm xe (loại bỏ trạm "tự túc") và sắp xếp theo thuTu
+   * @param registrations - Danh sách đăng ký
+   * @param routeCode - Mã tuyến để sắp xếp theo thứ tự từ Quản lý tuyến đường (optional)
    */
-  private async groupRegistrationsByStation(registrations: Registration[]): Promise<{ [station: string]: Registration[] }> {
+  private async groupRegistrationsByStation(registrations: Registration[], routeCode?: string): Promise<{ [station: string]: Registration[] }> {
     const grouped: { [station: string]: Registration[] } = {};
     const stationNameMap = new Map<string, string>(); // Map từ normalized name đến original name
     
@@ -2182,18 +2215,20 @@ export class PdfExportService {
       grouped[displayStationName].push(reg);
     });
     
-    // Get route code from data cache based on the first station
-    let routeCode = '';
-    const firstStation = Object.keys(grouped)[0];
-    if (firstStation) {
-      // Try to get route from data cache
-      if (this.dataCacheService.isDataLoaded()) {
-        routeCode = this.dataCacheService.getRouteForStation(firstStation) || '';
+    // Get route code from parameter, or try to find it from data cache
+    let finalRouteCode = routeCode || '';
+    if (!finalRouteCode) {
+      const firstStation = Object.keys(grouped)[0];
+      if (firstStation) {
+        // Try to get route from data cache
+        if (this.dataCacheService.isDataLoaded()) {
+          finalRouteCode = this.dataCacheService.getRouteForStation(firstStation) || '';
+        }
       }
     }
     
-    // Sắp xếp các trạm theo thuTu từ RouteDetail
-    const sortedGrouped = await this.sortStationsByThuTu(grouped, routeCode);
+    // Sắp xếp các trạm theo thuTu từ RouteDetail (Quản lý tuyến đường)
+    const sortedGrouped = await this.sortStationsByThuTu(grouped, finalRouteCode);
     
     return sortedGrouped;
   }
@@ -2241,33 +2276,75 @@ export class PdfExportService {
         if (!stationOrderMap.has(detail.maTuyenXe)) {
           stationOrderMap.set(detail.maTuyenXe, new Map());
         }
-        // Store both exact match and normalized match for better matching
-        stationOrderMap.get(detail.maTuyenXe)!.set(detail.tenDiemDon, detail.thuTu);
-        stationOrderMap.get(detail.maTuyenXe)!.set(this.normalizeStationName(detail.tenDiemDon), detail.thuTu);
+        const routeMap = stationOrderMap.get(detail.maTuyenXe)!;
+        const stationName = detail.tenDiemDon;
+        
+        // Store multiple variations for better matching:
+        // 1. Exact name
+        routeMap.set(stationName, detail.thuTu);
+        
+        // 2. Normalized name (no accents, lowercase)
+        routeMap.set(this.normalizeStationName(stationName), detail.thuTu);
+        
+        // 3. Lowercase version
+        routeMap.set(stationName.toLowerCase().trim(), detail.thuTu);
+        
+        // 4. Without parentheses
+        const withoutParentheses = stationName.replace(/[()]/g, '').trim();
+        if (withoutParentheses !== stationName) {
+          routeMap.set(withoutParentheses, detail.thuTu);
+          routeMap.set(withoutParentheses.toLowerCase().trim(), detail.thuTu);
+          routeMap.set(this.normalizeStationName(withoutParentheses), detail.thuTu);
+        }
+        
+        // 5. Trimmed version
+        const trimmed = stationName.trim();
+        if (trimmed !== stationName) {
+          routeMap.set(trimmed, detail.thuTu);
+        }
       });
 
       // If routeCode is not provided, try to find it from the stations
       if (!routeCode) {
-        const firstRegistration = Object.values(grouped)[0]?.[0];
-        if (!firstRegistration) {
-          return grouped;
-        }
-
-        // Try to get route from data cache using the first station
-        const firstStation = firstRegistration.tramXe;
-        if (this.dataCacheService.isDataLoaded()) {
-          routeCode = this.dataCacheService.getRouteForStation(firstStation) || '';
-        }
+        // Try to find routeCode from all stations, not just the first one
+        const allStations = Object.keys(grouped);
+        let foundRouteCode = '';
         
-        // If still no route code, search for it in station order map
-        if (!routeCode) {
-          for (const [route, stationMap] of stationOrderMap.entries()) {
-            if (stationMap.has(firstStation) || stationMap.has(this.normalizeStationName(firstStation))) {
-              routeCode = route;
+        // Strategy 1: Try data cache for each station
+        if (this.dataCacheService.isDataLoaded()) {
+          for (const station of allStations) {
+            const route = this.dataCacheService.getRouteForStation(station);
+            if (route) {
+              foundRouteCode = route;
               break;
             }
           }
         }
+        
+        // Strategy 2: Search in station order map
+        if (!foundRouteCode) {
+          for (const station of allStations) {
+            for (const [route, stationMap] of stationOrderMap.entries()) {
+              if (stationMap.has(station) || 
+                  stationMap.has(this.normalizeStationName(station)) ||
+                  stationMap.has(station.toLowerCase().trim())) {
+                foundRouteCode = route;
+                break;
+              }
+            }
+            if (foundRouteCode) break;
+          }
+        }
+        
+        routeCode = foundRouteCode;
+        
+        if (!routeCode) {
+          console.warn('⚠️ Could not determine routeCode for stations:', allStations);
+          console.warn('⚠️ Returning stations without sorting');
+          return grouped;
+        }
+        
+        console.log(`✅ Found routeCode: ${routeCode} for stations:`, allStations);
       }
 
       const routeOrderMap = routeCode ? stationOrderMap.get(routeCode) : undefined;
@@ -2279,21 +2356,58 @@ export class PdfExportService {
 
       // Sort stations by their thuTu order
       const sortedEntries = Object.entries(grouped).sort(([stationA], [stationB]) => {
-        // Try exact match first
-        let orderA = routeOrderMap.get(stationA);
-        let orderB = routeOrderMap.get(stationB);
+        // Helper function to find order with multiple matching strategies
+        const findOrder = (stationName: string): number => {
+          // Strategy 1: Exact match
+          let order = routeOrderMap.get(stationName);
+          if (order !== undefined) return order;
+          
+          // Strategy 2: Normalized match
+          const normalized = this.normalizeStationName(stationName);
+          order = routeOrderMap.get(normalized);
+          if (order !== undefined) return order;
+          
+          // Strategy 3: Case-insensitive match
+          const lowerStation = stationName.toLowerCase().trim();
+          for (const [key, value] of routeOrderMap.entries()) {
+            if (key.toLowerCase().trim() === lowerStation) {
+              return value;
+            }
+          }
+          
+          // Strategy 4: Partial match (contains)
+          for (const [key, value] of routeOrderMap.entries()) {
+            const keyLower = key.toLowerCase().trim();
+            const stationLower = stationName.toLowerCase().trim();
+            // Check if station name contains route detail name or vice versa
+            if (keyLower.includes(stationLower) || stationLower.includes(keyLower)) {
+              // Only match if the match is significant (at least 5 characters)
+              if (Math.min(keyLower.length, stationLower.length) >= 5) {
+                return value;
+              }
+            }
+          }
+          
+          // Strategy 5: Remove parentheses and try again
+          const withoutParentheses = stationName.replace(/[()]/g, '').trim();
+          if (withoutParentheses !== stationName) {
+            order = routeOrderMap.get(withoutParentheses);
+            if (order !== undefined) return order;
+            const normalizedWithout = this.normalizeStationName(withoutParentheses);
+            order = routeOrderMap.get(normalizedWithout);
+            if (order !== undefined) return order;
+          }
+          
+          return 999; // Default order for unmatched stations
+        };
         
-        // If no exact match, try normalized match
-        if (orderA === undefined) {
-          orderA = routeOrderMap.get(this.normalizeStationName(stationA));
-        }
-        if (orderB === undefined) {
-          orderB = routeOrderMap.get(this.normalizeStationName(stationB));
-        }
+        const orderA = findOrder(stationA);
+        const orderB = findOrder(stationB);
         
-        // Use found order or default to 999 (sorts strictly by database order)
-        orderA = orderA || 999;
-        orderB = orderB || 999;
+        // Log for debugging
+        if (orderA === 999 || orderB === 999) {
+          console.log(`⚠️ Station matching: "${stationA}" -> order ${orderA}, "${stationB}" -> order ${orderB}`);
+        }
         
         return orderA - orderB;
       });
@@ -2304,20 +2418,32 @@ export class PdfExportService {
         sortedGrouped[station] = registrations;
       });
 
-      console.log('Sorted stations by thuTu:', sortedEntries.map(([station, _]) => ({
-        station,
-        order: routeOrderMap.get(station) || routeOrderMap.get(this.normalizeStationName(station)) || 'unknown'
-      })));
+      // Helper function to find order for logging
+      const findOrderForLog = (stationName: string): number | string => {
+        let order = routeOrderMap.get(stationName);
+        if (order !== undefined) return order;
+        order = routeOrderMap.get(this.normalizeStationName(stationName));
+        if (order !== undefined) return order;
+        order = routeOrderMap.get(stationName.toLowerCase().trim());
+        if (order !== undefined) return order;
+        const withoutParentheses = stationName.replace(/[()]/g, '').trim();
+        order = routeOrderMap.get(withoutParentheses);
+        if (order !== undefined) return order;
+        return 'unknown';
+      };
+      
+      console.log(`📋 Sorted stations by thuTu for route ${routeCode}:`);
+      sortedEntries.forEach(([station, registrations]) => {
+        const order = findOrderForLog(station);
+        console.log(`   ${order}. ${station} (${registrations.length} nhân viên)`);
+      });
       
       // Debug: Log all route details for this route
-      console.log(`Route details for ${routeCode}:`, routeDetails.filter(d => d.maTuyenXe === routeCode));
-      
-      // Debug: Check if Ngã 3 Hãng dầu has correct order
-      const nga3HangDauDetails = routeDetails.filter(d => 
-        d.maTuyenXe === routeCode && 
-        (d.tenDiemDon.includes('Ngã 3 Hãng dầu') || d.tenDiemDon.includes('Ngã 3 Hàng dầu'))
-      );
-      console.log('Ngã 3 Hãng dầu details:', nga3HangDauDetails);
+      const routeDetailsForCode = routeDetails.filter(d => d.maTuyenXe === routeCode);
+      console.log(`🗺️ Route details for ${routeCode} (${routeDetailsForCode.length} stations):`);
+      routeDetailsForCode.forEach(detail => {
+        console.log(`   ${detail.thuTu}. ${detail.tenDiemDon}`);
+      });
 
       return sortedGrouped;
 
@@ -2395,7 +2521,8 @@ export class PdfExportService {
    */
   private async exportMultiplePagesForRoute(pdf: jsPDF, route: RouteInfo, maxEmployeesPerPage: number): Promise<void> {
     // Gom nhóm theo trạm xe
-    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
+    // Sử dụng routeName như routeCode để sắp xếp theo thứ tự từ Quản lý tuyến đường
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || [], route.routeName);
     const stations = Object.keys(groupedByStation);
     
     let currentPageEmployees: Registration[] = [];
@@ -2447,7 +2574,8 @@ export class PdfExportService {
         .toString().padStart(2, '0')} năm ${today.getFullYear()}`;
 
     // Gom nhóm nhân viên theo trạm xe để merge cell
-    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || []);
+    // Sử dụng routeName như routeCode để sắp xếp theo thứ tự từ Quản lý tuyến đường
+    const groupedByStation = await this.groupRegistrationsByStation(route.registrations || [], route.routeName);
     
     // Tạo hàng dữ liệu với merge cell
     const tableRows = await this.generateOvertimeTableRowsWithMergedCells(groupedByStation);
