@@ -22,7 +22,7 @@ export class VersionService {
    */
   getCurrentBuild(): number {
     const build = localStorage.getItem(this.BUILD_KEY);
-    return build ? parseInt(build, 10) : 41;
+    return build ? parseInt(build, 10) : 43;
   }
 
   /**

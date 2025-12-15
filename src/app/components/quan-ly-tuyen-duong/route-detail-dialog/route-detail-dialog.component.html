@@ -20,13 +20,19 @@
             <mat-select formControlName="maTuyenXe" placeholder="Chọn tuyến xe">
               <mat-option *ngIf="isLoading" disabled>
                 <mat-spinner diameter="20"></mat-spinner>
-                Đang tải...
+                <span style="margin-left: 8px;">Đang tải danh sách tuyến xe...</span>
+              </mat-option>
+              <mat-option *ngIf="!isLoading && availableRoutes.length === 0" disabled>
+                Không có tuyến xe nào
               </mat-option>
               <mat-option *ngFor="let route of availableRoutes" [value]="route.maTuyenXe">
                 {{ route.tenTuyenXe }}
               </mat-option>
             </mat-select>
             <mat-icon matSuffix>route</mat-icon>
+            <mat-hint *ngIf="!isLoading && availableRoutes.length > 0">
+              Có {{ availableRoutes.length }} tuyến xe để chọn
+            </mat-hint>
             <mat-error *ngIf="hasFieldError('maTuyenXe')">
               {{ getErrorMessage('maTuyenXe') }}
             </mat-error>

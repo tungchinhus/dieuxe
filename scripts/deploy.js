@@ -39,7 +39,7 @@ function deploy() {
   const site = resolveHostingSite(cfg);
   console.log(`Deploying to Firebase Hosting site: ${site}`);
 
-  const cmd = `npx --yes firebase deploy --only "hosting:${site}" --non-interactive`;
+  const cmd = `npx --yes firebase-tools deploy --only "hosting:${site}" --non-interactive`;
   execSync(cmd, { stdio: 'inherit', shell: true });
 }
 

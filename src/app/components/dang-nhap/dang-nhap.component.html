@@ -14,11 +14,11 @@
           <mat-form-field appearance="outline" class="full-width">
             <mat-label>Tên đăng nhập hoặc Email</mat-label>
             <input matInput 
-                   formControlName="username" 
+                   formControlName="usernameOrEmail" 
                    placeholder="Nhập tên đăng nhập hoặc email"
                    autocomplete="username">
             <mat-icon matSuffix>person</mat-icon>
-            <mat-error>{{getErrorMessage('username')}}</mat-error>
+            <mat-error>{{getErrorMessage('usernameOrEmail')}}</mat-error>
           </mat-form-field>
 
           <mat-form-field appearance="outline" class="full-width">

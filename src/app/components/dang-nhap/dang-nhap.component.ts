@@ -45,7 +45,7 @@ export class DangNhapComponent implements OnInit {
     private snackBar: MatSnackBar
   ) {
     this.loginForm = this.fb.group({
-      username: ['', [Validators.required, Validators.minLength(3)]],
+      usernameOrEmail: ['', [Validators.required, Validators.minLength(3)]],
       password: ['', [Validators.required, Validators.minLength(6)]],
       rememberMe: [false]
     });
@@ -61,9 +61,9 @@ export class DangNhapComponent implements OnInit {
   onSubmit(): void {
     if (this.loginForm.valid) {
       this.isLoading = true;
-      const { username, password, rememberMe } = this.loginForm.value;
+      const { usernameOrEmail, password, rememberMe } = this.loginForm.value;
       
-      this.authService.login(username, password).then(result => {
+      this.authService.login(usernameOrEmail, password).then(result => {
         this.isLoading = false;
         
         if (result.success) {
@@ -132,9 +132,9 @@ export class DangNhapComponent implements OnInit {
   // Demo accounts for testing
   fillDemoAccount(accountType: 'admin' | 'manager' | 'user'): void {
     const accounts = {
-      admin: { username: 'admin', password: 'admin123' },
-      manager: { username: 'manager1@thibidi.com', password: 'manager123' },
-      user: { username: 'user1@thibidi.com', password: 'user123' }
+      admin: { usernameOrEmail: 'admin', password: 'admin123' },
+      manager: { usernameOrEmail: 'manager1@thibidi.com', password: 'manager123' },
+      user: { usernameOrEmail: 'user1@thibidi.com', password: 'user123' }
     };
     
     const account = accounts[accountType];

@@ -51,6 +51,16 @@ export class RouteDetailDialogComponent implements OnInit {
   allRouteDetails: RouteDetail[] = [];
   isLoading = true;
 
+  // Default routes list (fallback if Firebase has no data)
+  private defaultRoutes = [
+    { maTuyenXe: 'HCM01', tenTuyenXe: 'Tuyến HCM01' },
+    { maTuyenXe: 'HCM02', tenTuyenXe: 'Tuyến HCM02' },
+    { maTuyenXe: 'HCM03', tenTuyenXe: 'Tuyến HCM03' },
+    { maTuyenXe: 'BH01', tenTuyenXe: 'Tuyến BH01' },
+    { maTuyenXe: 'BH02', tenTuyenXe: 'Tuyến BH02' },
+    { maTuyenXe: 'BH03', tenTuyenXe: 'Tuyến BH03' }
+  ];
+
   constructor(
     private fb: FormBuilder,
     private dialogRef: MatDialogRef<RouteDetailDialogComponent>,
@@ -92,25 +102,41 @@ export class RouteDetailDialogComponent implements OnInit {
         this.allRouteDetails = routeDetails;
         
         // Get unique routes from route details
-        const uniqueRoutes = new Map();
+        const uniqueRoutes = new Map<string, { maTuyenXe: string; tenTuyenXe: string }>();
+        
+        // First, add default routes to the map
+        this.defaultRoutes.forEach(route => {
+          uniqueRoutes.set(route.maTuyenXe, route);
+        });
+        
+        // Then, add routes from Firebase (will override defaults if they exist)
         routeDetails.forEach(detail => {
-          if (!uniqueRoutes.has(detail.maTuyenXe)) {
+          if (detail.maTuyenXe) {
+            // Check if we have a default name for this route
+            const defaultRoute = this.defaultRoutes.find(r => r.maTuyenXe === detail.maTuyenXe);
             uniqueRoutes.set(detail.maTuyenXe, {
               maTuyenXe: detail.maTuyenXe,
-              tenTuyenXe: `Tuyến ${detail.maTuyenXe}`
+              tenTuyenXe: defaultRoute?.tenTuyenXe || `Tuyến ${detail.maTuyenXe}`
             });
           }
         });
-        this.availableRoutes = Array.from(uniqueRoutes.values());
+        
+        // Convert to array and sort by route code
+        this.availableRoutes = Array.from(uniqueRoutes.values()).sort((a, b) => {
+          return a.maTuyenXe.localeCompare(b.maTuyenXe);
+        });
+        
         console.log('Available routes for dropdown:', this.availableRoutes);
         this.isLoading = false;
         console.log('=== ROUTES LOADED SUCCESSFULLY ===');
       },
       error: (error) => {
         console.error('Error loading route details from Firebase:', error);
-        this.availableRoutes = [];
+        // Use default routes if Firebase fails
+        this.availableRoutes = [...this.defaultRoutes];
         this.allRouteDetails = [];
         this.isLoading = false;
+        console.log('Using default routes due to Firebase error');
       }
     });
   }
