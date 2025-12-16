@@ -45,7 +45,7 @@
           <button mat-raised-button 
                   color="warn" 
                   (click)="deleteSelected()"
-                  [disabled]="selection.selected.length === 0"
+                  [disabled]="selection.selected.length === 0 || !canDelete"
                   class="action-button">
             <mat-icon>delete</mat-icon>
             Xóa Đã chọn ({{selection.selected.length}})
@@ -117,7 +117,7 @@
                       <mat-icon>edit</mat-icon>
                       <span>Chỉnh sửa</span>
                     </button>
-                    <button mat-menu-item (click)="deleteRouteDetail(routeDetail)">
+                    <button mat-menu-item *ngIf="canDelete" (click)="deleteRouteDetail(routeDetail)">
                       <mat-icon>delete</mat-icon>
                       <span>Xóa</span>
                     </button>

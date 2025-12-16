@@ -508,8 +508,8 @@ export class ExcelExportService {
     data.push([`Ngày ${new Date().toLocaleDateString('vi-VN')}`]);
     data.push([]);
     
-    // Table header simple
-    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', 'Từ...', 'Đến...', 'Ghi chú']);
+    // Table header - matching template order: STT, Họ và tên, Trạm xe, Điện thoại, (Empty), Từ..., Đến...
+    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', '', 'Từ...', 'Đến...']);
     
     let globalSttCounter = 1;
     
@@ -536,14 +536,38 @@ export class ExcelExportService {
         // Keep employees in their original order (already sorted by station order from database)
         // DO NOT sort alphabetically - use the original order as provided
         for (const emp of employees) {
+          // Debug: Log to verify data mapping
+          console.log('Excel Export - Employee data:', {
+            hoTen: emp.hoTen,
+            tramXe: emp.tramXe,
+            dienThoai: emp.dienThoai,
+            thoiGianBatDau: emp.thoiGianBatDau,
+            thoiGianKetThuc: emp.thoiGianKetThuc
+          });
+          
+          // Ensure correct data mapping - verify each field
+          const hoTen = String(emp.hoTen || '').trim(); // Họ và tên - Column B (must be name)
+          const tramXe = String(emp.tramXe || '').trim(); // Trạm xe - Column C (must be station)
+          const dienThoai = String(emp.dienThoai || '').trim(); // Điện thoại - Column D (must be phone)
+          const thoiGianBatDau = String(emp.thoiGianBatDau || '').trim(); // Từ... - Column F
+          const thoiGianKetThuc = String(emp.thoiGianKetThuc || '').trim(); // Đến... - Column G
+          
+          // Debug: Verify data before pushing
+          if (hoTen && hoTen.match(/^\d+$/)) {
+            console.warn('Excel Export - WARNING: Column B (Họ và tên) contains number:', hoTen, 'Employee:', emp);
+          }
+          if (dienThoai && !dienThoai.match(/^[\d\s\-\+\(\)]+$/)) {
+            console.warn('Excel Export - WARNING: Column D (Điện thoại) does not look like phone:', dienThoai, 'Employee:', emp);
+          }
+          
           data.push([
             globalSttCounter++,
-            emp.hoTen,
-            station, // Show station name for all employees to match PDF data arrangement
-            emp.dienThoai,
-            emp.thoiGianBatDau,
-            emp.thoiGianKetThuc,
-            ''
+            hoTen, // Họ và tên - Column B
+            tramXe, // Trạm xe - Column C
+            dienThoai, // Điện thoại - Column D
+            '', // Empty column - Column E
+            thoiGianBatDau, // Từ... - Column F
+            thoiGianKetThuc // Đến... - Column G
           ]);
         }
       }
@@ -552,15 +576,15 @@ export class ExcelExportService {
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
     
-    // Set column widths
+    // Set column widths - matching template order
     const colWidths = [
       { wch: 5 },   // STT
-      { wch: 25 },  // Họ và tên
-      { wch: 20 },  // Trạm xe
-      { wch: 15 },  // Điện thoại
-      { wch: 12 },  // Từ...
-      { wch: 12 },  // Đến...
-      { wch: 15 }   // Ghi chú
+      { wch: 20 },  // Họ và tên
+      { wch: 30 },  // Trạm xe
+      { wch: 12 },  // Điện thoại
+      { wch: 10 },  // Empty column
+      { wch: 10 },  // Từ...
+      { wch: 10 }   // Đến...
     ];
     worksheet['!cols'] = colWidths;
     
@@ -655,35 +679,35 @@ export class ExcelExportService {
       data.push([]);
     }
 
-    // Table header
-    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', 'Thời gian làm việc', '', 'Ghi chú']);
-    data.push(['', '', '', '', 'Từ...', 'Đến...', '']);
+    // Table header - matching template order
+    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', '', 'Thời gian làm việc', '']);
+    data.push(['', '', '', '', '', 'Từ...', 'Đến...']);
 
-    // Employee data
+    // Employee data - matching template order
     route.registrations.forEach((emp, index) => {
       data.push([
         index + 1,
         emp.hoTen,
         emp.tramXe,
         emp.dienThoai,
+        '', // Empty column to match template
         emp.thoiGianBatDau,
-        emp.thoiGianKetThuc,
-        ''
+        emp.thoiGianKetThuc
       ]);
     });
 
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
 
-    // Set column widths
+    // Set column widths - matching template order
     const colWidths = [
       { wch: 5 },   // STT
-      { wch: 25 },  // Họ và tên
-      { wch: 20 },  // Trạm xe
-      { wch: 15 },  // Điện thoại
-      { wch: 12 },  // Từ...
-      { wch: 12 },  // Đến...
-      { wch: 15 }   // Ghi chú
+      { wch: 20 },  // Họ và tên
+      { wch: 30 },  // Trạm xe
+      { wch: 12 },  // Điện thoại
+      { wch: 10 },  // Empty column
+      { wch: 10 },  // Từ...
+      { wch: 10 }   // Đến...
     ];
     worksheet['!cols'] = colWidths;
 

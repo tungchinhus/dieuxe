@@ -22,6 +22,8 @@ import { MatTooltipModule } from '@angular/material/tooltip';
 import { SidenavService } from '../../services/sidenav.service';
 import { FirestoreService } from '../../services/firestore.service';
 import { XeDuaDon, LoaiXe } from '../../models/vehicle.model';
+import { AuthService } from '../../services/auth.service';
+import { PREDEFINED_ROLES } from '../../models/user.model';
 import { NhaXe } from '../../models/garage.model';
 import { XeDuaDonFormDialogComponent } from './xe-dua-don-form-dialog/xe-dua-don-form-dialog.component';
 import { StationAssignmentDialogComponent } from './station-assignment-dialog/station-assignment-dialog.component';
@@ -94,7 +96,8 @@ export class QuanLyXeDuaDonComponent implements OnInit {
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private firestoreService: FirestoreService,
-    private stationAssignmentPdfExportService: StationAssignmentPdfExportService
+    private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
+    private authService: AuthService
   ) {}
 
   toggleSidenav(): void {
@@ -272,6 +275,15 @@ export class QuanLyXeDuaDonComponent implements OnInit {
    * Delete xe dua don
    */
   deleteXeDuaDon(xeDuaDon: XeDuaDon): void {
+    if (!this.canDelete) {
+      this.snackBar.open('Chỉ admin mới được xóa', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     if (confirm(`Bạn có chắc chắn muốn xóa xe đưa đón ${xeDuaDon.BienSoXe}?`)) {
       this.performDeleteXeDuaDon(xeDuaDon.MaXe);
     }
@@ -338,6 +350,10 @@ export class QuanLyXeDuaDonComponent implements OnInit {
 
   checkboxLabel(): string {
     return 'Chọn tất cả';
+  }
+
+  get canDelete(): boolean {
+    return this.authService.hasAnyRoleSync([PREDEFINED_ROLES.ADMIN, PREDEFINED_ROLES.SUPER_ADMIN]);
   }
 
   // ==================== FILTER METHODS ====================

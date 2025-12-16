@@ -5,7 +5,7 @@ import { Router } from '@angular/router';
 import { User } from '../models/user.model';
 import { UserManagementFirebaseService } from './user-management-firebase.service';
 import { FirebaseService } from './firebase.service';
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser } from 'firebase/auth';
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, User as FirebaseUser, setPersistence, browserLocalPersistence, browserSessionPersistence } from 'firebase/auth';
 import { reauthenticateWithCredential, EmailAuthProvider, updatePassword } from 'firebase/auth';
 
 @Injectable({
@@ -32,7 +32,7 @@ export class AuthService {
     // Load from storage for initial paint (will be reconciled by onAuthStateChanged)
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('authToken');
-    if (storedUser && storedToken) {
+    if (storedUser && storedToken && this.isTokenValid(storedToken)) {
       try {
         const user = JSON.parse(storedUser);
         this.currentUserSubject.next(user);
@@ -42,6 +42,8 @@ export class AuthService {
         console.error('Error parsing stored user data:', error);
         this.clearAuthData();
       }
+    } else if (storedToken && !this.isTokenValid(storedToken)) {
+      this.clearAuthData();
     }
 
     // Subscribe Firebase auth state
@@ -131,7 +133,7 @@ export class AuthService {
     });
   }
 
-  async login(usernameOrEmail: string, password: string): Promise<{ success: boolean; message: string; user?: User }> {
+  async login(usernameOrEmail: string, password: string, rememberMe = false): Promise<{ success: boolean; message: string; user?: User }> {
     try {
       // Allow login by username OR email
       const input = (usernameOrEmail || '').trim();
@@ -156,6 +158,9 @@ export class AuthService {
       if (!auth) {
         throw new Error('Firebase Auth not initialized');
       }
+
+      // Set persistence based on remember me
+      await setPersistence(auth, rememberMe ? browserLocalPersistence : browserSessionPersistence);
 
       // Use Firebase Auth with resolved email
       console.log('Attempting login with email:', signInEmail);
@@ -182,7 +187,7 @@ export class AuthService {
           createdAt: new Date(),
           updatedAt: new Date()
         };
-        this.setAuthData(minimalUser, token);
+        this.setAuthData(minimalUser, token, rememberMe);
         this.router.navigate(['/dangkyxe']);
         return { success: true, message: 'Đăng nhập thành công', user: minimalUser };
       }
@@ -194,7 +199,7 @@ export class AuthService {
         console.warn('Could not update last login:', updateError);
       }
 
-      this.setAuthData(appUser, token);
+      this.setAuthData(appUser, token, rememberMe);
       this.router.navigate(['/dangkyxe']);
       return { success: true, message: 'Đăng nhập thành công', user: appUser };
     } catch (error: any) {
@@ -313,8 +318,8 @@ export class AuthService {
   }
 
   // Token validity handled by Firebase; keep 24h fallback for stored token
-  isTokenValid(): boolean {
-    const token = this.getToken();
+  isTokenValid(tokenToCheck?: string): boolean {
+    const token = tokenToCheck || this.getToken();
     if (!token) return false;
     try {
       const tokenData = JSON.parse(atob(token.split('.')[1] || ''));
@@ -348,12 +353,17 @@ export class AuthService {
     }
   }
 
-  private setAuthData(user: User, token: string): void {
+  private setAuthData(user: User, token: string, persistToStorage: boolean = true): void {
     this.currentUserSubject.next(user);
     this.isAuthenticatedSubject.next(true);
     this.tokenSubject.next(token);
-    localStorage.setItem('currentUser', JSON.stringify(user));
-    localStorage.setItem('authToken', token);
+    if (persistToStorage) {
+      localStorage.setItem('currentUser', JSON.stringify(user));
+      localStorage.setItem('authToken', token);
+    } else {
+      localStorage.removeItem('currentUser');
+      localStorage.removeItem('authToken');
+    }
   }
 
   private clearAuthData(): void {

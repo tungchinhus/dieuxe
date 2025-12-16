@@ -16,6 +16,8 @@ import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
 import { FormsModule } from '@angular/forms';
 import { SelectionModel } from '@angular/cdk/collections';
 import { RouteDetail, RouteDetailCreate, RouteDetailUpdate } from '../../models/route-detail.model';
+import { AuthService } from '../../services/auth.service';
+import { PREDEFINED_ROLES } from '../../models/user.model';
 import { RouteDetailDialogComponent } from './route-detail-dialog/route-detail-dialog.component';
 import { ExcelService } from '../../services/excel.service';
 import { RouteDetailService } from '../../services/route-detail.service';
@@ -56,7 +58,8 @@ export class QuanLyTuyenDuongComponent implements OnInit {
     private dialog: MatDialog,
     private snackBar: MatSnackBar,
     private excelService: ExcelService,
-    private routeDetailService: RouteDetailService
+    private routeDetailService: RouteDetailService,
+    private authService: AuthService
   ) {}
 
   ngOnInit() {
@@ -190,6 +193,15 @@ export class QuanLyTuyenDuongComponent implements OnInit {
   }
 
   deleteRouteDetail(routeDetail: RouteDetail) {
+    if (!this.canDelete) {
+      this.snackBar.open('Chỉ admin mới được xóa', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     if (confirm('Bạn có chắc chắn muốn xóa chi tiết tuyến đường này?')) {
       if (routeDetail.id) {
         this.routeDetailService.deleteRouteDetail(routeDetail.id).then(() => {
@@ -213,6 +225,15 @@ export class QuanLyTuyenDuongComponent implements OnInit {
   }
 
   deleteSelected() {
+    if (!this.canDelete) {
+      this.snackBar.open('Chỉ admin mới được xóa', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
     if (this.selection.selected.length === 0) {
       this.snackBar.open('Vui lòng chọn ít nhất một mục để xóa!', 'Đóng', {
         duration: 3000,
@@ -252,6 +273,10 @@ export class QuanLyTuyenDuongComponent implements OnInit {
   private getNextId(): number {
     const maxId = Math.max(...this.dataSource.data.map(item => item.maChiTiet), 0);
     return maxId + 1;
+  }
+
+  get canDelete(): boolean {
+    return this.authService.hasAnyRoleSync([PREDEFINED_ROLES.ADMIN, PREDEFINED_ROLES.SUPER_ADMIN]);
   }
 
   openFileUploadDialog() {

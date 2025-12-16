@@ -151,7 +151,7 @@
                     <mat-icon>edit</mat-icon>
                     <span>Chỉnh sửa</span>
                   </button>
-                  <button mat-menu-item (click)="deleteXeDuaDon(row)" class="delete-action">
+                  <button mat-menu-item *ngIf="canDelete" (click)="deleteXeDuaDon(row)" class="delete-action">
                     <mat-icon>delete</mat-icon>
                     <span>Xóa</span>
                   </button>

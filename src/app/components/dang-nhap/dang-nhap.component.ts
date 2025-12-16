@@ -63,7 +63,7 @@ export class DangNhapComponent implements OnInit {
       this.isLoading = true;
       const { usernameOrEmail, password, rememberMe } = this.loginForm.value;
       
-      this.authService.login(usernameOrEmail, password).then(result => {
+      this.authService.login(usernameOrEmail, password, rememberMe).then(result => {
         this.isLoading = false;
         
         if (result.success) {
