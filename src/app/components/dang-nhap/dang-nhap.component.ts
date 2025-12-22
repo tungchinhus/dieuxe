@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, OnDestroy } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { Router } from '@angular/router';
 import { FormBuilder, FormGroup, Validators, ReactiveFormsModule } from '@angular/forms';
@@ -12,6 +12,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatCheckboxModule } from '@angular/material/checkbox';
 import { MatDividerModule } from '@angular/material/divider';
 import { AuthService } from '../../services/auth.service';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'app-dang-nhap',
@@ -32,11 +33,12 @@ import { AuthService } from '../../services/auth.service';
   templateUrl: './dang-nhap.component.html',
   styleUrl: './dang-nhap.component.css'
 })
-export class DangNhapComponent implements OnInit {
+export class DangNhapComponent implements OnInit, OnDestroy {
   loginForm: FormGroup;
   isLoading = false;
   hidePassword = true;
   rememberMe = false;
+  private authSubscription?: Subscription;
 
   constructor(
     private fb: FormBuilder,
@@ -52,9 +54,31 @@ export class DangNhapComponent implements OnInit {
   }
 
   ngOnInit(): void {
-    // Check if user is already logged in
-    if (this.authService.isAuthenticated()) {
-      this.router.navigate(['/dangkyxe']);
+    // Load rememberMe preference from localStorage
+    const rememberMePreference = localStorage.getItem('rememberMe') === 'true';
+    if (rememberMePreference) {
+      this.loginForm.patchValue({ rememberMe: true });
+      this.rememberMe = true;
+    }
+
+    // Check if user is already logged in (with a small delay to allow auth state to restore)
+    setTimeout(() => {
+      if (this.authService.isAuthenticated()) {
+        this.router.navigate(['/dangkyxe']);
+      }
+    }, 100);
+
+    // Also subscribe to auth state changes for immediate redirect
+    this.authSubscription = this.authService.isAuthenticated$.subscribe(isAuthenticated => {
+      if (isAuthenticated) {
+        this.router.navigate(['/dangkyxe']);
+      }
+    });
+  }
+
+  ngOnDestroy(): void {
+    if (this.authSubscription) {
+      this.authSubscription.unsubscribe();
     }
   }
 

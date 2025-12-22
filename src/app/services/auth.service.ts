@@ -28,7 +28,25 @@ export class AuthService {
     this.initializeAuth();
   }
 
-  private initializeAuth(): void {
+  private async initializeAuth(): Promise<void> {
+    const auth = this.firebaseService.getAuth();
+    
+    // Set persistence based on rememberMe preference BEFORE checking auth state
+    // This ensures Firebase will restore the session if rememberMe was enabled
+    const rememberMe = localStorage.getItem('rememberMe') === 'true';
+    try {
+      if (rememberMe) {
+        await setPersistence(auth, browserLocalPersistence);
+        console.log('Remember Me enabled: Using browserLocalPersistence');
+      } else {
+        await setPersistence(auth, browserSessionPersistence);
+        console.log('Remember Me disabled: Using browserSessionPersistence');
+      }
+    } catch (error) {
+      console.warn('Failed to set persistence:', error);
+      // Continue anyway - Firebase will use default persistence
+    }
+
     // Load from storage for initial paint (will be reconciled by onAuthStateChanged)
     const storedUser = localStorage.getItem('currentUser');
     const storedToken = localStorage.getItem('authToken');
@@ -46,8 +64,8 @@ export class AuthService {
       this.clearAuthData();
     }
 
-    // Subscribe Firebase auth state
-    onAuthStateChanged(this.firebaseService.getAuth(), async (fbUser: FirebaseUser | null) => {
+    // Subscribe Firebase auth state - this will automatically restore session if rememberMe was enabled
+    onAuthStateChanged(auth, async (fbUser: FirebaseUser | null) => {
       if (fbUser) {
         try {
           const token = await fbUser.getIdToken();
@@ -372,6 +390,8 @@ export class AuthService {
     this.tokenSubject.next(null);
     localStorage.removeItem('currentUser');
     localStorage.removeItem('authToken');
+    // Note: We keep 'rememberMe' preference even after logout
+    // so user can still use it next time they login
   }
 
   private translateFirebaseError(code?: string): string | null {
