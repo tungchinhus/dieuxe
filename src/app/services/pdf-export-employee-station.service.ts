@@ -444,8 +444,8 @@ export class PdfExportEmployeeStationService {
   /**
    * Áp dụng logic ưu tiên gom HCM và BH routes
    * Cập nhật: Ưu tiên "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa để tối ưu chi phí
-   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
-   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
+   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh (Gần Văn Thánh), Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private async applyHCMGroupingPriority(routeName: string, tramXe: string): Promise<string> {
     // Kiểm tra nếu là trường hợp "tự túc"
@@ -920,7 +920,8 @@ export class PdfExportEmployeeStationService {
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
       'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao',
-      'ngã 4 thủ đức', 'nga 4 thu duc'
+      'ngã 4 thủ đức', 'nga 4 thu duc',
+      'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'
     ];
     
     return hcm01PriorityStations.some(priorityStation =>

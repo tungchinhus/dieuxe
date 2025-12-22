@@ -161,18 +161,29 @@ export class ExcelExportService {
     for (const registration of registrations) {
       let finalRouteName = 'Chưa phân tuyến';
       
-      // Map từ tramXe sử dụng database chiTietTuyenDuong
+      // Áp dụng logic ưu tiên gom HCM routes TRƯỚC khi check database
+      // Điều này đảm bảo các trạm ưu tiên như "Hàng Xanh (Gần Văn Thánh)" được gán đúng vào HCM01
       if (registration.tramXe && registration.tramXe.trim() !== '') {
-        const mappedRoute = this.stationRouteMappingService.getRouteForStation(registration.tramXe);
-        if (mappedRoute) {
-          finalRouteName = mappedRoute;
-          console.log(`Excel Export - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}"`);
+        // Kiểm tra trạm ưu tiên HCM01 trước (bao gồm Hàng Xanh)
+        if (this.isHCM01PriorityStation(registration.tramXe)) {
+          finalRouteName = 'HCM01';
+          console.log(`Excel Export - Station "${registration.tramXe}" is HCM01 priority, assigned to HCM01`);
+        } else if (this.isHCM02PriorityStation(registration.tramXe)) {
+          finalRouteName = 'HCM02';
+          console.log(`Excel Export - Station "${registration.tramXe}" is HCM02 priority, assigned to HCM02`);
         } else {
-          console.warn(`Excel Export - No route mapping found for station "${registration.tramXe}"`);
+          // Nếu không phải trạm ưu tiên, mới check database
+          const mappedRoute = this.stationRouteMappingService.getRouteForStation(registration.tramXe);
+          if (mappedRoute) {
+            finalRouteName = mappedRoute;
+            console.log(`Excel Export - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}" from database`);
+          } else {
+            console.warn(`Excel Export - No route mapping found for station "${registration.tramXe}"`);
+          }
         }
       }
       
-      // Áp dụng logic ưu tiên gom HCM routes và xử lý "tự túc"
+      // Áp dụng logic ưu tiên gom HCM routes và xử lý "tự túc" (cho các trường hợp đặc biệt)
       finalRouteName = this.applyHCMGroupingPriority(finalRouteName, registration.tramXe);
       
       if (!routeMap.has(finalRouteName)) {
@@ -259,8 +270,8 @@ export class ExcelExportService {
 
   /**
    * Apply HCM grouping priority logic - Updated: Ưu tiên "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa
-   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
-   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
+   * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh (Gần Văn Thánh), Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
+   * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
    */
   private applyHCMGroupingPriority(routeName: string, tramXe: string): string {
     // Nếu là "tự túc", giữ nguyên
@@ -283,14 +294,16 @@ export class ExcelExportService {
       return 'BH03';
     }
 
+    // QUAN TRỌNG: Kiểm tra trạm ưu tiên HCM01 TRƯỚC HCM02 để đảm bảo "Hàng Xanh (Gần Văn Thánh)" luôn vào HCM01
+    // Ngay cả khi database trả về HCM02, logic này sẽ override
+    if (this.isHCM01PriorityStation(tramXe)) {
+      console.log(`Excel Export - Overriding route from "${routeName}" to "HCM01" for station "${tramXe}" (HCM01 priority)`);
+      return 'HCM01';
+    }
+
     // Kiểm tra nếu là trạm ưu tiên cho HCM02
     if (this.isHCM02PriorityStation(tramXe)) {
       return 'HCM02';
-    }
-
-    // Kiểm tra nếu là trạm ưu tiên cho HCM01
-    if (this.isHCM01PriorityStation(tramXe)) {
-      return 'HCM01';
     }
 
     // Nếu không phải HCM route, giữ nguyên
@@ -349,10 +362,19 @@ export class ExcelExportService {
     
     sortedHCMEmployees.forEach(employee => {
       const station = employee.tramXe?.toLowerCase() || '';
-      if (this.isTargetStationForHCM01(station)) {
-        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM01`);
+      
+      // QUAN TRỌNG: Kiểm tra HCM01 priority TRƯỚC (bao gồm Hàng Xanh)
+      if (this.isHCM01PriorityStation(employee.tramXe)) {
+        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM01 (HCM01 priority)`);
         employeesToMoveToHCM01.push(employee);
-      } else if (this.isSharedStation(station)) {
+      } 
+      // Kiểm tra HCM02 priority
+      else if (this.isHCM02PriorityStation(employee.tramXe)) {
+        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM02 (HCM02 priority)`);
+        employeesToMoveToHCM02.push(employee);
+      }
+      // Kiểm tra shared stations (các trạm chung)
+      else if (this.isSharedStation(station)) {
         employeesToMoveToHCM02.push(employee);
       } else {
         otherEmployees.push(employee);
@@ -511,13 +533,14 @@ export class ExcelExportService {
     // Table header - matching template order: STT, Họ và tên, Trạm xe, Điện thoại, (Empty), Từ..., Đến...
     data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', '', 'Từ...', 'Đến...']);
     
-    let globalSttCounter = 1;
-    
     // Iterate through each route
     for (const route of routeGroups) {
       if (!route.registrations || route.registrations.length === 0) {
         continue;
       }
+      
+      // Reset STT counter to 1 for each route
+      let routeSttCounter = 1;
       
       // Group employees by station
       const groupedByStation = await this.groupRegistrationsByStation(route.registrations);
@@ -561,7 +584,7 @@ export class ExcelExportService {
           }
           
           data.push([
-            globalSttCounter++,
+            routeSttCounter++,
             hoTen, // Họ và tên - Column B
             tramXe, // Trạm xe - Column C
             dienThoai, // Điện thoại - Column D
@@ -716,30 +739,18 @@ export class ExcelExportService {
 
   /**
    * Kiểm tra xem trạm có phải là trạm cần chuyển lên HCM01 không
+   * Bao gồm tất cả các trạm ưu tiên HCM01, đặc biệt là "Hàng Xanh (Gần Văn Thánh)"
    */
   private isTargetStationForHCM01(station: string): boolean {
     if (!station) return false;
     
-    const stationLower = station.toLowerCase();
-    
-    const targetStations = [
-      'đinh tiên hoàng-đbp',
-      'dinh tien hoang-dbp',
-      'hai bà trưng-đbp',
-      'hai ba trung-dbp',
-      'bv hòa hảo',
-      'bv hoa hao',
-      'bệnh viện hòa hảo',
-      'benh vien hoa hao'
-    ];
-    
-    return targetStations.some(targetStation => 
-      stationLower.includes(targetStation) || targetStation.includes(stationLower)
-    );
+    // Sử dụng hàm isHCM01PriorityStation để đảm bảo nhất quán
+    return this.isHCM01PriorityStation(station);
   }
 
   /**
    * Kiểm tra xem trạm có phải là trạm chung giữa 2 tuyến không
+   * Lưu ý: Hàng Xanh (Gần Văn Thánh) chỉ thuộc HCM01, không phải trạm chung
    */
   private isSharedStation(station: string): boolean {
     if (!station) return false;
@@ -755,11 +766,7 @@ export class ExcelExportService {
       'nga 4 thu duc',
       'rmk',
       'ngã 3 cát lái',
-      'nga 3 cat lai',
-      'hàng xanh',
-      'hang xanh',
-      'hàng xanh (gần văn thánh)',
-      'hang xanh (gan van thanh)'
+      'nga 3 cat lai'
     ];
     
     return sharedStations.some(sharedStation => 
@@ -796,7 +803,7 @@ export class ExcelExportService {
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
     const stationLower = station.toLowerCase();
-    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao', 'ngã 4 thủ đức', 'nga 4 thu duc'];
+    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao', 'ngã 4 thủ đức', 'nga 4 thu duc', 'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'];
     return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
   }
 
