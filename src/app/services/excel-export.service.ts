@@ -80,7 +80,7 @@ export class ExcelExportService {
 
       // Kiểm tra có tuyến nào có nhân viên không
       if (routeGroups.length === 0) {
-        alert('Không có dữ liệu nhân viên để xuất Excel (tất cả nhân viên đều có trạm "tự túc")');
+        alert('Không có dữ liệu nhân viên để xuất Excel');
         return;
       }
 
@@ -232,15 +232,15 @@ export class ExcelExportService {
       routeMap.get(finalRouteName)!.registrations.push(registration);
     }
 
-    // Convert to array and filter out routes with no employees and self-transport routes
+    // Convert to array and filter out routes with no employees
+    // Bổ sung: Bao gồm cả nhân viên tự túc (tục túc) trong Excel export
     const routes = Array.from(routeMap.values()).filter(route => 
       route.registrations && 
-      route.registrations.length > 0 &&
-      route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
+      route.registrations.length > 0
     );
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
+    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03, TỰ TÚC
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'TỰ TÚC'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
