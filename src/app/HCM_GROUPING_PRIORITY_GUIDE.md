@@ -9,7 +9,7 @@ Theo yêu cầu từ hình ảnh, hệ thống đã được cập nhật để 
 ### 1. Nguyên tắc hoạt động
 
 - **HCM01**: Bao gồm các trạm: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh (Gần Văn Thánh), Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
-- **HCM02**: Bao gồm các trạm: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh (Gần Văn Thánh), Bà Chiểu, Chợ Gò Vấp, Hóc Môn (Chùa Hoằng Pháp), Trường Lý Tự Trọng
+- **HCM02**: Bao gồm các trạm: Ngã 3 Bến Gỗ, Ngã 3 Long Bình Tân, Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Bà Chiểu, Chợ Gò Vấp, Hóc Môn (Chùa Hoằng Pháp), Trường Lý Tự Trọng
 - **Đặc biệt**: 
   - **Ngã 3 Hãng dầu** luôn thuộc **BH04**, không phân biệt tuyến gốc
   - **Ngã 4 Thủ Đức** không được gom vào BH01 nếu thuộc các tuyến khác
