@@ -179,6 +179,18 @@ export class ExcelService {
         const dienThoai = this.getStringValue(row[3]) || ''; // Column D: Điện thoại
         const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[4])) || ''; // Column F: Từ...
         const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[5])) || ''; // Column G: Đến...
+
+        // Skip rows that are missing any required field
+        // Required fields: Họ tên NV, Trạm xe, Thời gian (từ giờ đến giờ)
+        // Số điện thoại không bắt buộc
+        if (!hoTen || !tramXe || !thoiGianBatDau || !thoiGianKetThuc) {
+          console.warn(
+            `Skipping row ${i} due to missing required data. ` +
+            `HoTen="${hoTen}", TramXe="${tramXe}", DienThoai="${dienThoai}", ` +
+            `ThoiGianBatDau="${thoiGianBatDau}", ThoiGianKetThuc="${thoiGianKetThuc}"`
+          );
+          continue;
+        }
         
         
         // Get route information using database lookup
