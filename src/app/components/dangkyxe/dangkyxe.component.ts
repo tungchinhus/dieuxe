@@ -555,10 +555,11 @@ export class DangKyXeComponent implements OnInit {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls';
+    input.multiple = true; // Allow multiple file selection
     input.onchange = (event: any) => {
-      const file = event.target.files[0];
-      if (file) {
-        this.handleFileUpload(file);
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        this.handleMultipleFileUpload(Array.from(files));
       }
     };
     input.click();
@@ -569,10 +570,11 @@ export class DangKyXeComponent implements OnInit {
     const input = document.createElement('input');
     input.type = 'file';
     input.accept = '.xlsx,.xls';
+    input.multiple = true; // Allow multiple file selection
     input.onchange = (event: any) => {
-      const file = event.target.files[0];
-      if (file) {
-        this.handleFileUploadHC(file);
+      const files = event.target.files;
+      if (files && files.length > 0) {
+        this.handleMultipleFileUploadHC(Array.from(files));
       }
     };
     input.click();
@@ -991,6 +993,366 @@ export class DangKyXeComponent implements OnInit {
     } catch (error) {
       console.error('Error processing file:', error);
       this.snackBar.open(`Lỗi khi xử lý file: ${error}`, 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } finally {
+      // Reset loading state
+      this.isImportingExcel = false;
+    }
+  }
+
+  // Handle multiple file uploads
+  private async handleMultipleFileUpload(files: File[]): Promise<void> {
+    if (files.length === 0) return;
+
+    try {
+      this.isImportingExcel = true;
+      const totalFiles = files.length;
+      let totalRegistrations: Registration[] = [];
+      let totalSaved = 0;
+      let totalFailed = 0;
+      const allFailedData: Array<{registration: Registration, reason: string}> = [];
+      const allDuplicates: Registration[] = [];
+      const allValidData: Registration[] = [];
+
+      // Process each file sequentially
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileNumber = i + 1;
+        
+        this.snackBar.open(
+          `Đang xử lý file ${fileNumber}/${totalFiles}: ${file.name}...`, 
+          'Đóng', 
+          {
+            duration: 2000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+
+        try {
+          console.log(`Processing file ${fileNumber}/${totalFiles}:`, file.name);
+          
+          // Read and process Excel file
+          const registrations = await this.excelService.readExcelFile(file);
+          console.log(`File ${file.name} processed:`, registrations.length, 'registrations');
+
+          if (registrations.length > 0) {
+            totalRegistrations = totalRegistrations.concat(registrations);
+            
+            // Check for duplicates
+            const duplicateCheck = await this.checkDuplicatesInImportData(registrations);
+            
+            allDuplicates.push(...duplicateCheck.duplicates);
+            allValidData.push(...duplicateCheck.validData);
+          } else {
+            console.warn(`No valid data found in file: ${file.name}`);
+          }
+        } catch (error) {
+          console.error(`Error processing file ${file.name}:`, error);
+          this.snackBar.open(
+            `Lỗi khi xử lý file ${file.name}: ${error}`, 
+            'Đóng', 
+            {
+              duration: 5000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            }
+          );
+        }
+      }
+
+      // Process all collected data
+      if (totalRegistrations.length > 0) {
+        if (allDuplicates.length > 0) {
+          // Show duplicate notification dialog
+          const dialogRef = this.dialog.open(DuplicateDataDialogComponent, {
+            width: '600px',
+            data: {
+              duplicates: allDuplicates,
+              validData: allValidData,
+              duplicateDetails: allDuplicates.map(d => `${d.hoTen} - ${d.tramXe} (${d.ngayDangKy})`),
+              totalRecords: totalRegistrations.length,
+              allDuplicates: allValidData.length === 0 && allDuplicates.length > 0
+            }
+          });
+
+          // Auto-save valid data while showing dialog
+          if (allValidData.length > 0) {
+            const result = await this.saveRegistrationsToFirebase(allValidData);
+            totalSaved = result.savedCount;
+            totalFailed = result.failedData.length;
+            allFailedData.push(...result.failedData);
+            
+            if (result.savedCount > 0) {
+              // Refresh data from Firebase
+              await this.loadDataFromFirebase();
+            }
+            
+            // Show detailed import results if there are any failures
+            if (result.failedData.length > 0) {
+              const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+                width: '1000px',
+                data: {
+                  totalProcessed: allValidData.length,
+                  savedCount: result.savedCount,
+                  failedData: result.failedData
+                }
+              });
+            }
+          }
+
+          dialogRef.afterClosed().subscribe(async () => {
+            // Show summary
+            this.snackBar.open(
+              `Hoàn thành import ${totalFiles} file(s): ${totalSaved} đã lưu, ${allDuplicates.length} trùng lặp, ${totalFailed} lỗi`, 
+              'Đóng', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+          });
+        } else {
+          // No duplicates, save all data (use totalRegistrations which equals allValidData when no duplicates)
+          const dataToSave = allValidData.length > 0 ? allValidData : totalRegistrations;
+          const result = await this.saveRegistrationsToFirebase(dataToSave);
+          totalSaved = result.savedCount;
+          totalFailed = result.failedData.length;
+          allFailedData.push(...result.failedData);
+          
+          if (result.savedCount > 0) {
+            // Refresh data from Firebase
+            await this.loadDataFromFirebase();
+            
+            // Show success message
+            this.snackBar.open(
+              `Đã import ${totalFiles} file(s) và lưu ${result.savedCount}/${totalRegistrations.length} đăng ký vào hệ thống!`, 
+              '', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+          } else {
+            this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase!', 'Đóng', {
+              duration: 3000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          }
+          
+          // Show detailed import results if there are any failures
+          if (result.failedData.length > 0) {
+            const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+              width: '1000px',
+              data: {
+                totalProcessed: totalRegistrations.length,
+                savedCount: result.savedCount,
+                failedData: result.failedData
+              }
+            });
+          }
+        }
+      } else {
+        this.snackBar.open(
+          `Không tìm thấy dữ liệu hợp lệ trong ${totalFiles} file(s) đã chọn!`, 
+          'Đóng', 
+          {
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+      }
+
+    } catch (error) {
+      console.error('Error processing multiple files:', error);
+      this.snackBar.open(`Lỗi khi xử lý nhiều file: ${error}`, 'Đóng', {
+        duration: 5000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+    } finally {
+      // Reset loading state
+      this.isImportingExcel = false;
+    }
+  }
+
+  // Handle multiple file uploads for HC collection
+  private async handleMultipleFileUploadHC(files: File[]): Promise<void> {
+    if (files.length === 0) return;
+
+    try {
+      this.isImportingExcel = true;
+      const totalFiles = files.length;
+      let totalRegistrations: Registration[] = [];
+      let totalSaved = 0;
+      let totalFailed = 0;
+      const allFailedData: Array<{registration: Registration, reason: string}> = [];
+      const allDuplicates: Registration[] = [];
+      const allValidData: Registration[] = [];
+
+      // Process each file sequentially
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i];
+        const fileNumber = i + 1;
+        
+        this.snackBar.open(
+          `Đang xử lý file HC ${fileNumber}/${totalFiles}: ${file.name}...`, 
+          'Đóng', 
+          {
+            duration: 2000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+
+        try {
+          console.log(`Processing HC file ${fileNumber}/${totalFiles}:`, file.name);
+          
+          // Read and process Excel file (only T7 and CN sheets)
+          const registrations = await this.excelService.readExcelFileHC(file);
+          console.log(`HC File ${file.name} processed:`, registrations.length, 'registrations');
+
+          if (registrations.length > 0) {
+            totalRegistrations = totalRegistrations.concat(registrations);
+            
+            // Check for duplicates
+            const duplicateCheck = await this.checkDuplicatesInImportDataHC(registrations);
+            
+            allDuplicates.push(...duplicateCheck.duplicates);
+            allValidData.push(...duplicateCheck.validData);
+          } else {
+            console.warn(`No valid data found in HC file: ${file.name}`);
+          }
+        } catch (error) {
+          console.error(`Error processing HC file ${file.name}:`, error);
+          this.snackBar.open(
+            `Lỗi khi xử lý file HC ${file.name}: ${error}`, 
+            'Đóng', 
+            {
+              duration: 5000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            }
+          );
+        }
+      }
+
+      // Process all collected data
+      if (totalRegistrations.length > 0) {
+        if (allDuplicates.length > 0) {
+          // Show duplicate notification dialog
+          const dialogRef = this.dialog.open(DuplicateDataDialogComponent, {
+            width: '600px',
+            data: {
+              duplicates: allDuplicates,
+              validData: allValidData,
+              duplicateDetails: allDuplicates.map(d => `${d.hoTen} - ${d.tramXe} (${d.ngayDangKy})`),
+              totalRecords: totalRegistrations.length,
+              allDuplicates: allValidData.length === 0 && allDuplicates.length > 0
+            }
+          });
+
+          // Auto-save valid data while showing dialog
+          if (allValidData.length > 0) {
+            const result = await this.saveRegistrationsToFirebaseHC(allValidData);
+            totalSaved = result.savedCount;
+            totalFailed = result.failedData.length;
+            allFailedData.push(...result.failedData);
+            
+            if (result.savedCount > 0) {
+              // Refresh data from Firebase
+              await this.loadDataFromFirebase();
+            }
+            
+            // Show detailed import results if there are any failures
+            if (result.failedData.length > 0) {
+              const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+                width: '1000px',
+                data: {
+                  totalProcessed: allValidData.length,
+                  savedCount: result.savedCount,
+                  failedData: result.failedData
+                }
+              });
+            }
+          }
+
+          dialogRef.afterClosed().subscribe(async () => {
+            // Show summary
+            this.snackBar.open(
+              `Hoàn thành import HC ${totalFiles} file(s): ${totalSaved} đã lưu, ${allDuplicates.length} trùng lặp, ${totalFailed} lỗi`, 
+              'Đóng', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+          });
+        } else {
+          // No duplicates, save all data (use totalRegistrations which equals allValidData when no duplicates)
+          const dataToSave = allValidData.length > 0 ? allValidData : totalRegistrations;
+          const result = await this.saveRegistrationsToFirebaseHC(dataToSave);
+          totalSaved = result.savedCount;
+          totalFailed = result.failedData.length;
+          allFailedData.push(...result.failedData);
+          
+          if (result.savedCount > 0) {
+            // Refresh data from Firebase
+            await this.loadDataFromFirebase();
+            
+            // Show success message
+            this.snackBar.open(
+              `Đã import HC ${totalFiles} file(s) và lưu ${result.savedCount}/${totalRegistrations.length} đăng ký vào hệ thống!`, 
+              '', 
+              {
+                duration: 8000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              }
+            );
+          } else {
+            this.snackBar.open('Không có dữ liệu hợp lệ để lưu vào Firebase HC!', 'Đóng', {
+              duration: 3000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          }
+          
+          // Show detailed import results if there are any failures
+          if (result.failedData.length > 0) {
+            const errorDialogRef = this.dialog.open(ImportErrorDialogComponent, {
+              width: '1000px',
+              data: {
+                totalProcessed: totalRegistrations.length,
+                savedCount: result.savedCount,
+                failedData: result.failedData
+              }
+            });
+          }
+        }
+      } else {
+        this.snackBar.open(
+          `Không tìm thấy dữ liệu hợp lệ trong ${totalFiles} file(s) HC đã chọn!`, 
+          'Đóng', 
+          {
+            duration: 3000,
+            horizontalPosition: 'right',
+            verticalPosition: 'top'
+          }
+        );
+      }
+
+    } catch (error) {
+      console.error('Error processing multiple HC files:', error);
+      this.snackBar.open(`Lỗi khi xử lý nhiều file HC: ${error}`, 'Đóng', {
         duration: 5000,
         horizontalPosition: 'right',
         verticalPosition: 'top'
@@ -1677,7 +2039,6 @@ export class DangKyXeComponent implements OnInit {
     try {
       // Get real data from selected day's registrations
       const todayRegistrations = await this.getSelectedDateRegistrations();
-      
       if (todayRegistrations.length === 0) {
         const base = this.displayDate || this.startDate || new Date();
         const dateStr = this.getVietnamDateString(base);
@@ -1960,7 +2321,6 @@ export class DangKyXeComponent implements OnInit {
       const base = this.displayDate || this.startDate || new Date();
       const startOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate());
       const endOfDay = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 23, 59, 59);
-
       const registrations = this.useHC
         ? await this.firestoreService.getDangKyPhanXeHCByDateRange(startOfDay, endOfDay)
         : await this.firestoreService.getDangKyPhanXeByDateRange(startOfDay, endOfDay);
