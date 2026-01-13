@@ -2473,18 +2473,50 @@ export class DangKyXeComponent implements OnInit {
 
 
   /**
+   * Kiểm tra xem trạm có phải là BV Hòa Hảo không
+   * BV Hòa Hảo phải luôn ở HCM01, không bao giờ được đưa vào HCM02
+   */
+  private isBvHoaHaoStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const bvHoaHaoVariations = ['bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
+    return bvHoaHaoVariations.some(v => stationLower.includes(v) || v.includes(stationLower));
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm chung giữa HCM01 và HCM02 không
+   * Các trạm này có thể được chuyển từ HCM01 sang HCM02 để tạo chỗ trống cho BV Hòa Hảo
+   */
+  private isSharedStationForHCM(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const sharedStations = [
+      'ngã 4 thủ đức', 'nga 4 thu duc',
+      'rmk',
+      'ngã 3 cát lái', 'nga 3 cat lai'
+    ];
+    return sharedStations.some(sharedStation =>
+      stationLower.includes(sharedStation) || sharedStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
-   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo, Ngã 4 Thủ Đức
+   * Cập nhật theo hình ảnh: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, Ngã 4 Thủ Đức, Hàng Xanh
+   * Lưu ý: BV Hòa Hảo được xử lý riêng bằng isBvHoaHaoStation
    */
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
+    // Loại bỏ BV Hòa Hảo vì đã được xử lý riêng
+    if (this.isBvHoaHaoStation(station)) {
+      return false;
+    }
     
     const stationLower = station.toLowerCase();
     
     const hcm01PriorityStations = [
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
-      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao',
       'ngã 4 thủ đức', 'nga 4 thu duc',
       'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'
     ];
@@ -3163,6 +3195,7 @@ export class DangKyXeComponent implements OnInit {
 
   /**
    * Phân chia đều nhân viên HCM giữa HCM01 và HCM02 không quan tâm mã tuyến ban đầu
+   * QUAN TRỌNG: Đảm bảo BV Hòa Hảo luôn ở HCM01
    */
   private distributeHCMEmployeesEvenlyForDialog(routes: any[], hcmRoutes: any[]): any[] {
     console.log('Dialog - Applying even distribution logic for HCM routes...');
@@ -3177,6 +3210,19 @@ export class DangKyXeComponent implements OnInit {
     
     console.log(`Dialog - Total HCM employees to distribute: ${allHCMEmployees.length}`);
     
+    // QUAN TRỌNG: Tách riêng BV Hòa Hảo để đảm bảo luôn ở HCM01
+    const bvHoaHaoEmployees: Registration[] = [];
+    const otherHCMEmployees: Registration[] = [];
+    
+    allHCMEmployees.forEach(employee => {
+      if (this.isBvHoaHaoStation(employee.tramXe)) {
+        console.log(`Dialog - Classifying employee ${employee.hoTen} from station "${employee.tramXe}" as BV Hòa Hảo (must be in HCM01)`);
+        bvHoaHaoEmployees.push(employee);
+      } else {
+        otherHCMEmployees.push(employee);
+      }
+    });
+    
     // Khởi tạo danh sách nhân viên cho từng tuyến
     const hcm01Employees: Registration[] = [];
     const hcm02Employees: Registration[] = [];
@@ -3184,9 +3230,9 @@ export class DangKyXeComponent implements OnInit {
     const maxEmployeesPerRoute = 15;
     let currentRoute = 'HCM01'; // Bắt đầu với HCM01
     
-    // Vòng lặp tuần tự gán nhân viên
-    for (let i = 0; i < allHCMEmployees.length; i++) {
-      const employee = allHCMEmployees[i];
+    // Vòng lặp tuần tự gán nhân viên (không bao gồm BV Hòa Hảo)
+    for (let i = 0; i < otherHCMEmployees.length; i++) {
+      const employee = otherHCMEmployees[i];
       
       if (currentRoute === 'HCM01') {
         if (hcm01Employees.length < maxEmployeesPerRoute) {
@@ -3206,6 +3252,46 @@ export class DangKyXeComponent implements OnInit {
           // Cả hai tuyến đều đủ, nhân viên còn lại sẽ được xử lý bởi overflow logic
           console.log(`Dialog - Both HCM routes full, employee ${employee.hoTen} will be handled by overflow logic`);
           break;
+        }
+      }
+    }
+    
+    // QUAN TRỌNG: Đảm bảo tất cả nhân viên từ BV Hòa Hảo được đưa vào HCM01
+    // Nếu HCM01 đầy, chuyển nhân viên từ các trạm chung (shared stations) từ HCM01 sang HCM02 để tạo chỗ trống
+    for (const employee of bvHoaHaoEmployees) {
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+        console.log(`Dialog - Added BV Hòa Hảo employee ${employee.hoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
+      } else {
+        // HCM01 is full, cần chuyển nhân viên từ trạm chung từ HCM01 sang HCM02 để tạo chỗ trống
+        console.log(`Dialog - HCM01 is full, moving shared station employees from HCM01 to HCM02 to make room for BV Hòa Hảo employee ${employee.hoTen}`);
+        
+        // Tìm nhân viên từ trạm chung trong HCM01 để chuyển sang HCM02
+        let moved = false;
+        for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+          const empInHCM01 = hcm01Employees[i];
+          const stationLower = (empInHCM01.tramXe || '').toLowerCase();
+          
+          // Chỉ chuyển nhân viên từ trạm chung (shared stations như RMK, Ngã 4 Thủ Đức, Ngã 3 Cát Lái)
+          if (this.isSharedStationForHCM(stationLower)) {
+            if (hcm02Employees.length < maxEmployeesPerRoute) {
+              hcm01Employees.splice(i, 1);
+              hcm02Employees.push(empInHCM01);
+              console.log(`Dialog - Moved shared station employee ${empInHCM01.hoTen} from HCM01 to HCM02 to make room for BV Hòa Hảo`);
+              moved = true;
+              break;
+            }
+          }
+        }
+        
+        // Nếu đã chuyển được, thêm nhân viên BV Hòa Hảo vào HCM01
+        if (moved) {
+          hcm01Employees.push(employee);
+          console.log(`Dialog - Added BV Hòa Hảo employee ${employee.hoTen} to HCM01 after making room`);
+        } else {
+          // Nếu không thể chuyển, vẫn thêm vào HCM01 (overflow) nhưng log warning
+          console.warn(`Dialog - WARNING: Could not make room in HCM01 for BV Hòa Hảo employee ${employee.hoTen}, adding anyway (overflow)`);
+          hcm01Employees.push(employee);
         }
       }
     }
@@ -3569,6 +3655,30 @@ export class DangKyXeComponent implements OnInit {
     const bh02Stations = this.dataCacheService.getStationsForRoute('BH02');
     const bh03Stations = this.dataCacheService.getStationsForRoute('BH03');
 
+    // QUAN TRỌNG: Tách riêng các trạm ưu tiên cho từng tuyến BH
+    const phuocTanEmployees: Registration[] = []; // Ưu tiên BH01
+    const nga3HangDauEmployees: Registration[] = []; // Ưu tiên BH03
+    const benGoLongBinhTanEmployees: Registration[] = []; // Ưu tiên BH03
+    const otherBHEmployees: Registration[] = [];
+    
+    allBHEmployees.forEach(employee => {
+      const station = employee.tramXe || '';
+      if (this.isPhuocTanToanDung(station)) {
+        console.log(`Dialog - Classifying employee ${employee.hoTen} from station "${station}" as Phước Tân (must be in BH01)`);
+        phuocTanEmployees.push(employee);
+      } else if (this.isNga3HangDauStation(station)) {
+        console.log(`Dialog - Classifying employee ${employee.hoTen} from station "${station}" as Ngã 3 Hãng dầu (must be in BH03)`);
+        nga3HangDauEmployees.push(employee);
+      } else if (this.isBenGoOrLongBinhTanStation(station)) {
+        console.log(`Dialog - Classifying employee ${employee.hoTen} from station "${station}" as Ngã 3 Bến Gỗ/Long Bình Tân (must be in BH03)`);
+        benGoLongBinhTanEmployees.push(employee);
+      } else {
+        otherBHEmployees.push(employee);
+      }
+    });
+    
+    console.log(`Dialog - BH Employee classification: Phước Tân=${phuocTanEmployees.length}, Ngã 3 Hãng dầu=${nga3HangDauEmployees.length}, Bến Gỗ/Long Bình Tân=${benGoLongBinhTanEmployees.length}, Other=${otherBHEmployees.length}`);
+
     const bh01Employees: Registration[] = [];
     const bh02Employees: Registration[] = [];
     const bh03Employees: Registration[] = [];
@@ -3577,9 +3687,53 @@ export class DangKyXeComponent implements OnInit {
     const maxEmployeesBH02 = 45;
     const maxEmployeesBH03 = 15;
 
-    // BƯỚC 1: Gom nhân viên vào BH01
-    console.log('Dialog - BH Step 1: Grouping into BH01');
-    for (const employee of allBHEmployees) {
+    // Helper function to add employee to a route if there's space
+    const addToRoute = (employee: Registration, route: Registration[], routeName: string): boolean => {
+      if (route.includes(employee)) {
+        return false; // Already added
+      }
+      const maxCapacity = routeName === 'BH01' ? maxEmployeesBH01 : routeName === 'BH02' ? maxEmployeesBH02 : maxEmployeesBH03;
+      if (route.length < maxCapacity) {
+        route.push(employee);
+        return true;
+      }
+      return false; // Route is full
+    };
+    
+    // Helper function to move employee from one route to another
+    const moveFromRoute = (employee: Registration, fromRoute: Registration[], toRoute: Registration[], toRouteName: string): boolean => {
+      const index = fromRoute.indexOf(employee);
+      const maxCapacity = toRouteName === 'BH01' ? maxEmployeesBH01 : toRouteName === 'BH02' ? maxEmployeesBH02 : maxEmployeesBH03;
+      if (index >= 0 && toRoute.length < maxCapacity) {
+        fromRoute.splice(index, 1);
+        toRoute.push(employee);
+        return true;
+      }
+      return false;
+    };
+    
+    // Helper function to check if station is shared between multiple BH routes
+    const isSharedBHStation = (station: string): boolean => {
+      const stationLower = station.toLowerCase();
+      const inBH01 = bh01Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH02 = bh02Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const inBH03 = bh03Stations.some(s => 
+        s.toLowerCase() === stationLower || 
+        this.normalizeStationName(s) === this.normalizeStationName(station)
+      );
+      const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
+      return routeCount > 1; // Shared if appears in more than one route
+    };
+
+    // BƯỚC 1: Gom nhân viên vào BH01 từ các trạm khác (trước khi thêm trạm ưu tiên)
+    console.log('Dialog - BH Step 1: Grouping other employees into BH01');
+    for (const employee of otherBHEmployees) {
       const station = employee.tramXe || '';
       const stationLower = station.toLowerCase();
 
@@ -3596,37 +3750,59 @@ export class DangKyXeComponent implements OnInit {
         this.normalizeStationName(s) === this.normalizeStationName(station)
       );
 
-      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" luôn gom về BH01 khi trùng nhiều tuyến
-      if (this.isPhuocTanToanDung(station) && inBH01) {
-        if (bh01Employees.length < maxEmployeesBH01 && !bh01Employees.includes(employee)) {
-          bh01Employees.push(employee);
-          continue;
-        }
-      }
-
       const routeCount = [inBH01, inBH02, inBH03].filter(Boolean).length;
       const shouldAddToBH01 = (inBH01 && inBH02 && inBH03) || (inBH01 && routeCount === 1);
 
-      if (shouldAddToBH01 && bh01Employees.length < maxEmployeesBH01) {
-        bh01Employees.push(employee);
+      if (shouldAddToBH01) {
+        addToRoute(employee, bh01Employees, 'BH01');
+      }
+    }
+    
+    // BƯỚC 2: QUAN TRỌNG - Đảm bảo tất cả nhân viên từ Phước Tân được đưa vào BH01
+    // Nếu BH01 đầy, chuyển nhân viên từ trạm chung từ BH01 sang BH02 hoặc BH03 để tạo chỗ trống
+    for (const employee of phuocTanEmployees) {
+      if (!addToRoute(employee, bh01Employees, 'BH01')) {
+        // BH01 is full, cần chuyển nhân viên từ trạm chung từ BH01 sang BH02/BH03 để tạo chỗ trống
+        console.log(`Dialog - BH01 is full, moving shared station employees from BH01 to make room for Phước Tân employee ${employee.hoTen}`);
+        
+        // Tìm nhân viên từ trạm chung trong BH01 để chuyển sang BH02 hoặc BH03
+        let moved = false;
+        for (let i = bh01Employees.length - 1; i >= 0; i--) {
+          const empInBH01 = bh01Employees[i];
+          
+          // Chỉ chuyển nhân viên từ trạm chung (shared stations)
+          if (isSharedBHStation(empInBH01.tramXe || '')) {
+            // Ưu tiên chuyển sang BH02 trước
+            if (moveFromRoute(empInBH01, bh01Employees, bh02Employees, 'BH02')) {
+              console.log(`Dialog - Moved shared station employee ${empInBH01.hoTen} from BH01 to BH02 to make room for Phước Tân`);
+              moved = true;
+              break;
+            } else if (moveFromRoute(empInBH01, bh01Employees, bh03Employees, 'BH03')) {
+              console.log(`Dialog - Moved shared station employee ${empInBH01.hoTen} from BH01 to BH03 to make room for Phước Tân`);
+              moved = true;
+              break;
+            }
+          }
+        }
+        
+        // Nếu đã chuyển được, thêm nhân viên Phước Tân vào BH01
+        if (moved) {
+          addToRoute(employee, bh01Employees, 'BH01');
+        } else {
+          // Nếu không thể chuyển, vẫn thêm vào BH01 (overflow) nhưng log warning
+          console.warn(`Dialog - WARNING: Could not make room in BH01 for Phước Tân employee ${employee.hoTen}, adding anyway (overflow)`);
+          bh01Employees.push(employee);
+        }
       }
     }
 
-    // BƯỚC 2: Gom nhân viên vào BH02
-    console.log('Dialog - BH Step 2: Grouping into BH02');
-    for (const employee of allBHEmployees) {
+    // BƯỚC 3: Gom nhân viên vào BH02 từ nhân viên còn lại (không bao gồm trạm ưu tiên)
+    console.log('Dialog - BH Step 3: Grouping remaining employees into BH02');
+    for (const employee of otherBHEmployees) {
       if (bh01Employees.includes(employee)) continue;
 
       const station = employee.tramXe || '';
       const stationLower = station.toLowerCase();
-
-      // Ưu tiên đặc biệt: "Phước Tân (Cây xăng Toàn Dung)" không đưa vào BH02 nếu BH01 còn chỗ
-      if (this.isPhuocTanToanDung(station)) {
-        if (bh01Employees.length < maxEmployeesBH01) {
-          bh01Employees.push(employee);
-          continue;
-        }
-      }
 
       const inBH02 = bh02Stations.some(s => 
         s.toLowerCase() === stationLower || 
@@ -3640,14 +3816,53 @@ export class DangKyXeComponent implements OnInit {
       const routeCount = [inBH02, inBH03].filter(Boolean).length;
       const shouldAddToBH02 = (inBH02 && inBH03) || (inBH02 && routeCount === 1);
 
-      if (shouldAddToBH02 && bh02Employees.length < maxEmployeesBH02) {
-        bh02Employees.push(employee);
+      if (shouldAddToBH02) {
+        addToRoute(employee, bh02Employees, 'BH02');
       }
     }
 
-    // BƯỚC 3: Gom nhân viên vào BH03
-    console.log('Dialog - BH Step 3: Grouping into BH03');
-    for (const employee of allBHEmployees) {
+    // BƯỚC 4: QUAN TRỌNG - Đảm bảo tất cả nhân viên từ Ngã 3 Hãng dầu và Bến Gỗ/Long Bình Tân được đưa vào BH03
+    // Nếu BH03 đầy, chuyển nhân viên từ trạm chung từ BH03 sang BH01 hoặc BH02 để tạo chỗ trống
+    const allBH03PriorityEmployees = [...nga3HangDauEmployees, ...benGoLongBinhTanEmployees];
+    for (const employee of allBH03PriorityEmployees) {
+      if (!addToRoute(employee, bh03Employees, 'BH03')) {
+        // BH03 is full, cần chuyển nhân viên từ trạm chung từ BH03 sang BH01 hoặc BH02 để tạo chỗ trống
+        console.log(`Dialog - BH03 is full, moving shared station employees from BH03 to make room for priority employee ${employee.hoTen}`);
+        
+        // Tìm nhân viên từ trạm chung trong BH03 để chuyển sang BH01 hoặc BH02
+        let moved = false;
+        for (let i = bh03Employees.length - 1; i >= 0; i--) {
+          const empInBH03 = bh03Employees[i];
+          
+          // Chỉ chuyển nhân viên từ trạm chung (shared stations), không chuyển các trạm ưu tiên khác
+          if (isSharedBHStation(empInBH03.tramXe || '')) {
+            // Ưu tiên chuyển sang BH02 trước
+            if (moveFromRoute(empInBH03, bh03Employees, bh02Employees, 'BH02')) {
+              console.log(`Dialog - Moved shared station employee ${empInBH03.hoTen} from BH03 to BH02 to make room for priority employee`);
+              moved = true;
+              break;
+            } else if (moveFromRoute(empInBH03, bh03Employees, bh01Employees, 'BH01')) {
+              console.log(`Dialog - Moved shared station employee ${empInBH03.hoTen} from BH03 to BH01 to make room for priority employee`);
+              moved = true;
+              break;
+            }
+          }
+        }
+        
+        // Nếu đã chuyển được, thêm nhân viên ưu tiên vào BH03
+        if (moved) {
+          addToRoute(employee, bh03Employees, 'BH03');
+        } else {
+          // Nếu không thể chuyển, vẫn thêm vào BH03 (overflow) nhưng log warning
+          console.warn(`Dialog - WARNING: Could not make room in BH03 for priority employee ${employee.hoTen}, adding anyway (overflow)`);
+          bh03Employees.push(employee);
+        }
+      }
+    }
+
+    // BƯỚC 5: Thêm các nhân viên còn lại vào BH03
+    console.log('Dialog - BH Step 5: Adding remaining employees to BH03');
+    for (const employee of otherBHEmployees) {
       if (bh01Employees.includes(employee) || bh02Employees.includes(employee)) continue;
 
       const station = employee.tramXe || '';
@@ -3658,10 +3873,8 @@ export class DangKyXeComponent implements OnInit {
         this.normalizeStationName(s) === this.normalizeStationName(station)
       );
 
-      if (inBH03 && bh03Employees.length < maxEmployeesBH03) {
-        bh03Employees.push(employee);
-      } else if (inBH03 && bh01Employees.length < maxEmployeesBH01) {
-        bh01Employees.push(employee);
+      if (inBH03) {
+        addToRoute(employee, bh03Employees, 'BH03');
       }
     }
 
