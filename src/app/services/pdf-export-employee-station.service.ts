@@ -796,6 +796,19 @@ export class PdfExportEmployeeStationService {
     // Lấy đủ nhân viên cho HCM01 và HCM02 từ tất cả nhân viên HCM
     const allHCMEmployees = [...employeesNotMatchingBH, ...employeesMatchingBH];
     
+    // QUAN TRỌNG: Tách riêng BV Hòa Hảo để đảm bảo luôn ở HCM01
+    const bvHoaHaoEmployees: NhanVien[] = [];
+    const otherHCMEmployees: NhanVien[] = [];
+    
+    allHCMEmployees.forEach(employee => {
+      if (this.isBvHoaHaoStation(employee.TramXe || '')) {
+        console.log(`Station Matching - Classifying employee ${employee.HoTen} from station "${employee.TramXe}" as BV Hòa Hảo (must be in HCM01)`);
+        bvHoaHaoEmployees.push(employee);
+      } else {
+        otherHCMEmployees.push(employee);
+      }
+    });
+    
     // Sử dụng logic phân chia đều mới: gom tất cả nhân viên và gán tuần tự
     const hcm01Employees: NhanVien[] = [];
     const hcm02Employees: NhanVien[] = [];
@@ -805,9 +818,9 @@ export class PdfExportEmployeeStationService {
     
     // Ưu tiên đặc biệt: Đưa nhân viên trạm "Ngã 3 Bến Gỗ" lên trước để gán vào HCM01 nếu còn chỗ
     const isBenGo = (s: string | undefined) => (s || '').toLowerCase().includes('ngã 3 bến gỗ') || (s || '').toLowerCase().includes('nga 3 ben go');
-    const benGoFirst = [...allHCMEmployees.filter(e => isBenGo(e.TramXe)), ...allHCMEmployees.filter(e => !isBenGo(e.TramXe))];
+    const benGoFirst = [...otherHCMEmployees.filter(e => isBenGo(e.TramXe)), ...otherHCMEmployees.filter(e => !isBenGo(e.TramXe))];
 
-    // Vòng lặp tuần tự gán nhân viên
+    // Vòng lặp tuần tự gán nhân viên (không bao gồm BV Hòa Hảo)
     for (let i = 0; i < benGoFirst.length; i++) {
       const employee = benGoFirst[i];
       
@@ -829,6 +842,46 @@ export class PdfExportEmployeeStationService {
           // Cả hai tuyến đều đủ, nhân viên còn lại sẽ được xử lý bởi overflow logic
           console.log(`Station Matching - Both HCM routes full, employee ${employee.HoTen} will be handled by overflow logic`);
           break;
+        }
+      }
+    }
+    
+    // QUAN TRỌNG: Đảm bảo tất cả nhân viên từ BV Hòa Hảo được đưa vào HCM01
+    // Nếu HCM01 đầy, chuyển nhân viên từ các trạm chung (shared stations) từ HCM01 sang HCM02 để tạo chỗ trống
+    for (const employee of bvHoaHaoEmployees) {
+      if (hcm01Employees.length < maxEmployeesPerRoute) {
+        hcm01Employees.push(employee);
+        console.log(`Station Matching - Added BV Hòa Hảo employee ${employee.HoTen} to HCM01 (${hcm01Employees.length}/${maxEmployeesPerRoute})`);
+      } else {
+        // HCM01 is full, cần chuyển nhân viên từ trạm chung từ HCM01 sang HCM02 để tạo chỗ trống
+        console.log(`Station Matching - HCM01 is full, moving shared station employees from HCM01 to HCM02 to make room for BV Hòa Hảo employee ${employee.HoTen}`);
+        
+        // Tìm nhân viên từ trạm chung trong HCM01 để chuyển sang HCM02
+        let moved = false;
+        for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+          const empInHCM01 = hcm01Employees[i];
+          const stationLower = (empInHCM01.TramXe || '').toLowerCase();
+          
+          // Chỉ chuyển nhân viên từ trạm chung (shared stations như RMK, Ngã 4 Thủ Đức, Ngã 3 Cát Lái)
+          if (this.isSharedStationForHCM(stationLower)) {
+            if (hcm02Employees.length < maxEmployeesPerRoute) {
+              hcm01Employees.splice(i, 1);
+              hcm02Employees.push(empInHCM01);
+              console.log(`Station Matching - Moved shared station employee ${empInHCM01.HoTen} from HCM01 to HCM02 to make room for BV Hòa Hảo`);
+              moved = true;
+              break;
+            }
+          }
+        }
+        
+        // Nếu đã chuyển được, thêm nhân viên BV Hòa Hảo vào HCM01
+        if (moved) {
+          hcm01Employees.push(employee);
+          console.log(`Station Matching - Added BV Hòa Hảo employee ${employee.HoTen} to HCM01 after making room`);
+        } else {
+          // Nếu không thể chuyển, vẫn thêm vào HCM01 (overflow) nhưng log warning
+          console.warn(`Station Matching - WARNING: Could not make room in HCM01 for BV Hòa Hảo employee ${employee.HoTen}, adding anyway (overflow)`);
+          hcm01Employees.push(employee);
         }
       }
     }
@@ -907,19 +960,51 @@ export class PdfExportEmployeeStationService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là BV Hòa Hảo không
+   * BV Hòa Hảo phải luôn ở HCM01, không bao giờ được đưa vào HCM02
+   */
+  private isBvHoaHaoStation(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const bvHoaHaoVariations = ['bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao'];
+    return bvHoaHaoVariations.some(v => stationLower.includes(v) || v.includes(stationLower));
+  }
+
+  /**
+   * Kiểm tra xem trạm có phải là trạm chung giữa HCM01 và HCM02 không
+   * Các trạm này có thể được chuyển từ HCM01 sang HCM02 để tạo chỗ trống cho BV Hòa Hảo
+   */
+  private isSharedStationForHCM(station: string): boolean {
+    if (!station) return false;
+    const stationLower = station.toLowerCase();
+    const sharedStations = [
+      'ngã 4 thủ đức', 'nga 4 thu duc',
+      'rmk',
+      'ngã 3 cát lái', 'nga 3 cat lai'
+    ];
+    return sharedStations.some(sharedStation =>
+      stationLower.includes(sharedStation) || sharedStation.includes(stationLower)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là trạm ưu tiên cho HCM01 không
-   * Cập nhật: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo, Ngã 4 Thủ Đức
+   * Cập nhật: HCM01 bao gồm Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, Ngã 4 Thủ Đức, Hàng Xanh
+   * Lưu ý: BV Hòa Hảo được xử lý riêng bằng isBvHoaHaoStation
    * (Đã loại bỏ "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" - ưu tiên vào BH)
    */
   private isHCM01PriorityStation(station: string): boolean {
     if (!station) return false;
+    // Loại bỏ BV Hòa Hảo vì đã được xử lý riêng
+    if (this.isBvHoaHaoStation(station)) {
+      return false;
+    }
     
     const stationLower = station.toLowerCase();
     
     const hcm01PriorityStations = [
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
-      'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao',
       'ngã 4 thủ đức', 'nga 4 thu duc',
       'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'
     ];
