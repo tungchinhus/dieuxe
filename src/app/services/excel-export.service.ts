@@ -63,23 +63,35 @@ export class ExcelExportService {
 
   /**
    * Export overtime report Excel with vehicle assignments
+   * preGroupedRoutes: dữ liệu đã được gom tuyến sẵn từ màn hình (ưu tiên dùng nếu có)
    */
-  async exportOvertimeReportExcelWithVehicleAssignments(vehicleAssignments: RouteVehicleAssignment[], selectedDate?: Date): Promise<void> {
+  async exportOvertimeReportExcelWithVehicleAssignments(
+    vehicleAssignments: RouteVehicleAssignment[],
+    selectedDate?: Date,
+    preGroupedRoutes?: RouteInfo[]
+  ): Promise<void> {
     try {
-      // 1) Lấy dữ liệu theo ngày đã chọn (fallback hôm nay)
-      const todayRegistrations = selectedDate
-        ? await this.getRegistrationsByDate(selectedDate)
-        : await this.getTodayRegistrations();
-      if (todayRegistrations.length === 0) {
-        alert('Không có dữ liệu đăng ký cho ngày hôm nay');
-        return;
+      let routeGroups: RouteInfo[];
+
+      if (preGroupedRoutes && preGroupedRoutes.length > 0) {
+        // Sử dụng dữ liệu đã được gom tuyến sẵn từ màn hình (đảm bảo giống PDF/Dialog)
+        routeGroups = await this.attachDriverInfoToRoutes(preGroupedRoutes, vehicleAssignments);
+      } else {
+        // 1) Lấy dữ liệu theo ngày đã chọn (fallback hôm nay)
+        const todayRegistrations = selectedDate
+          ? await this.getRegistrationsByDate(selectedDate)
+          : await this.getTodayRegistrations();
+        if (todayRegistrations.length === 0) {
+          alert('Không có dữ liệu đăng ký cho ngày hôm nay');
+          return;
+        }
+
+        // 2) Gom theo tuyến với thông tin xe được phân công
+        routeGroups = await this.groupRegistrationsByRouteWithVehicleAssignments(todayRegistrations, vehicleAssignments);
       }
 
-      // 2) Gom theo tuyến với thông tin xe được phân công
-      const routeGroups = await this.groupRegistrationsByRouteWithVehicleAssignments(todayRegistrations, vehicleAssignments);
-
       // Kiểm tra có tuyến nào có nhân viên không
-      if (routeGroups.length === 0) {
+      if (!routeGroups || routeGroups.length === 0) {
         alert('Không có dữ liệu nhân viên để xuất Excel');
         return;
       }
@@ -269,6 +281,63 @@ export class ExcelExportService {
   }
 
   /**
+   * Gắn thông tin xe/tài xế cho các tuyến đã được gom sẵn (từ dialog)
+   */
+  private async attachDriverInfoToRoutes(
+    routeGroups: RouteInfo[],
+    vehicleAssignments: RouteVehicleAssignment[]
+  ): Promise<RouteInfo[]> {
+    const enrichedRoutes: RouteInfo[] = [];
+
+    for (const route of routeGroups) {
+      const vehicleAssignment = vehicleAssignments.find(va => va.routeCode === route.routeName);
+
+      const clonedRoute: RouteInfo = {
+        routeName: route.routeName,
+        registrations: route.registrations ? [...route.registrations] : [],
+        driverInfo: route.driverInfo
+          ? { ...route.driverInfo }
+          : undefined
+      };
+
+      if (vehicleAssignment && vehicleAssignment.assignedVehicle?.vehicleId) {
+        try {
+          const vehicleDetails = await this.firestoreService.getXeDuaDonById(
+            vehicleAssignment.assignedVehicle.vehicleId
+          );
+
+          if (vehicleDetails) {
+            clonedRoute.driverInfo = {
+              name: vehicleDetails.TenTaiXe || 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+              phone: vehicleDetails.SoDienThoaiTaiXe || '0900000000',
+              vehicleNumber: vehicleDetails.BienSoXe || vehicleAssignment.assignedVehicle.licensePlate
+            };
+          } else {
+            // Fallback nếu không tìm thấy thông tin xe
+            clonedRoute.driverInfo = {
+              name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+              phone: '0900000000',
+              vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+            };
+          }
+        } catch (error) {
+          console.error('Error getting vehicle details:', error);
+          // Fallback nếu có lỗi
+          clonedRoute.driverInfo = {
+            name: 'TX ' + vehicleAssignment.assignedVehicle.vehicleId,
+            phone: '0900000000',
+            vehicleNumber: vehicleAssignment.assignedVehicle.licensePlate
+          };
+        }
+      }
+
+      enrichedRoutes.push(clonedRoute);
+    }
+
+    return enrichedRoutes;
+  }
+
+  /**
    * Apply HCM grouping priority logic - Updated: Ưu tiên "Ngã 3 Bến Gỗ" và "Ngã 3 Long Bình Tân" vào tuyến Biên Hòa
    * HCM01: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Hàng Xanh (Gần Văn Thánh), Đinh Tiên Hoàng-ĐBP, Hai Bà Trưng-ĐBP, BV Hòa Hảo
    * HCM02: Ngã 4 Thủ Đức, RMK, Ngã 3 Cát Lái, Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Trường Lý Tự Trọng
@@ -341,196 +410,323 @@ export class ExcelExportService {
    * Distribute HCM employees evenly for Excel export - theo thứ tự trạm từ chiTietTuyenDuong
    */
   private async distributeHCMEvenlyForExcel(routes: RouteInfo[], hcmRoutes: RouteInfo[]): Promise<RouteInfo[]> {
-    // Use the same logic as PDF export to ensure consistency
-    console.log('Excel Export - Applying even distribution logic for HCM routes with specific station transfers...');
-    const allHCMEmployees: Registration[] = [];
-    hcmRoutes.forEach(route => {
-      if (route.registrations) {
-        allHCMEmployees.push(...route.registrations);
+    console.log('Excel Export - Applying HCM distribution logic (no split station + shared-station constraints)...');
+
+    const maxEmployeesPerRoute = 15;
+    const updatedRoutes = [...routes];
+
+    // Snapshot: nhân viên từ các tuyến khác (không phải HCM01/HCM02) để bù HCM02 nếu thiếu
+    const otherRoutesEmployeesSnapshot: Registration[] = [];
+    updatedRoutes.forEach(r => {
+      if (r.routeName !== 'HCM01' && r.routeName !== 'HCM02' && r.registrations?.length) {
+        otherRoutesEmployeesSnapshot.push(...r.registrations);
       }
+    });
+
+    const allHCMEmployees: Registration[] = [];
+    hcmRoutes.forEach(r => {
+      if (r.registrations?.length) allHCMEmployees.push(...r.registrations);
     });
     console.log(`Excel Export - Total HCM employees to distribute: ${allHCMEmployees.length}`);
-    
-    // Sắp xếp nhân viên theo thứ tự trạm trong tuyến từ chiTietTuyenDuong
+
     const sortedHCMEmployees = await this.sortEmployeesByStationOrder(allHCMEmployees);
-    console.log(`Excel Export - Sorted HCM employees by station order: ${sortedHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
-    
-    // Phân loại nhân viên theo trạm để xử lý chuyển đổi
-    // QUAN TRỌNG: Tách riêng BV Hòa Hảo để đảm bảo luôn ở HCM01
-    const bvHoaHaoEmployees: Registration[] = [];
-    const employeesToMoveToHCM01: Registration[] = [];
-    const employeesToMoveToHCM02: Registration[] = [];
-    const sharedStationEmployees: Registration[] = []; // Separate shared stations from HCM02 priority
-    const otherEmployees: Registration[] = [];
-    
-    sortedHCMEmployees.forEach(employee => {
-      const station = employee.tramXe?.toLowerCase() || '';
-      
-      // QUAN TRỌNG: Tách riêng BV Hòa Hảo - phải luôn ở HCM01
-      if (this.isBvHoaHaoStation(employee.tramXe)) {
-        console.log(`Excel Export - Classifying employee ${employee.hoTen} from station "${employee.tramXe}" as BV Hòa Hảo (must be in HCM01)`);
-        bvHoaHaoEmployees.push(employee);
+
+    const isThuDucStation = (tramXe: string | undefined): boolean => {
+      const s = (tramXe || '').toLowerCase();
+      return s.includes('ngã 4 thủ đức') || s.includes('nga 4 thu duc');
+    };
+
+    const isBvHoaHao = (tramXe: string | undefined): boolean => this.isBvHoaHaoStation(tramXe || '');
+
+    const isHangXanhStation = (tramXe: string | undefined): boolean => {
+      const s = (tramXe || '').toLowerCase();
+      return s.includes('hàng xanh') || s.includes('hang xanh');
+    };
+
+    const isRMKStation = (tramXe: string | undefined): boolean => {
+      const s = (tramXe || '').toLowerCase();
+      return s.includes('rmk');
+    };
+
+    const getPreferredHCMRouteForStation = (tramXe: string | undefined): 'HCM01' | 'HCM02' => {
+      const station = (tramXe || '').trim();
+      if (isBvHoaHao(station)) return 'HCM01';
+      if (isThuDucStation(station)) return 'HCM01'; // Ngã 4 Thủ Đức luôn về HCM01 (không tách)
+      if (isHangXanhStation(station)) return 'HCM02'; // Hàng Xanh ưu tiên HCM02
+      if (this.isSharedStation(station)) {
+        // Shared: RMK có thể xuống HCM02 khi cần cân bằng, mặc định về HCM01
+        return isRMKStation(station) ? 'HCM01' : 'HCM01';
       }
-      // QUAN TRỌNG: Kiểm tra HCM01 priority TRƯỚC (bao gồm Hàng Xanh, nhưng không bao gồm BV Hòa Hảo vì đã tách riêng)
-      else if (this.isHCM01PriorityStation(employee.tramXe)) {
-        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM01 (HCM01 priority)`);
-        employeesToMoveToHCM01.push(employee);
-      } 
-      // Kiểm tra HCM02 priority (như Chợ Gò Vấp)
-      else if (this.isHCM02PriorityStation(employee.tramXe)) {
-        console.log(`Excel Export - Moving employee ${employee.hoTen} from station "${employee.tramXe}" to HCM02 (HCM02 priority)`);
-        employeesToMoveToHCM02.push(employee);
-      }
-      // Kiểm tra shared stations (các trạm chung như RMK)
-      else if (this.isSharedStation(station)) {
-        sharedStationEmployees.push(employee);
-      } else {
-        otherEmployees.push(employee);
-      }
-    });
-    
-    console.log(`Excel Export - Employee classification: BV Hòa Hảo=${bvHoaHaoEmployees.length}, To HCM01=${employeesToMoveToHCM01.length}, To HCM02=${employeesToMoveToHCM02.length}, Shared=${sharedStationEmployees.length}, Other=${otherEmployees.length}`);
-    
+      if (this.isHCM02PriorityStation(station)) return 'HCM02';
+      // Còn lại ưu tiên HCM01
+      return 'HCM01';
+    };
+
+    const addedEmployeeIds = new Set<string>();
     const hcm01Employees: Registration[] = [];
     const hcm02Employees: Registration[] = [];
-    const maxEmployeesPerRoute = 15;
-    const addedEmployeeIds = new Set<string>(); // Track which employees have been added
-    
-    // Helper function to add employee to a route if there's space
-    const addToRoute = (employee: Registration, route: Registration[], routeName: string): boolean => {
-      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
-      if (addedEmployeeIds.has(empId)) {
-        return false; // Already added
-      }
-      if (route.length < maxEmployeesPerRoute) {
-        route.push(employee);
-        addedEmployeeIds.add(empId);
-        return true;
-      }
-      return false; // Route is full
-    };
-    
-    // Helper function to move employee from one route to another
-    const moveFromRoute = (employee: Registration, fromRoute: Registration[], toRoute: Registration[]): boolean => {
-      const index = fromRoute.findIndex(emp => 
-        emp.hoTen === employee.hoTen && 
-        emp.tramXe === employee.tramXe && 
-        emp.ngayDangKy === employee.ngayDangKy
-      );
-      if (index >= 0 && toRoute.length < maxEmployeesPerRoute) {
-        fromRoute.splice(index, 1);
-        toRoute.push(employee);
-        return true;
-      }
-      return false;
-    };
-    
-    // Bước 1: Thêm nhân viên từ các trạm ưu tiên HCM01 (không bao gồm BV Hòa Hảo) vào HCM01
-    const sortedHCM01Priority = await this.sortEmployeesByStationOrder(employeesToMoveToHCM01);
-    for (const employee of sortedHCM01Priority) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
-      }
-    }
-    
-    // Bước 2: Thêm nhân viên từ các trạm ưu tiên HCM02 vào HCM02
-    const sortedHCM02Priority = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
-    for (const employee of sortedHCM02Priority) {
-      if (!addToRoute(employee, hcm02Employees, 'HCM02')) {
-        // HCM02 is full, add to HCM01 instead
-        addToRoute(employee, hcm01Employees, 'HCM01');
-      }
-    }
-    
-    // Bước 3: Thêm nhân viên từ các trạm chung (shared stations như RMK) vào HCM01 trước, sau đó HCM02
-    const sortedSharedEmployees = await this.sortEmployeesByStationOrder(sharedStationEmployees);
-    // Ưu tiên đặc biệt: Ngã 3 Bến Gỗ phải được đưa vào HCM01 trước
-    const isBenGo = (s: string | undefined) => (s || '').toLowerCase().includes('ngã 3 bến gỗ') || (s || '').toLowerCase().includes('nga 3 ben go');
-    const benGoShared = sortedSharedEmployees.filter(emp => isBenGo(emp.tramXe));
-    const otherShared = sortedSharedEmployees.filter(emp => !isBenGo(emp.tramXe));
 
-    for (const employee of [...benGoShared, ...otherShared]) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
+    const empKey = (e: Registration) => `${e.hoTen}_${e.tramXe}_${e.ngayDangKy}`;
+
+    const addEmployee = (e: Registration, routeArr: Registration[], routeName: 'HCM01' | 'HCM02'): boolean => {
+      const key = empKey(e);
+      if (addedEmployeeIds.has(key)) return false;
+      if (routeArr.length >= maxEmployeesPerRoute) return false;
+      routeArr.push(e);
+      addedEmployeeIds.add(key);
+      return true;
+    };
+
+    const removeEmployeeFromRouteRegistrations = (e: Registration): void => {
+      for (const r of updatedRoutes) {
+        if (!r.registrations?.length) continue;
+        const idx = r.registrations.findIndex(x =>
+          x.hoTen === e.hoTen &&
+          x.tramXe === e.tramXe &&
+          x.ngayDangKy === e.ngayDangKy
+        );
+        if (idx >= 0) {
+          r.registrations.splice(idx, 1);
+          return;
+        }
       }
-    }
-    
-    // Bước 4: Thêm nhân viên khác vào HCM01, sau đó HCM02
-    const sortedOtherEmployees = await this.sortEmployeesByStationOrder(otherEmployees);
-    for (const employee of sortedOtherEmployees) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
+    };
+
+    // Group HCM employees by normalized station to avoid splitting
+    const stationGroups = new Map<string, { stationRaw: string; employees: Registration[] }>();
+    const stationOrder: string[] = [];
+    for (const e of sortedHCMEmployees) {
+      const stationRaw = (e.tramXe || '').trim();
+      const key = this.normalizeStationName(stationRaw);
+      if (!stationGroups.has(key)) {
+        stationGroups.set(key, { stationRaw, employees: [] });
+        stationOrder.push(key);
       }
+      stationGroups.get(key)!.employees.push(e);
     }
-    
-    // Bước 5: QUAN TRỌNG - Đảm bảo tất cả nhân viên từ BV Hòa Hảo được đưa vào HCM01
-    // Nếu HCM01 đầy, chuyển nhân viên từ các trạm chung (shared stations) từ HCM01 sang HCM02 để tạo chỗ trống
-    const sortedBvHoaHaoEmployees = await this.sortEmployeesByStationOrder(bvHoaHaoEmployees);
-    for (const employee of sortedBvHoaHaoEmployees) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, cần chuyển nhân viên từ trạm chung từ HCM01 sang HCM02 để tạo chỗ trống
-        console.log(`Excel Export - HCM01 is full, moving shared station employees from HCM01 to HCM02 to make room for BV Hòa Hảo employee ${employee.hoTen}`);
-        
-        // Tìm nhân viên từ trạm chung trong HCM01 để chuyển sang HCM02
-        let moved = false;
-        for (let i = hcm01Employees.length - 1; i >= 0; i--) {
-          const empInHCM01 = hcm01Employees[i];
-          const stationLower = (empInHCM01.tramXe || '').toLowerCase();
-          
-          // Chỉ chuyển nhân viên từ trạm chung (shared stations)
-          if (this.isSharedStation(stationLower)) {
-            if (moveFromRoute(empInHCM01, hcm01Employees, hcm02Employees)) {
-              console.log(`Excel Export - Moved shared station employee ${empInHCM01.hoTen} from HCM01 to HCM02 to make room for BV Hòa Hảo`);
-              moved = true;
-              break;
+
+    const tryAddGroup = (group: Registration[], dest: Registration[], destName: 'HCM01' | 'HCM02'): boolean => {
+      if (dest.length + group.length > maxEmployeesPerRoute) return false;
+      for (const e of group) {
+        // group add: bypass capacity (checked) but still avoid duplicates
+        const key = empKey(e);
+        if (addedEmployeeIds.has(key)) continue;
+        dest.push(e);
+        addedEmployeeIds.add(key);
+      }
+      return true;
+    };
+
+    // Step 1: assign station groups by preference (no split unless forced)
+    for (const key of stationOrder) {
+      const groupInfo = stationGroups.get(key);
+      if (!groupInfo) continue;
+      const group = groupInfo.employees;
+      const pref = getPreferredHCMRouteForStation(groupInfo.stationRaw);
+
+      if (pref === 'HCM02') {
+        if (!tryAddGroup(group, hcm02Employees, 'HCM02')) {
+          if (!tryAddGroup(group, hcm01Employees, 'HCM01')) {
+            console.warn(`Excel Export - WARNING: Cannot keep station "${groupInfo.stationRaw}" together within capacity, splitting as fallback.`);
+            for (const e of group) {
+              if (!addEmployee(e, hcm02Employees, 'HCM02')) addEmployee(e, hcm01Employees, 'HCM01');
             }
           }
         }
-        
-        // Nếu đã chuyển được, thêm nhân viên BV Hòa Hảo vào HCM01
-        if (moved) {
-          addToRoute(employee, hcm01Employees, 'HCM01');
-        } else {
-          // Nếu không thể chuyển, vẫn thêm vào HCM01 (overflow) nhưng log warning
-          console.warn(`Excel Export - WARNING: Could not make room in HCM01 for BV Hòa Hảo employee ${employee.hoTen}, adding anyway (overflow)`);
-          hcm01Employees.push(employee);
-          addedEmployeeIds.add(`${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`);
-        }
-      }
-    }
-    
-    // Bước 6: Đảm bảo tất cả nhân viên được thêm vào (overflow handling - nếu cả 2 tuyến đều đầy, vẫn thêm vào)
-    const allEmployees = [...sortedHCM01Priority, ...sortedHCM02Priority, ...sortedSharedEmployees, ...sortedOtherEmployees, ...sortedBvHoaHaoEmployees];
-    for (const employee of allEmployees) {
-      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
-      if (!addedEmployeeIds.has(empId)) {
-        // Not yet added, try to add to HCM02 first, then HCM01
-        if (!addToRoute(employee, hcm02Employees, 'HCM02')) {
-          // HCM02 is also full, add to HCM01 anyway (overflow)
-          if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-            // Both routes are full, add to HCM02 anyway to ensure no employee is lost
-            hcm02Employees.push(employee);
-            addedEmployeeIds.add(empId);
+      } else {
+        if (!tryAddGroup(group, hcm01Employees, 'HCM01')) {
+          if (!tryAddGroup(group, hcm02Employees, 'HCM02')) {
+            console.warn(`Excel Export - WARNING: Cannot keep station "${groupInfo.stationRaw}" together within capacity, splitting as fallback.`);
+            for (const e of group) {
+              if (!addEmployee(e, hcm01Employees, 'HCM01')) addEmployee(e, hcm02Employees, 'HCM02');
+            }
           }
         }
       }
     }
 
+    // Step 2: ensure HCM02 does NOT contain forbidden stations (shared trừ RMK, Thu Duc, BV Hoa Hao)
+    for (let i = hcm02Employees.length - 1; i >= 0; i--) {
+      const e = hcm02Employees[i];
+      const station = (e.tramXe || '').trim();
+      const isSharedButNotRMK = this.isSharedStation(station) && !isRMKStation(station);
+      if (isBvHoaHao(station) || isThuDucStation(station) || isSharedButNotRMK) {
+        hcm02Employees.splice(i, 1);
+        const key = empKey(e);
+        addedEmployeeIds.delete(key);
+        if (!addEmployee(e, hcm01Employees, 'HCM01')) {
+          // if HCM01 is full, re-add to HCM02 as overflow but warn
+          hcm02Employees.push(e);
+          addedEmployeeIds.add(key);
+          console.warn(`Excel Export - WARNING: HCM01 full; cannot move employee "${e.hoTen}" (${e.tramXe}) out of HCM02.`);
+        }
+      }
+    }
+
+    // Step 3: if HCM02 thiếu người, ưu tiên chuyển từ HCM01 sang (chỉ trạm hợp lệ HCM02)
+    const isValidForHCM02 = (tramXe: string | undefined): boolean => {
+      const station = (tramXe || '').trim();
+      // HCM02 nhận Hàng Xanh + HCM02 priority + RMK khi cần; không nhận BV Hòa Hảo, Thủ Đức, shared khác
+      if (isBvHoaHao(station) || isThuDucStation(station)) return false;
+      const isSharedNotRMK = this.isSharedStation(station) && !isRMKStation(station);
+      if (isSharedNotRMK) return false;
+      if (isRMKStation(station)) return true; // cho phép RMK xuống HCM02 khi cần
+      return isHangXanhStation(station) || this.isHCM02PriorityStation(station);
+    };
+
+    const moveGroupFromHCM01ToHCM02 = (stationKey: string): boolean => {
+      // collect group from HCM01 by normalized station
+      const group = hcm01Employees.filter(e => this.normalizeStationName((e.tramXe || '').trim()) === stationKey);
+      if (group.length === 0) return false;
+      if (!isValidForHCM02(group[0].tramXe)) return false;
+      if (hcm02Employees.length + group.length > maxEmployeesPerRoute) return false;
+
+      // remove from HCM01
+      for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+        const e = hcm01Employees[i];
+        if (this.normalizeStationName((e.tramXe || '').trim()) === stationKey) {
+          hcm01Employees.splice(i, 1);
+          const key = empKey(e);
+          addedEmployeeIds.delete(key);
+        }
+      }
+      // add to HCM02
+      for (const e of group) {
+        addEmployee(e, hcm02Employees, 'HCM02');
+      }
+      return true;
+    };
+
+    const rebuildHCM01StationKeys = (): string[] => {
+      const keys: string[] = [];
+      const seen = new Set<string>();
+      for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+        const k = this.normalizeStationName((hcm01Employees[i].tramXe || '').trim());
+        if (!seen.has(k)) {
+          seen.add(k);
+          keys.push(k);
+        }
+      }
+      return keys;
+    };
+
+    // Step 3b: nếu HCM01 vượt quá 15, chuyển bớt (ưu tiên RMK / HCM02 priority) sang HCM02
+    const tryReduceHCM01 = (): void => {
+      if (hcm01Employees.length <= maxEmployeesPerRoute) return;
+      const priorityOrder = (stationKey: string): number => {
+        const raw = stationKey;
+        // ưu tiên đẩy RMK trước, sau đó các trạm HCM02 priority, sau đó khác
+        if (isRMKStation(raw)) return 0;
+        if (this.isHCM02PriorityStation(raw)) return 1;
+        return 2;
+      };
+
+      // Build map stationKey -> group
+      const groupsMap = new Map<string, Registration[]>();
+      for (const e of hcm01Employees) {
+        const k = this.normalizeStationName((e.tramXe || '').trim());
+        if (!groupsMap.has(k)) groupsMap.set(k, []);
+        groupsMap.get(k)!.push(e);
+      }
+      const keys = Array.from(groupsMap.keys()).sort((a, b) => priorityOrder(a) - priorityOrder(b));
+
+      for (const k of keys) {
+        if (hcm01Employees.length <= maxEmployeesPerRoute) break;
+        const group = groupsMap.get(k) || [];
+        if (group.length === 0) continue;
+        if (!isValidForHCM02(group[0].tramXe)) continue; // BV Hòa Hảo/Thủ Đức/shared-other không được chuyển
+        if (hcm02Employees.length + group.length > maxEmployeesPerRoute) continue;
+
+        // move group
+        for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+          const e = hcm01Employees[i];
+          if (this.normalizeStationName((e.tramXe || '').trim()) === k) {
+            hcm01Employees.splice(i, 1);
+            const key = empKey(e);
+            addedEmployeeIds.delete(key);
+          }
+        }
+        for (const e of group) addEmployee(e, hcm02Employees, 'HCM02');
+      }
+    };
+
+    tryReduceHCM01();
+
+    while (hcm02Employees.length < maxEmployeesPerRoute) {
+      const needed = maxEmployeesPerRoute - hcm02Employees.length;
+      // try move from HCM01 first
+      let movedAny = false;
+      const candidateStationKeys = rebuildHCM01StationKeys();
+      for (const k of candidateStationKeys) {
+        if (hcm02Employees.length >= maxEmployeesPerRoute) break;
+        if (moveGroupFromHCM01ToHCM02(k)) {
+          movedAny = true;
+          if (maxEmployeesPerRoute - hcm02Employees.length <= 0) break;
+        }
+      }
+      if (movedAny) continue;
+
+      // Step 4: still thiếu -> lấy từ tuyến khác (snapshot) theo trạm hợp lệ HCM02
+      const availableFromOtherRoutes = otherRoutesEmployeesSnapshot.filter(e => {
+        const key = empKey(e);
+        return !addedEmployeeIds.has(key) && isValidForHCM02(e.tramXe);
+      });
+
+      if (availableFromOtherRoutes.length === 0) {
+        console.log(`Excel Export - No compatible employees found from other routes to fill HCM02 (still missing ${needed}).`);
+        break;
+      }
+
+      const sortedCandidates = await this.sortEmployeesByStationOrder(availableFromOtherRoutes);
+
+      // add by station group (avoid split if possible)
+      const candidateGroups = new Map<string, Registration[]>();
+      const candidateOrder: string[] = [];
+      for (const e of sortedCandidates) {
+        const k = this.normalizeStationName((e.tramXe || '').trim());
+        if (!candidateGroups.has(k)) {
+          candidateGroups.set(k, []);
+          candidateOrder.push(k);
+        }
+        candidateGroups.get(k)!.push(e);
+      }
+
+      let added = false;
+      for (const k of candidateOrder) {
+        if (hcm02Employees.length >= maxEmployeesPerRoute) break;
+        const group = candidateGroups.get(k) || [];
+        if (group.length === 0) continue;
+        if (hcm02Employees.length + group.length > maxEmployeesPerRoute) continue;
+
+        // add the group
+        for (const e of group) {
+          if (addEmployee(e, hcm02Employees, 'HCM02')) {
+            removeEmployeeFromRouteRegistrations(e);
+            added = true;
+          }
+        }
+      }
+
+      if (!added) {
+        // fallback: add individuals if no group fits
+        for (const e of sortedCandidates) {
+          if (hcm02Employees.length >= maxEmployeesPerRoute) break;
+          if (addEmployee(e, hcm02Employees, 'HCM02')) {
+            removeEmployeeFromRouteRegistrations(e);
+            added = true;
+          }
+        }
+      }
+
+      if (!added) break;
+    }
+
     console.log(`Excel Export - Final distribution result: HCM01=${hcm01Employees.length}, HCM02=${hcm02Employees.length}`);
-    console.log(`Excel Export - HCM01 final order:`, hcm01Employees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', '));
-    const updatedRoutes = [...routes];
+
     const hcm01Index = updatedRoutes.findIndex(r => r.routeName === 'HCM01');
     const hcm02Index = updatedRoutes.findIndex(r => r.routeName === 'HCM02');
-
-    if (hcm01Index >= 0) {
-      updatedRoutes[hcm01Index].registrations = hcm01Employees;
-    }
-    if (hcm02Index >= 0) {
-      updatedRoutes[hcm02Index].registrations = hcm02Employees;
-    }
+    if (hcm01Index >= 0) updatedRoutes[hcm01Index].registrations = await this.sortEmployeesByStationOrder(hcm01Employees);
+    if (hcm02Index >= 0) updatedRoutes[hcm02Index].registrations = await this.sortEmployeesByStationOrder(hcm02Employees);
 
     return updatedRoutes;
   }
@@ -611,7 +807,7 @@ export class ExcelExportService {
    */
   private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[]): Promise<XLSX.WorkSheet> {
     const data: any[][] = [];
-    
+
     // Header
     data.push(['PHIẾU BÁO LÀM THÊM GIỜ']);
     data.push([`Ngày ${new Date().toLocaleDateString('vi-VN')}`]);
@@ -677,7 +873,7 @@ export class ExcelExportService {
         }
       }
     }
-    
+
     // Create worksheet
     const worksheet = XLSX.utils.aoa_to_sheet(data);
     
@@ -713,7 +909,6 @@ export class ExcelExportService {
     
     // Sort stations within the route
     const sortedGrouped = await this.sortStationsByOrder(grouped);
-    
     return sortedGrouped;
   }
   
@@ -901,7 +1096,8 @@ export class ExcelExportService {
       return false;
     }
     const stationLower = station.toLowerCase();
-    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'ngã 4 thủ đức', 'nga 4 thu duc', 'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'];
+    // RMK thuộc tuyến HCM (HCM01/HCM02), mặc định ưu tiên HCM01 - đồng bộ với PDF export
+    const priorities = ['đinh tiên hoàng', 'dinh tien hoang', 'hai bà trưng', 'hai ba trung', 'ngã 4 thủ đức', 'nga 4 thu duc', 'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)', 'rmk'];
     return priorities.some(p => stationLower.includes(p) || p.includes(stationLower));
   }
 

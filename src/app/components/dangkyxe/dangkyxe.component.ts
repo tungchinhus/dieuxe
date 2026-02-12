@@ -743,7 +743,20 @@ export class DangKyXeComponent implements OnInit {
       }
     }
 
-    console.log(`[HC Import] Completed: ${savedCount} saved, ${failedData.length} failed`);
+    // Console log tổng kết số lượng nhân viên import HC
+    console.log('========================================');
+    console.log('📊 TỔNG KẾT IMPORT NHÂN VIÊN HC:');
+    console.log(`   ✅ Số lượng import thành công: ${savedCount}/${registrations.length}`);
+    console.log(`   ❌ Số lượng không import được: ${failedData.length}/${registrations.length}`);
+    console.log(`   📝 Tổng số nhân viên xử lý: ${registrations.length}`);
+    if (failedData.length > 0) {
+      console.log('   ⚠️  Chi tiết lỗi:');
+      failedData.forEach((item, index) => {
+        console.log(`      ${index + 1}. ${item.registration.hoTen} - ${item.registration.tramXe}: ${item.reason}`);
+      });
+    }
+    console.log('========================================');
+    
     return { savedCount, failedData };
   }
 
@@ -1102,6 +1115,16 @@ export class DangKyXeComponent implements OnInit {
                 }
               });
             }
+            
+            // Console log tổng kết sau khi xử lý tất cả files (có duplicate)
+            console.log('========================================');
+            console.log('📊 TỔNG KẾT IMPORT TẤT CẢ FILES (CÓ DUPLICATE):');
+            console.log(`   📁 Số file đã xử lý: ${totalFiles}`);
+            console.log(`   ✅ Tổng số nhân viên import thành công: ${totalSaved}`);
+            console.log(`   ❌ Tổng số nhân viên không import được: ${totalFailed}`);
+            console.log(`   🔄 Tổng số nhân viên trùng lặp: ${allDuplicates.length}`);
+            console.log(`   📝 Tổng số nhân viên đã đọc từ Excel: ${totalRegistrations.length}`);
+            console.log('========================================');
           }
 
           dialogRef.afterClosed().subscribe(async () => {
@@ -1282,6 +1305,16 @@ export class DangKyXeComponent implements OnInit {
                 }
               });
             }
+            
+            // Console log tổng kết sau khi xử lý tất cả files HC (có duplicate)
+            console.log('========================================');
+            console.log('📊 TỔNG KẾT IMPORT TẤT CẢ FILES HC (CÓ DUPLICATE):');
+            console.log(`   📁 Số file đã xử lý: ${totalFiles}`);
+            console.log(`   ✅ Tổng số nhân viên import thành công: ${totalSaved}`);
+            console.log(`   ❌ Tổng số nhân viên không import được: ${totalFailed}`);
+            console.log(`   🔄 Tổng số nhân viên trùng lặp: ${allDuplicates.length}`);
+            console.log(`   📝 Tổng số nhân viên đã đọc từ Excel: ${totalRegistrations.length}`);
+            console.log('========================================');
           }
 
           dialogRef.afterClosed().subscribe(async () => {
@@ -1337,6 +1370,16 @@ export class DangKyXeComponent implements OnInit {
               }
             });
           }
+          
+          // Console log tổng kết sau khi xử lý tất cả files HC
+          console.log('========================================');
+          console.log('📊 TỔNG KẾT IMPORT TẤT CẢ FILES HC:');
+          console.log(`   📁 Số file đã xử lý: ${totalFiles}`);
+          console.log(`   ✅ Tổng số nhân viên import thành công: ${totalSaved}`);
+          console.log(`   ❌ Tổng số nhân viên không import được: ${totalFailed}`);
+          console.log(`   🔄 Tổng số nhân viên trùng lặp: ${allDuplicates.length}`);
+          console.log(`   📝 Tổng số nhân viên đã đọc từ Excel: ${totalRegistrations.length}`);
+          console.log('========================================');
         }
       } else {
         this.snackBar.open(
@@ -1348,6 +1391,13 @@ export class DangKyXeComponent implements OnInit {
             verticalPosition: 'top'
           }
         );
+        
+        // Console log khi không có dữ liệu HC
+        console.log('========================================');
+        console.log('⚠️  KHÔNG TÌM THẤY DỮ LIỆU HỢP LỆ HC:');
+        console.log(`   📁 Số file đã xử lý: ${totalFiles}`);
+        console.log(`   ❌ Tổng số nhân viên đã đọc: ${totalRegistrations.length}`);
+        console.log('========================================');
       }
 
     } catch (error) {
@@ -1653,6 +1703,20 @@ export class DangKyXeComponent implements OnInit {
         continue;
       }
     }
+    
+    // Console log tổng kết số lượng nhân viên import
+    console.log('========================================');
+    console.log('📊 TỔNG KẾT IMPORT NHÂN VIÊN:');
+    console.log(`   ✅ Số lượng import thành công: ${savedCount}/${registrations.length}`);
+    console.log(`   ❌ Số lượng không import được: ${failedData.length}/${registrations.length}`);
+    console.log(`   📝 Tổng số nhân viên xử lý: ${registrations.length}`);
+    if (failedData.length > 0) {
+      console.log('   ⚠️  Chi tiết lỗi:');
+      failedData.forEach((item, index) => {
+        console.log(`      ${index + 1}. ${item.registration.hoTen} - ${item.registration.tramXe}: ${item.reason}`);
+      });
+    }
+    console.log('========================================');
     
     return { savedCount, failedData };
   }
@@ -2058,7 +2122,6 @@ export class DangKyXeComponent implements OnInit {
       // Group registrations by route using the same logic as PDF generation
       const routeGroups = await this.groupRegistrationsByRouteForDialog(todayRegistrations);
       console.log('Dialog Excel - Route groups after grouping:', routeGroups.map(rg => `${rg.routeName} (${rg.registrations?.length || 0} employees)`));
-      
       // Tạo danh sách tuyến từ routeGroups (đã được xử lý logic phân chia)
       const realRoutes = routeGroups
         .map(routeGroup => ({
@@ -2105,8 +2168,29 @@ export class DangKyXeComponent implements OnInit {
 
       dialogRef.afterClosed().subscribe(async result => {
         if (result && result.routeAssignments) {
-          // Export to Excel after vehicle assignment
-          await this.exportOvertimeReportExcelWithVehicleAssignment(result);
+          try {
+            // Export to Excel after vehicle assignment, dùng luôn routeGroups đã xử lý ở trên
+            const base = this.displayDate || this.startDate || new Date();
+            await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(
+              result.routeAssignments,
+              base,
+              routeGroups
+            );
+
+            // Show success message
+            this.snackBar.open('File Excel đã được tạo thành công với thông tin phân công xe!', 'Đóng', {
+              duration: 3000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          } catch (error) {
+            console.error('Error exporting overtime report Excel:', error);
+            this.snackBar.open('Có lỗi xảy ra khi tạo file Excel!', 'Đóng', {
+              duration: 5000,
+              horizontalPosition: 'right',
+              verticalPosition: 'top'
+            });
+          }
         }
       });
 
@@ -2389,17 +2473,16 @@ export class DangKyXeComponent implements OnInit {
       routeMap.get(finalRouteName)!.registrations.push(registration);
     }
 
-    // Convert to array and filter out routes with no employees and self-transport routes
+    // Convert to array: giữ cả tuyến TỰ TÚC để Excel xuất đủ nhân viên (trước đây loại TỰ TÚC khiến file thiếu)
     const routes = Array.from(routeMap.values()).filter(route => 
       route.registrations && 
-      route.registrations.length > 0 &&
-      route.routeName !== 'TỰ TÚC' // Exclude self-transport routes
+      route.registrations.length > 0
     );
 
     console.log('Dialog - Routes before sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
 
-    // Sort routes according to the specified order: HCM01, HCM02, BH01, BH02, BH03
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03'];
+    // Sort routes: HCM01, HCM02, BH01, BH02, BH03, TỰ TÚC (và Chưa phân tuyến nếu có)
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'TỰ TÚC'];
     
     routes.sort((a, b) => {
       const indexA = routeOrder.indexOf(a.routeName);
@@ -2513,12 +2596,13 @@ export class DangKyXeComponent implements OnInit {
     }
     
     const stationLower = station.toLowerCase();
-    
+    // RMK thuộc tuyến HCM (HCM01/HCM02), ưu tiên HCM01 - đồng bộ PDF/Excel export
     const hcm01PriorityStations = [
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
       'ngã 4 thủ đức', 'nga 4 thu duc',
-      'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'
+      'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)',
+      'rmk'
     ];
     
     return hcm01PriorityStations.some(priorityStation =>
@@ -2658,32 +2742,6 @@ export class DangKyXeComponent implements OnInit {
     } catch (error) {
       console.error('Error exporting overtime report PDF:', error);
       this.snackBar.open('Có lỗi xảy ra khi tạo file PDF!', 'Đóng', {
-        duration: 5000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
-    }
-  }
-
-  /**
-   * Export overtime report Excel with vehicle assignment data
-   */
-  private async exportOvertimeReportExcelWithVehicleAssignment(result: any): Promise<void> {
-    try {
-      // Pass vehicle assignment data and selected date to Excel export service
-      const base = this.displayDate || this.startDate || new Date();
-      await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(result.routeAssignments, base);
-      
-      // Show success message
-      this.snackBar.open('File Excel đã được tạo thành công với thông tin phân công xe!', 'Đóng', {
-        duration: 3000,
-        horizontalPosition: 'right',
-        verticalPosition: 'top'
-      });
-
-    } catch (error) {
-      console.error('Error exporting overtime report Excel:', error);
-      this.snackBar.open('Có lỗi xảy ra khi tạo file Excel!', 'Đóng', {
         duration: 5000,
         horizontalPosition: 'right',
         verticalPosition: 'top'
