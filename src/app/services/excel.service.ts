@@ -37,55 +37,144 @@ export class ExcelService {
   }
 
   /**
+   * Detect Excel file type (.xls or .xlsx)
+   * @param file - Excel file
+   * @returns File type string
+   */
+  private detectFileType(file: File): 'xls' | 'xlsx' | 'unknown' {
+    const fileName = file.name.toLowerCase();
+    if (fileName.endsWith('.xls') && !fileName.endsWith('.xlsx')) {
+      return 'xls';
+    } else if (fileName.endsWith('.xlsx')) {
+      return 'xlsx';
+    }
+    return 'unknown';
+  }
+
+  /**
    * Read Excel file and convert to Registration array
+   * Supports both .xls (Excel 97-2003) and .xlsx (Excel 2007+) formats
    * @param file - Excel file
    * @returns Promise with array of Registration objects
    */
   async readExcelFile(file: File): Promise<Registration[]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      const fileType = this.detectFileType(file);
+      
+      console.log(`Reading Excel file: ${file.name}, Type: ${fileType}, Size: ${file.size} bytes`);
       
       reader.onload = async (e: any) => {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Configure options for reading Excel files
+          // These options work for both .xls and .xlsx
+          const readOptions: XLSX.ParsingOptions = {
+            type: 'array',
+            cellDates: true,        // Parse dates as Date objects
+            cellNF: false,          // Don't parse number formats
+            cellStyles: false,      // Don't parse cell styles (faster)
+            sheetStubs: false,      // Skip empty sheets
+            dense: false,           // Use sparse array (better for large files)
+            raw: false              // Parse cell values (not raw strings)
+          };
+          
+          // For .xls files, add additional options if needed
+          if (fileType === 'xls') {
+            console.log('Detected Excel 97-2003 format (.xls), using compatibility mode');
+            // xlsx library handles .xls automatically, but we can add specific options
+            readOptions.cellText = false; // Don't parse text formatting
+          }
+          
+          const workbook = XLSX.read(data, readOptions);
+          
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            reject(new Error('File Excel không có sheet nào hoặc file bị lỗi'));
+            return;
+          }
+          
+          console.log(`Found ${workbook.SheetNames.length} sheet(s): ${workbook.SheetNames.join(', ')}`);
           
           // Get the first worksheet
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           
-          // Convert to JSON
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          if (!worksheet) {
+            reject(new Error(`Không thể đọc sheet "${firstSheetName}" từ file Excel`));
+            return;
+          }
+          
+          // Convert to JSON with options that work for both formats
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+            header: 1,
+            defval: '',           // Default value for empty cells
+            raw: false            // Parse values (convert dates, numbers, etc.)
+          });
+          
+          console.log(`Converted sheet "${firstSheetName}" to JSON: ${jsonData.length} rows`);
           
           // Convert to Registration objects with database lookup
           const registrations = await this.convertToRegistrations(jsonData);
           resolve(registrations);
-        } catch (error) {
-          reject(new Error('Error reading Excel file: ' + error));
+        } catch (error: any) {
+          const errorMessage = error?.message || String(error);
+          console.error('Error reading Excel file:', error);
+          reject(new Error(`Lỗi khi đọc file Excel (${fileType}): ${errorMessage}`));
         }
       };
       
-      reader.onerror = () => {
-        reject(new Error('Error reading file'));
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        reject(new Error('Lỗi khi đọc file. Vui lòng kiểm tra file có bị hỏng không.'));
       };
       
+      // Read as ArrayBuffer to support both .xls and .xlsx
       reader.readAsArrayBuffer(file);
     });
   }
 
   /**
    * Read Excel file for HC collection - only read sheets "T7" and "CN"
+   * Supports both .xls (Excel 97-2003) and .xlsx (Excel 2007+) formats
    * @param file - Excel file
    * @returns Promise with array of Registration objects from both sheets
    */
   async readExcelFileHC(file: File): Promise<Registration[]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      const fileType = this.detectFileType(file);
+      
+      console.log(`Reading Excel HC file: ${file.name}, Type: ${fileType}, Size: ${file.size} bytes`);
       
       reader.onload = async (e: any) => {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Configure options for reading Excel files
+          const readOptions: XLSX.ParsingOptions = {
+            type: 'array',
+            cellDates: true,
+            cellNF: false,
+            cellStyles: false,
+            sheetStubs: false,
+            dense: false,
+            raw: false
+          };
+          
+          if (fileType === 'xls') {
+            console.log('Detected Excel 97-2003 format (.xls) for HC, using compatibility mode');
+            readOptions.cellText = false;
+          }
+          
+          const workbook = XLSX.read(data, readOptions);
+          
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            reject(new Error('File Excel không có sheet nào hoặc file bị lỗi'));
+            return;
+          }
+          
+          console.log(`Found ${workbook.SheetNames.length} sheet(s): ${workbook.SheetNames.join(', ')}`);
           
           const allRegistrations: Registration[] = [];
           const sheetNamesToRead = ['T7', 'CN'];
@@ -94,7 +183,18 @@ export class ExcelService {
           for (const sheetName of sheetNamesToRead) {
             if (workbook.SheetNames.includes(sheetName)) {
               const worksheet = workbook.Sheets[sheetName];
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+              
+              if (!worksheet) {
+                console.warn(`Sheet "${sheetName}" exists but cannot be read`);
+                continue;
+              }
+              
+              const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+                header: 1,
+                defval: '',
+                raw: false
+              });
+              
               const registrations = await this.convertToRegistrations(jsonData);
               
               // Update ngày đăng ký based on sheet name
@@ -108,27 +208,82 @@ export class ExcelService {
               allRegistrations.push(...registrations);
               console.log(`Read ${registrations.length} registrations from sheet "${sheetName}" with registration date: ${registrationDate}`);
             } else {
-              console.warn(`Sheet "${sheetName}" not found in Excel file`);
+              console.warn(`Sheet "${sheetName}" not found in Excel file. Available sheets: ${workbook.SheetNames.join(', ')}`);
             }
           }
           
           if (allRegistrations.length === 0) {
-            reject(new Error('Không tìm thấy sheet T7 hoặc CN trong file Excel'));
+            reject(new Error(`Không tìm thấy sheet T7 hoặc CN trong file Excel. Các sheet có sẵn: ${workbook.SheetNames.join(', ')}`));
           } else {
             console.log(`Total registrations from HC sheets: ${allRegistrations.length}`);
             resolve(allRegistrations);
           }
-        } catch (error) {
-          reject(new Error('Error reading Excel file HC: ' + error));
+        } catch (error: any) {
+          const errorMessage = error?.message || String(error);
+          console.error('Error reading Excel HC file:', error);
+          reject(new Error(`Lỗi khi đọc file Excel HC (${fileType}): ${errorMessage}`));
         }
       };
       
-      reader.onerror = () => {
-        reject(new Error('Error reading file'));
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        reject(new Error('Lỗi khi đọc file. Vui lòng kiểm tra file có bị hỏng không.'));
       };
       
       reader.readAsArrayBuffer(file);
     });
+  }
+
+  /**
+   * Find column indices from header row
+   * @param headerRow - Header row data
+   * @returns Object with column indices
+   */
+  private findColumnIndices(headerRow: any[]): {
+    stt: number;
+    hoTen: number;
+    tramXe: number;
+    dienThoai: number;
+    thoiGianBatDau: number;
+    thoiGianKetThuc: number;
+  } {
+    const indices = {
+      stt: 0,
+      hoTen: 1,
+      tramXe: 2,
+      dienThoai: 3,
+      thoiGianBatDau: 4,
+      thoiGianKetThuc: 5
+    };
+    
+    if (!headerRow || headerRow.length === 0) {
+      return indices;
+    }
+    
+    // Convert header row to lowercase string for searching
+    const headerString = headerRow.map(cell => this.getStringValue(cell).toLowerCase()).join(' ');
+    
+    // Find column indices by searching for header keywords
+    for (let i = 0; i < headerRow.length; i++) {
+      const cellValue = this.getStringValue(headerRow[i]).toLowerCase();
+      
+      if (cellValue.includes('stt') || cellValue.includes('số thứ tự')) {
+        indices.stt = i;
+      } else if (cellValue.includes('họ') && cellValue.includes('tên') || cellValue.includes('họ và tên')) {
+        indices.hoTen = i;
+      } else if (cellValue.includes('trạm') || cellValue.includes('trạm xe')) {
+        indices.tramXe = i;
+      } else if (cellValue.includes('điện thoại') || cellValue.includes('số điện thoại')) {
+        indices.dienThoai = i;
+      } else if (cellValue.includes('từ') || cellValue.includes('thời gian bắt đầu')) {
+        indices.thoiGianBatDau = i;
+      } else if (cellValue.includes('đến') || cellValue.includes('thời gian kết thúc')) {
+        indices.thoiGianKetThuc = i;
+      }
+    }
+    
+    console.log('Column indices found:', indices);
+    return indices;
   }
 
   /**
@@ -138,15 +293,20 @@ export class ExcelService {
    */
   private async convertToRegistrations(data: any[]): Promise<Registration[]> {
     const registrations: Registration[] = [];
+    let skippedRows = 0;
+    let processedRows = 0;
     
     // Find the header row (contains "STT" or "Họ và tên")
     let headerRowIndex = -1;
-    for (let i = 0; i < data.length; i++) {
+    let headerRow: any[] = [];
+    for (let i = 0; i < Math.min(20, data.length); i++) { // Check first 20 rows for header
       const row = data[i];
       if (row && row.length > 0) {
         const rowString = row.join(' ').toLowerCase();
-        if (rowString.includes('stt') || rowString.includes('họ và tên')) {
+        if (rowString.includes('stt') || rowString.includes('họ và tên') || rowString.includes('họ tên')) {
           headerRowIndex = i;
+          headerRow = row;
+          console.log(`Found header row at index ${i}:`, row);
           break;
         }
       }
@@ -155,39 +315,65 @@ export class ExcelService {
     if (headerRowIndex === -1) {
       console.warn('Header row not found, using default mapping');
       headerRowIndex = 0;
+      headerRow = data[0] || [];
     }
+    
+    // Find column indices from header
+    const colIndices = this.findColumnIndices(headerRow);
     
     // Process data rows starting from the row after header
     for (let i = headerRowIndex + 1; i < data.length; i++) {
+      processedRows++;
       const row = data[i];
       
       // Skip empty rows
-      if (!row || row.length === 0) continue;
-      
-      // Skip rows that don't have both employee name and station
-      if (!this.getStringValue(row[1]) || !this.getStringValue(row[2])) continue;
+      if (!row || row.length === 0) {
+        skippedRows++;
+        continue;
+      }
       
       try {
-        console.log(`Processing Excel row ${i}:`, row);
+        // Extract data using found column indices
+        const hoTen = this.getStringValue(row[colIndices.hoTen]) || '';
+        const tramXe = this.getStringValue(row[colIndices.tramXe]) || '';
+        const dienThoai = this.getStringValue(row[colIndices.dienThoai]) || '';
         
-        // Debug: Log the row data to understand the structure
-        console.log(`Row ${i} data:`, row);
-        console.log(`Row ${i} length:`, row.length);
+        // Try to extract time from the found columns, or search in nearby columns
+        let thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianBatDau])) || '';
+        let thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianKetThuc])) || '';
         
-        const hoTen = this.getStringValue(row[1]) || ''; // Column B: Họ và tên
-        const tramXe = this.getStringValue(row[2]) || ''; // Column C: Trạm xe        
-        const dienThoai = this.getStringValue(row[3]) || ''; // Column D: Điện thoại
-        const thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[4])) || ''; // Column F: Từ...
-        const thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[5])) || ''; // Column G: Đến...
-
-        // Skip rows that are missing any required field
-        // Required fields: Họ tên NV, Trạm xe, Thời gian (từ giờ đến giờ)
-        // Số điện thoại không bắt buộc
-        if (!hoTen || !tramXe || !thoiGianBatDau || !thoiGianKetThuc) {
+        // If time not found in expected columns, try searching in nearby columns (for .xls files with different structure)
+        if (!thoiGianBatDau || !thoiGianKetThuc) {
+          for (let j = 0; j < Math.min(row.length, 10); j++) {
+            const cellValue = this.getStringValue(row[j]);
+            if (!thoiGianBatDau && this.extractTimeFromString(cellValue)) {
+              thoiGianBatDau = this.extractTimeFromString(cellValue);
+              console.log(`Found start time in column ${j}: ${thoiGianBatDau}`);
+            }
+            if (!thoiGianKetThuc && j > colIndices.thoiGianBatDau && this.extractTimeFromString(cellValue)) {
+              thoiGianKetThuc = this.extractTimeFromString(cellValue);
+              console.log(`Found end time in column ${j}: ${thoiGianKetThuc}`);
+              break; // Found end time, stop searching
+            }
+          }
+        }
+        
+        // Use default time for overtime work if not found (15h45 - 19h)
+        if (!thoiGianBatDau) {
+          thoiGianBatDau = '15:45';
+          console.log(`Using default start time for row ${i}: 15:45`);
+        }
+        if (!thoiGianKetThuc) {
+          thoiGianKetThuc = '19:00';
+          console.log(`Using default end time for row ${i}: 19:00`);
+        }
+        
+        // Skip rows that are missing required fields (Họ tên and Trạm xe are required)
+        if (!hoTen || !tramXe) {
+          skippedRows++;
           console.warn(
             `Skipping row ${i} due to missing required data. ` +
-            `HoTen="${hoTen}", TramXe="${tramXe}", DienThoai="${dienThoai}", ` +
-            `ThoiGianBatDau="${thoiGianBatDau}", ThoiGianKetThuc="${thoiGianKetThuc}"`
+            `HoTen="${hoTen}", TramXe="${tramXe}"`
           );
           continue;
         }
@@ -202,32 +388,36 @@ export class ExcelService {
         const registration: Registration = {
           id: `excel_${i}`, // Temporary ID for Excel import
           maNhanVien: maNhanVien, // Generated from name
-          hoTen: hoTen, // Column B: Họ và tên
-          dienThoai: dienThoai, // Column D: Điện thoại
+          hoTen: hoTen, // Họ và tên
+          dienThoai: dienThoai, // Điện thoại
           phongBan: '', // Default empty for now
           ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
           loaiCa: this.extractShiftFromTime(thoiGianBatDau) || 'PT-cc', // Extract from start time
-          thoiGianBatDau: thoiGianBatDau, // Column F: Thời gian làm việc (Từ...)
-          thoiGianKetThuc: thoiGianKetThuc, // Column G: Thời gian làm việc (Đến...)
+          thoiGianBatDau: thoiGianBatDau, // Thời gian làm việc (Từ...)
+          thoiGianKetThuc: thoiGianKetThuc, // Thời gian làm việc (Đến...)
           maTuyenXe: maTuyenXe, // Derived from database lookup
-          tramXe: tramXe, // Column C: Trạm xe
+          tramXe: tramXe, // Trạm xe
           noiDungCongViec: '', // Default empty for overtime work
           dangKyCom: false // Default false for overtime work
         };
         
         // Debug: Log the extracted values
-        console.log(`Row ${i} - HoTen: ${registration.hoTen}, TramXe: ${registration.tramXe}`);
-        console.log(`Row ${i} - ThoiGianBatDau: ${registration.thoiGianBatDau}, ThoiGianKetThuc: ${registration.thoiGianKetThuc}`);
-        console.log(`Row ${i} - Raw data from row[5]: "${this.getStringValue(row[5])}", row[6]: "${this.getStringValue(row[6])}"`);
-        console.log(`Row ${i} - Derived maTuyenXe: "${maTuyenXe}" for hoTen: "${hoTen}", tramXe: "${tramXe}"`);
-        
-        console.log(`Converted registration ${i}:`, registration);
+        console.log(`✅ Row ${i} - Successfully converted: HoTen="${registration.hoTen}", TramXe="${registration.tramXe}", ThoiGian="${registration.thoiGianBatDau}-${registration.thoiGianKetThuc}"`);
         registrations.push(registration);
       } catch (error) {
+        skippedRows++;
         console.warn(`Error processing row ${i}:`, error);
         continue;
       }
     }
+    
+    // Console log tổng kết đọc file Excel
+    console.log('========================================');
+    console.log('📊 TỔNG KẾT ĐỌC FILE EXCEL:');
+    console.log(`   ✅ Số nhân viên đọc được từ Excel: ${registrations.length}`);
+    console.log(`   ⏭️  Số dòng bị bỏ qua (thiếu dữ liệu/lỗi): ${skippedRows}`);
+    console.log(`   📝 Tổng số dòng đã xử lý: ${processedRows}`);
+    console.log('========================================');
     
     return registrations;
   }
@@ -660,35 +850,73 @@ export class ExcelService {
 
   /**
    * Read Excel file and convert to RouteDetail array
+   * Supports both .xls (Excel 97-2003) and .xlsx (Excel 2007+) formats
    * @param file - Excel file
    * @returns Promise with array of RouteDetail objects
    */
   async readRouteDetailExcelFile(file: File): Promise<RouteDetailCreate[]> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
+      const fileType = this.detectFileType(file);
+      
+      console.log(`Reading RouteDetail Excel file: ${file.name}, Type: ${fileType}, Size: ${file.size} bytes`);
       
       reader.onload = (e: any) => {
         try {
           const data = new Uint8Array(e.target.result);
-          const workbook = XLSX.read(data, { type: 'array' });
+          
+          // Configure options for reading Excel files
+          const readOptions: XLSX.ParsingOptions = {
+            type: 'array',
+            cellDates: true,
+            cellNF: false,
+            cellStyles: false,
+            sheetStubs: false,
+            dense: false,
+            raw: false
+          };
+          
+          if (fileType === 'xls') {
+            console.log('Detected Excel 97-2003 format (.xls) for RouteDetail, using compatibility mode');
+            readOptions.cellText = false;
+          }
+          
+          const workbook = XLSX.read(data, readOptions);
+          
+          if (!workbook.SheetNames || workbook.SheetNames.length === 0) {
+            reject(new Error('File Excel không có sheet nào hoặc file bị lỗi'));
+            return;
+          }
           
           // Get the first worksheet
           const firstSheetName = workbook.SheetNames[0];
           const worksheet = workbook.Sheets[firstSheetName];
           
+          if (!worksheet) {
+            reject(new Error(`Không thể đọc sheet "${firstSheetName}" từ file Excel`));
+            return;
+          }
+          
           // Convert to JSON
-          const jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+          const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
+            header: 1,
+            defval: '',
+            raw: false
+          });
           
           // Convert to RouteDetail objects
           const routeDetails = this.convertToRouteDetails(jsonData);
           resolve(routeDetails);
-        } catch (error) {
-          reject(new Error('Error reading Excel file: ' + error));
+        } catch (error: any) {
+          const errorMessage = error?.message || String(error);
+          console.error('Error reading RouteDetail Excel file:', error);
+          reject(new Error(`Lỗi khi đọc file Excel (${fileType}): ${errorMessage}`));
         }
       };
       
-      reader.onerror = () => {
-        reject(new Error('Error reading file'));
+      reader.onerror = (error) => {
+        console.error('FileReader error:', error);
+        reject(new Error('Lỗi khi đọc file. Vui lòng kiểm tra file có bị hỏng không.'));
       };
       
       reader.readAsArrayBuffer(file);

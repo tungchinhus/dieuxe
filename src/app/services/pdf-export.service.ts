@@ -784,6 +784,35 @@ export class PdfExportService {
     });
     console.log(`PDF Export - Total HCM employees to distribute: ${allHCMEmployees.length}`);
     
+    // Lưu trữ nhân viên từ các tuyến khác (không phải HCM01/HCM02) để có thể sử dụng sau này
+    const otherRoutesEmployees: Registration[] = [];
+    routes.forEach(route => {
+      if (route.routeName !== 'HCM01' && route.routeName !== 'HCM02' && route.registrations) {
+        route.registrations.forEach(emp => {
+          otherRoutesEmployees.push(emp);
+        });
+      }
+    });
+    console.log(`PDF Export - Found ${otherRoutesEmployees.length} employees from other routes (BH, etc.)`);
+    
+    // BƯỚC 0: QUAN TRỌNG - Gom nhân viên cùng trạm để đảm bảo không bị tách
+    console.log(`PDF Export - Step 0: Grouping employees by station to prevent splitting...`);
+    const employeesByStation = new Map<string, Registration[]>();
+    allHCMEmployees.forEach(employee => {
+      const station = (employee.tramXe || '').trim();
+      const normalizedStation = this.normalizeStationName(station);
+      if (!employeesByStation.has(normalizedStation)) {
+        employeesByStation.set(normalizedStation, []);
+      }
+      employeesByStation.get(normalizedStation)!.push(employee);
+    });
+    
+    // Log thống kê nhân viên theo trạm
+    console.log(`PDF Export - Employees grouped by station:`);
+    employeesByStation.forEach((employees, station) => {
+      console.log(`  - ${station}: ${employees.length} employees`);
+    });
+    
     // Sắp xếp nhân viên theo thứ tự trạm trong tuyến từ chiTietTuyenDuong
     const sortedHCMEmployees = await this.sortEmployeesByStationOrder(allHCMEmployees);
     console.log(`PDF Export - Sorted HCM employees by station order: ${sortedHCMEmployees.map(emp => `${emp.hoTen}(${emp.tramXe})`).join(', ')}`);
@@ -793,6 +822,7 @@ export class PdfExportService {
     const bvHoaHaoEmployees: Registration[] = [];
     const employeesToMoveToHCM01: Registration[] = [];
     const employeesToMoveToHCM02: Registration[] = [];
+    const hangXanhEmployees: Registration[] = []; // Tách riêng Hàng Xanh cho HCM02
     const otherEmployees: Registration[] = [];
     
     sortedHCMEmployees.forEach(employee => {
@@ -802,6 +832,11 @@ export class PdfExportService {
       if (this.isBvHoaHaoStation(employee.tramXe)) {
         console.log(`PDF Export - Classifying employee ${employee.hoTen} from station "${employee.tramXe}" as BV Hòa Hảo (must be in HCM01)`);
         bvHoaHaoEmployees.push(employee);
+      }
+      // Tách riêng Hàng Xanh - chỉ thuộc HCM02
+      else if (this.isHangXanhStation(employee.tramXe)) {
+        console.log(`PDF Export - Classifying employee ${employee.hoTen} from station "${employee.tramXe}" as Hàng Xanh (must be in HCM02)`);
+        hangXanhEmployees.push(employee);
       }
       // Kiểm tra xem có phải trạm cần chuyển lên HCM01 không (không bao gồm BV Hòa Hảo)
       else if (this.isTargetStationForHCM01(station)) {
@@ -816,7 +851,7 @@ export class PdfExportService {
       }
     });
     
-    console.log(`PDF Export - Employee classification: BV Hòa Hảo=${bvHoaHaoEmployees.length}, To HCM01=${employeesToMoveToHCM01.length}, To HCM02=${employeesToMoveToHCM02.length}, Other=${otherEmployees.length}`);
+    console.log(`PDF Export - Employee classification: BV Hòa Hảo=${bvHoaHaoEmployees.length}, To HCM01=${employeesToMoveToHCM01.length}, To HCM02=${employeesToMoveToHCM02.length}, Hàng Xanh=${hangXanhEmployees.length}, Other=${otherEmployees.length}`);
     
     const hcm01Employees: Registration[] = [];
     const hcm02Employees: Registration[] = [];
@@ -854,23 +889,56 @@ export class PdfExportService {
       return false;
     };
     
-    // Bước 1: Thêm nhân viên từ các trạm đặc biệt vào HCM01 (theo thứ tự từ database)
-    console.log(`PDF Export - Step 1: Adding target station employees to HCM01 in correct order`);
+    // Helper function để kiểm tra trạm có phải là "Ngã 4 Thủ Đức" không
+    const isThuDucStationLocal = (station: string | undefined): boolean => {
+      if (!station) return false;
+      const stationLower = station.toLowerCase();
+      return stationLower.includes('ngã 4 thủ đức') || stationLower.includes('nga 4 thu duc');
+    };
     
-    // Sắp xếp lại nhân viên từ trạm đặc biệt theo thứ tự từ database
+    // Bước 1: QUAN TRỌNG - Gom tất cả nhân viên cùng trạm và đảm bảo không bị tách
+    // Đầu tiên, gom tất cả nhân viên "Ngã 4 Thủ Đức" vào HCM01
+    console.log(`PDF Export - Step 1: Grouping employees from same station together - Ngã 4 Thủ Đức to HCM01`);
+    
+    const thuDucEmployees: Registration[] = [];
+    const allOtherEmployeesForHCM01: Registration[] = [];
+    
+    // Tách nhân viên "Ngã 4 Thủ Đức" ra riêng
+    sortedHCMEmployees.forEach(employee => {
+      if (isThuDucStationLocal(employee.tramXe)) {
+        thuDucEmployees.push(employee);
+      } else if (!this.isHangXanhStation(employee.tramXe) && !this.isBvHoaHaoStation(employee.tramXe)) {
+        // Không phải Hàng Xanh và không phải BV Hòa Hảo
+        allOtherEmployeesForHCM01.push(employee);
+      }
+    });
+    
+    console.log(`PDF Export - Found ${thuDucEmployees.length} employees from Ngã 4 Thủ Đức`);
+    
+    // Thêm tất cả nhân viên "Ngã 4 Thủ Đức" vào HCM01 (theo thứ tự từ database)
+    const sortedThuDucEmployees = await this.sortEmployeesByStationOrder(thuDucEmployees);
+    for (const employee of sortedThuDucEmployees) {
+      addToRoute(employee, hcm01Employees, 'HCM01');
+    }
+    
+    // Bước 2: Thêm nhân viên từ các trạm đặc biệt vào HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 2: Adding target station employees to HCM01 in correct order`);
+    
     const sortedTargetEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM01);
-    
     for (const employee of sortedTargetEmployees) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
+      // Bỏ qua nhân viên đã được thêm vào (như Ngã 4 Thủ Đức)
+      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
+      if (!addedEmployeeIds.has(empId)) {
+        if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
+          // HCM01 is full, add to HCM02 instead
+          addToRoute(employee, hcm02Employees, 'HCM02');
+        }
       }
     }
     
-    // Bước 2: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01 (theo thứ tự từ database)
-    console.log(`PDF Export - Step 2: Adding shared station employees to HCM01 to reach 15 in correct order`);
+    // Bước 3: Thêm nhân viên từ các trạm chung để đủ 15 người cho HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 3: Adding shared station employees to HCM01 to reach 15 in correct order`);
     
-    // Sắp xếp lại nhân viên từ trạm chung theo thứ tự từ database
     const sortedSharedEmployees = await this.sortEmployeesByStationOrder(employeesToMoveToHCM02);
     
     // Ưu tiên đặc biệt: Ngã 3 Bến Gỗ phải được đưa vào HCM01 trước khi HCM01 đủ 15
@@ -880,26 +948,31 @@ export class PdfExportService {
 
     // Đưa Bến Gỗ vào trước
     for (const employee of [...benGoShared, ...otherShared]) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
+      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
+      if (!addedEmployeeIds.has(empId)) {
+        if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
+          // HCM01 is full, add to HCM02 instead
+          addToRoute(employee, hcm02Employees, 'HCM02');
+        }
       }
     }
     
-    // Bước 3: Thêm nhân viên khác để đủ 15 người cho HCM01 (theo thứ tự từ database)
-    console.log(`PDF Export - Step 3: Adding other employees to HCM01 to reach 15 in correct order`);
+    // Bước 4: Thêm nhân viên khác để đủ 15 người cho HCM01 (theo thứ tự từ database)
+    console.log(`PDF Export - Step 4: Adding other employees to HCM01 to reach 15 in correct order`);
     
-    // Sắp xếp lại nhân viên khác theo thứ tự từ database
     const sortedOtherEmployees = await this.sortEmployeesByStationOrder(otherEmployees);
     
     for (const employee of sortedOtherEmployees) {
-      if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
-        // HCM01 is full, add to HCM02 instead
-        addToRoute(employee, hcm02Employees, 'HCM02');
+      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
+      if (!addedEmployeeIds.has(empId)) {
+        if (!addToRoute(employee, hcm01Employees, 'HCM01')) {
+          // HCM01 is full, add to HCM02 instead
+          addToRoute(employee, hcm02Employees, 'HCM02');
+        }
       }
     }
     
-    // Bước 4: QUAN TRỌNG - Đảm bảo tất cả nhân viên từ BV Hòa Hảo được đưa vào HCM01
+    // Bước 5: QUAN TRỌNG - Đảm bảo tất cả nhân viên từ BV Hòa Hảo được đưa vào HCM01
     // Nếu HCM01 đầy, chuyển nhân viên từ các trạm chung (shared stations) từ HCM01 sang HCM02 để tạo chỗ trống
     const sortedBvHoaHaoEmployees = await this.sortEmployeesByStationOrder(bvHoaHaoEmployees);
     for (const employee of sortedBvHoaHaoEmployees) {
@@ -907,14 +980,14 @@ export class PdfExportService {
         // HCM01 is full, cần chuyển nhân viên từ trạm chung từ HCM01 sang HCM02 để tạo chỗ trống
         console.log(`PDF Export - HCM01 is full, moving shared station employees from HCM01 to HCM02 to make room for BV Hòa Hảo employee ${employee.hoTen}`);
         
-        // Tìm nhân viên từ trạm chung trong HCM01 để chuyển sang HCM02
+        // Tìm nhân viên từ trạm chung trong HCM01 để chuyển sang HCM02 (không phải Ngã 4 Thủ Đức)
         let moved = false;
         for (let i = hcm01Employees.length - 1; i >= 0; i--) {
           const empInHCM01 = hcm01Employees[i];
           const stationLower = (empInHCM01.tramXe || '').toLowerCase();
           
-          // Chỉ chuyển nhân viên từ trạm chung (shared stations)
-          if (this.isSharedStation(stationLower)) {
+          // Chỉ chuyển nhân viên từ trạm chung (shared stations) và không phải Ngã 4 Thủ Đức
+          if (this.isSharedStation(stationLower) && !isThuDucStationLocal(empInHCM01.tramXe)) {
             if (moveFromRoute(empInHCM01, hcm01Employees, hcm02Employees)) {
               console.log(`PDF Export - Moved shared station employee ${empInHCM01.hoTen} from HCM01 to HCM02 to make room for BV Hòa Hảo`);
               moved = true;
@@ -935,23 +1008,156 @@ export class PdfExportService {
       }
     }
     
-    // Bước 5: Phân chia nhân viên còn lại cho HCM02 (theo thứ tự từ database)
-    console.log(`PDF Export - Step 5: Distributing remaining employees to HCM02 in correct order`);
+    // Bước 6: QUAN TRỌNG - Đảm bảo HCM01 không vượt quá 15 người
+    // Nếu HCM01 có hơn 15 người, chuyển nhân viên không phải "Ngã 4 Thủ Đức" sang HCM02
+    console.log(`PDF Export - Step 6: Ensuring HCM01 has exactly 15 employees`);
+    
+    while (hcm01Employees.length > maxEmployeesPerRoute) {
+      // Tìm nhân viên không phải "Ngã 4 Thủ Đức" để chuyển sang HCM02
+      let moved = false;
+      for (let i = hcm01Employees.length - 1; i >= 0; i--) {
+        const empInHCM01 = hcm01Employees[i];
+        
+        // Chỉ chuyển nhân viên không phải "Ngã 4 Thủ Đức" và không phải BV Hòa Hảo
+        if (!isThuDucStationLocal(empInHCM01.tramXe) && !this.isBvHoaHaoStation(empInHCM01.tramXe)) {
+          if (moveFromRoute(empInHCM01, hcm01Employees, hcm02Employees)) {
+            console.log(`PDF Export - Moved employee ${empInHCM01.hoTen} from HCM01 to HCM02 to reduce HCM01 to ${hcm01Employees.length}`);
+            moved = true;
+            break;
+          }
+        }
+      }
+      
+      if (!moved) {
+        // Nếu không thể chuyển được, log warning và break
+        console.warn(`PDF Export - WARNING: Could not reduce HCM01 below ${hcm01Employees.length} employees`);
+        break;
+      }
+    }
+    
+    // Bước 7: QUAN TRỌNG - Đảm bảo HCM02 chỉ có nhân viên "Hàng Xanh"
+    console.log(`PDF Export - Step 7: Ensuring HCM02 only has Hàng Xanh employees`);
+    
+    // Thêm tất cả nhân viên "Hàng Xanh" vào HCM02
+    const sortedHangXanhEmployees = await this.sortEmployeesByStationOrder(hangXanhEmployees);
+    for (const employee of sortedHangXanhEmployees) {
+      const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
+      if (!addedEmployeeIds.has(empId)) {
+        addToRoute(employee, hcm02Employees, 'HCM02');
+      }
+    }
+    
+    // Loại bỏ các nhân viên không phải "Hàng Xanh" khỏi HCM02 (nếu có)
+    const nonHangXanhInHCM02: Registration[] = [];
+    for (let i = hcm02Employees.length - 1; i >= 0; i--) {
+      const emp = hcm02Employees[i];
+      if (!this.isHangXanhStation(emp.tramXe)) {
+        nonHangXanhInHCM02.push(emp);
+        hcm02Employees.splice(i, 1);
+        const empId = `${emp.hoTen}_${emp.tramXe}_${emp.ngayDangKy}`;
+        addedEmployeeIds.delete(empId);
+      }
+    }
+    
+    if (nonHangXanhInHCM02.length > 0) {
+      console.log(`PDF Export - Removed ${nonHangXanhInHCM02.length} non-Hàng Xanh employees from HCM02`);
+      // Thêm các nhân viên này vào HCM01 nếu còn chỗ
+      for (const employee of nonHangXanhInHCM02) {
+        if (hcm01Employees.length < maxEmployeesPerRoute) {
+          addToRoute(employee, hcm01Employees, 'HCM01');
+        } else {
+          console.warn(`PDF Export - WARNING: Employee ${employee.hoTen} from station "${employee.tramXe}" cannot be added to HCM01 (full) or HCM02 (only Hàng Xanh)`);
+        }
+      }
+    }
+    
+    // Bước 8: Phân chia nhân viên còn lại cho HCM02 (chỉ nếu là Hàng Xanh)
+    console.log(`PDF Export - Step 8: Distributing remaining Hàng Xanh employees to HCM02 in correct order`);
     
     // Lấy tất cả nhân viên chưa được thêm vào
-    const allProcessedEmployees = [...sortedTargetEmployees, ...sortedSharedEmployees, ...sortedOtherEmployees, ...sortedBvHoaHaoEmployees];
+    const allProcessedEmployees = [...sortedTargetEmployees, ...sortedSharedEmployees, ...sortedOtherEmployees, ...sortedBvHoaHaoEmployees, ...sortedHangXanhEmployees];
     const remainingEmployees = allProcessedEmployees.filter(emp => {
       const empId = `${emp.hoTen}_${emp.tramXe}_${emp.ngayDangKy}`;
       return !addedEmployeeIds.has(empId);
     });
     
-    // Sắp xếp lại nhân viên còn lại theo thứ tự từ database
-    const sortedRemainingEmployees = await this.sortEmployeesByStationOrder(remainingEmployees);
+    // Chỉ thêm nhân viên "Hàng Xanh" vào HCM02
+    const remainingHangXanhEmployees = remainingEmployees.filter(emp => this.isHangXanhStation(emp.tramXe));
+    const sortedRemainingHangXanhEmployees = await this.sortEmployeesByStationOrder(remainingHangXanhEmployees);
     
-    for (const employee of sortedRemainingEmployees) {
+    for (const employee of sortedRemainingHangXanhEmployees) {
       if (!addToRoute(employee, hcm02Employees, 'HCM02')) {
         console.log(`PDF Export - HCM02 full, employee ${employee.hoTen} will be handled by overflow logic`);
         break;
+      }
+    }
+    
+    // Bước 9: QUAN TRỌNG - Nếu HCM02 còn thiếu, tìm nhân viên từ các tuyến khác có trạm phù hợp với HCM02
+    console.log(`PDF Export - Step 9: Checking if HCM02 needs more employees (current: ${hcm02Employees.length}/${maxEmployeesPerRoute})`);
+    
+    if (hcm02Employees.length < maxEmployeesPerRoute) {
+      const neededForHCM02 = maxEmployeesPerRoute - hcm02Employees.length;
+      console.log(`PDF Export - HCM02 needs ${neededForHCM02} more employees, searching other routes...`);
+      
+      // Lọc nhân viên từ các tuyến khác chưa được thêm vào HCM01 hoặc HCM02
+      const availableOtherRoutesEmployees = otherRoutesEmployees.filter(emp => {
+        const empId = `${emp.hoTen}_${emp.tramXe}_${emp.ngayDangKy}`;
+        return !addedEmployeeIds.has(empId);
+      });
+      
+      console.log(`PDF Export - Found ${availableOtherRoutesEmployees.length} available employees from other routes`);
+      
+      // Tìm nhân viên từ các tuyến khác có trạm phù hợp với HCM02
+      // Các trạm phù hợp: Bà Chiểu, Chợ Gò Vấp, Hóc Môn, Chùa Hoằng Pháp, Trường Lý Tự Trọng, Hàng Xanh
+      const hcm02CompatibleEmployees = availableOtherRoutesEmployees.filter(emp => {
+        const station = emp.tramXe || '';
+        // Kiểm tra xem trạm có phù hợp với HCM02 không
+        return this.isHCM02PriorityStation(station) || this.isHangXanhStation(station);
+      });
+      
+      console.log(`PDF Export - Found ${hcm02CompatibleEmployees.length} employees from other routes compatible with HCM02`);
+      
+      if (hcm02CompatibleEmployees.length > 0) {
+        // Sắp xếp theo thứ tự trạm và thêm vào HCM02
+        const sortedCompatibleEmployees = await this.sortEmployeesByStationOrder(hcm02CompatibleEmployees);
+        
+        let addedCount = 0;
+        for (const employee of sortedCompatibleEmployees) {
+          if (addedCount >= neededForHCM02) {
+            break;
+          }
+          
+          const empId = `${employee.hoTen}_${employee.tramXe}_${employee.ngayDangKy}`;
+          if (!addedEmployeeIds.has(empId)) {
+            if (addToRoute(employee, hcm02Employees, 'HCM02')) {
+              addedCount++;
+              console.log(`PDF Export - Added employee ${employee.hoTen} from station "${employee.tramXe}" to HCM02 from other route`);
+              
+              // Xóa nhân viên này khỏi tuyến gốc của họ
+              routes.forEach(route => {
+                if (route.routeName !== 'HCM01' && route.routeName !== 'HCM02' && route.registrations) {
+                  const index = route.registrations.findIndex(emp => 
+                    emp.hoTen === employee.hoTen && 
+                    emp.tramXe === employee.tramXe && 
+                    emp.ngayDangKy === employee.ngayDangKy
+                  );
+                  if (index >= 0) {
+                    route.registrations.splice(index, 1);
+                    console.log(`PDF Export - Removed employee ${employee.hoTen} from route ${route.routeName}`);
+                  }
+                }
+              });
+            }
+          }
+        }
+        
+        if (addedCount > 0) {
+          console.log(`PDF Export - Successfully added ${addedCount} employees to HCM02 from other routes`);
+        } else {
+          console.log(`PDF Export - Could not add employees from other routes (may already be assigned)`);
+        }
+      } else {
+        console.log(`PDF Export - No compatible employees found from other routes for HCM02`);
       }
     }
     
@@ -1825,6 +2031,26 @@ export class PdfExportService {
   }
 
   /**
+   * Kiểm tra xem trạm có phải là "Hàng Xanh" không
+   */
+  private isHangXanhStation(tramXe: string): boolean {
+    if (!tramXe) return false;
+    
+    const station = tramXe.toLowerCase();
+    
+    const hangXanhStations = [
+      'hàng xanh',
+      'hang xanh',
+      'hàng xanh (gần văn thánh)',
+      'hang xanh (gan van thanh)'
+    ];
+    
+    return hangXanhStations.some(stationName => 
+      station.includes(stationName) || stationName.includes(station)
+    );
+  }
+
+  /**
    * Kiểm tra xem trạm có phải là "Ngã 3 Bến Gỗ" hoặc "Ngã 3 Long Bình Tân" không
    * Các trạm này được ưu tiên vào tuyến Biên Hòa để tối ưu chi phí
    */
@@ -1853,12 +2079,14 @@ export class PdfExportService {
     
     const stationLower = station.toLowerCase();
     
+    // RMK thuộc tuyến HCM (HCM01/HCM02), mặc định ưu tiên HCM01 để xuất PDF đúng
     const hcm01PriorityStations = [
       'đinh tiên hoàng', 'dinh tien hoang',
       'hai bà trưng', 'hai ba trung',
       'bv hòa hảo', 'bv hoa hao', 'bệnh viện hòa hảo', 'benh vien hoa hao',
       'ngã 4 thủ đức', 'nga 4 thu duc',
-      'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)'
+      'hàng xanh', 'hang xanh', 'hàng xanh (gần văn thánh)', 'hang xanh (gan van thanh)',
+      'rmk'
     ];
     
     return hcm01PriorityStations.some(priorityStation =>
