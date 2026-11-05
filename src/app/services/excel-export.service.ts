@@ -40,7 +40,7 @@ export interface RouteVehicleAssignment {
   thuTu: number;
 }
 
-import { resolveOvertimeRoute, sortByStation } from './overtime-grouping.util';
+import { groupOvertimeByRouteAndStation, compareRouteNames } from './overtime-grouping.util';
 
 export interface RouteInfo {
   routeName: string;
@@ -100,13 +100,15 @@ export class ExcelExportService {
 
       // 3) Tạo Excel workbook với ONE sheet chứa tất cả tuyến
       const workbook = XLSX.utils.book_new();
-      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups);
+      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups, selectedDate);
 
       // Thêm worksheet vào workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh Sach Phu Troi');
 
       // 4) Xuất file Excel
-      const fileName = `Phieu_Bao_Lam_Them_Gio_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const d = selectedDate || new Date();
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const fileName = `Phieu_Bao_Lam_Them_Gio_${ymd}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
     } catch (error) {
@@ -167,16 +169,19 @@ export class ExcelExportService {
    * Gom nhóm theo tuyến với thông tin xe được phân công
    */
   private async groupRegistrationsByRouteWithVehicleAssignments(registrations: Registration[], vehicleAssignments: RouteVehicleAssignment[]): Promise<RouteInfo[]> {
-    // Load station-route mapping from database
-    await this.stationRouteMappingService.loadStationRouteMapping();
-    
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
+    }
+
     const routeMap = new Map<string, RouteInfo>();
 
-    for (const registration of registrations) {
-      // Nguyên tắc: gom theo tuyến đã đăng ký + trạm (xem overtime-grouping.util.ts)
-      const finalRouteName = resolveOvertimeRoute(registration, station =>
-        this.stationRouteMappingService.getRouteForStation(station) || null
-      );
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
+
+    for (const registration of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(registration)!;
       
       if (!routeMap.has(finalRouteName)) {
         // Tìm thông tin xe được phân công cho tuyến này
@@ -251,15 +256,7 @@ export class ExcelExportService {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    // Trong mỗi tuyến: nhân viên cùng trạm đứng liền nhau, trạm theo thứ tự đón
-    if (!this.dataCacheService.isDataLoaded()) {
-      await this.dataCacheService.loadAllData();
-    }
-    const finalRoutes = routes.map(route => ({
-      ...route,
-      registrations: sortByStation(route.registrations || [], station =>
-        this.dataCacheService.getStationOrderInRoute(route.routeName, station))
-    }));
+    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
 
     return finalRoutes;
   }
@@ -789,12 +786,12 @@ export class ExcelExportService {
   /**
    * Create single sheet with all routes and stations grouped (like PDF)
    */
-  private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[]): Promise<XLSX.WorkSheet> {
+  private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[], reportDate?: Date): Promise<XLSX.WorkSheet> {
     const data: any[][] = [];
 
-    // Header
+    // Header: ngày của danh sách (ngày đang chọn), không phải ngày xuất file
     data.push(['PHIẾU BÁO LÀM THÊM GIỜ']);
-    data.push([`Ngày ${new Date().toLocaleDateString('vi-VN')}`]);
+    data.push([`Ngày ${(reportDate || new Date()).toLocaleDateString('vi-VN')}`]);
     data.push([]);
     
     // Table header - matching template order: STT, Họ và tên, Trạm xe, Điện thoại, (Empty), Từ..., Đến...

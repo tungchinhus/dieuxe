@@ -10,7 +10,7 @@ import { RouteDetail } from '../models/route-detail.model';
 // (Import dưới dùng cho map field; có thể giữ hoặc bỏ nếu không cần)
 import { DangKyPhanXe } from '../models/vehicle.model';
 
-import { resolveOvertimeRoute, sortByStation } from './overtime-grouping.util';
+import { groupOvertimeByRouteAndStation, compareRouteNames } from './overtime-grouping.util';
 
 export interface RouteInfo {
   routeName: string;
@@ -289,11 +289,13 @@ export class PdfExportService {
       await this.dataCacheService.loadAllData();
     }
 
-    for (const registration of registrations) {
-      // Nguyên tắc: gom theo tuyến đã đăng ký + trạm (xem overtime-grouping.util.ts)
-      const finalRouteName = resolveOvertimeRoute(registration, station =>
-        this.dataCacheService.getRouteForStation(station) || this.determineRouteFromStationName(station) || null
-      );
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
+
+    for (const registration of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(registration)!;
       
       if (!routeMap.has(finalRouteName)) {
         // Tìm thông tin xe được phân công cho tuyến này
@@ -383,11 +385,7 @@ export class PdfExportService {
     });
 
     // Trong mỗi tuyến: nhân viên cùng trạm đứng liền nhau, trạm theo thứ tự đón
-    const finalRoutes = routes.map(route => ({
-      ...route,
-      registrations: sortByStation(route.registrations || [], station =>
-        this.dataCacheService.getStationOrderInRoute(route.routeName, station))
-    }));
+    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
 
     return finalRoutes;
   }
@@ -404,11 +402,13 @@ export class PdfExportService {
       await this.dataCacheService.loadAllData();
     }
 
-    for (const reg of registrations) {
-      // Nguyên tắc: gom theo tuyến đã đăng ký + trạm (xem overtime-grouping.util.ts)
-      const finalRouteName = resolveOvertimeRoute(reg, station =>
-        this.dataCacheService.getRouteForStation(station) || this.determineRouteFromStationName(station) || null
-      );
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
+
+    for (const reg of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(reg)!;
 
       if (!routeMap.has(finalRouteName)) {
         routeMap.set(finalRouteName, {
@@ -454,11 +454,7 @@ export class PdfExportService {
     });
 
     // Trong mỗi tuyến: nhân viên cùng trạm đứng liền nhau, trạm theo thứ tự đón
-    const finalRoutes = routes.map(route => ({
-      ...route,
-      registrations: sortByStation(route.registrations || [], station =>
-        this.dataCacheService.getStationOrderInRoute(route.routeName, station))
-    }));
+    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
 
     return finalRoutes;
   }

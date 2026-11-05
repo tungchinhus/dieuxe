@@ -2440,11 +2440,7 @@ export class DangKyXeComponent implements OnInit {
     if (!this.dataCacheService.isDataLoaded()) {
       await this.dataCacheService.loadAllData();
     }
-    return groupOvertimeByRouteAndStation(
-      registrations,
-      station => this.dataCacheService.getRouteForStation(station),
-      (route, station) => this.dataCacheService.getStationOrderInRoute(route, station)
-    );
+    return groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
   }
 
   /**
