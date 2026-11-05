@@ -523,11 +523,14 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return;
     }
 
-    // Phân bổ xe cho từng tuyến dựa trên số nhân viên
+    // Phân bổ xe cho từng tuyến dựa trên số nhân viên.
+    // Mỗi xe chỉ gán cho 1 tuyến (trước đây cùng 1 xe bị gán cho nhiều tuyến).
+    const pool = [...availableVehicles];
     this.routeAssignments.forEach(route => {
-      const bestVehicle = this.selectBestVehicleForRoute(availableVehicles, route);
+      const bestVehicle = this.selectBestVehicleForRoute([...pool], route);
       if (bestVehicle) {
         this.assignVehicleToRoute(route.routeId, bestVehicle);
+        pool.splice(pool.indexOf(bestVehicle), 1);
       }
     });
   }

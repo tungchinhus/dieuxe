@@ -40,6 +40,8 @@ export interface RouteVehicleAssignment {
   thuTu: number;
 }
 
+import { groupOvertimeByRouteAndStation, compareRouteNames, selfTransportGroup } from './overtime-grouping.util';
+
 export interface RouteInfo {
   routeName: string;
   registrations: Registration[];
@@ -98,13 +100,15 @@ export class ExcelExportService {
 
       // 3) Tạo Excel workbook với ONE sheet chứa tất cả tuyến
       const workbook = XLSX.utils.book_new();
-      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups);
+      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups, selectedDate);
 
       // Thêm worksheet vào workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh Sach Phu Troi');
 
       // 4) Xuất file Excel
-      const fileName = `Phieu_Bao_Lam_Them_Gio_${new Date().toISOString().split('T')[0]}.xlsx`;
+      const d = selectedDate || new Date();
+      const ymd = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+      const fileName = `Phieu_Bao_Lam_Them_Gio_${ymd}.xlsx`;
       XLSX.writeFile(workbook, fileName);
 
     } catch (error) {
@@ -165,38 +169,19 @@ export class ExcelExportService {
    * Gom nhóm theo tuyến với thông tin xe được phân công
    */
   private async groupRegistrationsByRouteWithVehicleAssignments(registrations: Registration[], vehicleAssignments: RouteVehicleAssignment[]): Promise<RouteInfo[]> {
-    // Load station-route mapping from database
-    await this.stationRouteMappingService.loadStationRouteMapping();
-    
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
+    }
+
     const routeMap = new Map<string, RouteInfo>();
 
-    for (const registration of registrations) {
-      let finalRouteName = 'Chưa phân tuyến';
-      
-      // Áp dụng logic ưu tiên gom HCM routes TRƯỚC khi check database
-      // Điều này đảm bảo các trạm ưu tiên như "Hàng Xanh (Gần Văn Thánh)" được gán đúng vào HCM01
-      if (registration.tramXe && registration.tramXe.trim() !== '') {
-        // Kiểm tra trạm ưu tiên HCM01 trước (bao gồm Hàng Xanh)
-        if (this.isHCM01PriorityStation(registration.tramXe)) {
-          finalRouteName = 'HCM01';
-          console.log(`Excel Export - Station "${registration.tramXe}" is HCM01 priority, assigned to HCM01`);
-        } else if (this.isHCM02PriorityStation(registration.tramXe)) {
-          finalRouteName = 'HCM02';
-          console.log(`Excel Export - Station "${registration.tramXe}" is HCM02 priority, assigned to HCM02`);
-        } else {
-          // Nếu không phải trạm ưu tiên, mới check database
-          const mappedRoute = this.stationRouteMappingService.getRouteForStation(registration.tramXe);
-          if (mappedRoute) {
-            finalRouteName = mappedRoute;
-            console.log(`Excel Export - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}" from database`);
-          } else {
-            console.warn(`Excel Export - No route mapping found for station "${registration.tramXe}"`);
-          }
-        }
-      }
-      
-      // Áp dụng logic ưu tiên gom HCM routes và xử lý "tự túc" (cho các trường hợp đặc biệt)
-      finalRouteName = this.applyHCMGroupingPriority(finalRouteName, registration.tramXe);
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
+
+    for (const registration of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(registration)!;
       
       if (!routeMap.has(finalRouteName)) {
         // Tìm thông tin xe được phân công cho tuyến này
@@ -271,11 +256,11 @@ export class ExcelExportService {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với PDF export
-    const processedRoutes = await this.applyHCMOverflowLogicForExcel(routes);
-
-    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa (like PDF)
-    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+    const finalRoutes: RouteInfo[] = [
+      ...[...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName)),
+      // Nhóm TỰ TÚC ở cuối phiếu (không ghi xe)
+      ...selfTransportGroup(registrations).map(g => ({ routeName: g.routeName, registrations: g.registrations }))
+    ];
 
     return finalRoutes;
   }
@@ -805,12 +790,12 @@ export class ExcelExportService {
   /**
    * Create single sheet with all routes and stations grouped (like PDF)
    */
-  private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[]): Promise<XLSX.WorkSheet> {
+  private async createSingleSheetWithAllRoutes(routeGroups: RouteInfo[], reportDate?: Date): Promise<XLSX.WorkSheet> {
     const data: any[][] = [];
 
-    // Header
+    // Header: ngày của danh sách (ngày đang chọn), không phải ngày xuất file
     data.push(['PHIẾU BÁO LÀM THÊM GIỜ']);
-    data.push([`Ngày ${new Date().toLocaleDateString('vi-VN')}`]);
+    data.push([`Ngày ${(reportDate || new Date()).toLocaleDateString('vi-VN')}`]);
     data.push([]);
     
     // Table header - matching template order: STT, Họ và tên, Trạm xe, Điện thoại, (Empty), Từ..., Đến...
@@ -832,7 +817,10 @@ export class ExcelExportService {
       data.push([]);
       const routeHeaderText = `TUYẾN: ${route.routeName}`;
       if (route.driverInfo) {
-        data.push([`${routeHeaderText} | Tài xế: ${route.driverInfo.name} | SĐT: ${route.driverInfo.phone} | Xe: ${route.driverInfo.vehicleNumber}`, '', '', '', '', '', '']);
+        // Theo mẫu danh sách phụ trội: "TUYẾN: HCM01 | TX THIỆN - SĐT: 0918688500 - 60B 06121"
+        const driverName = String(route.driverInfo.name || '').replace(/^\s*TX\s+/i, '').trim().toUpperCase();
+        const plate = this.formatLicensePlate(route.driverInfo.vehicleNumber);
+        data.push([`${routeHeaderText} | TX ${driverName} - SĐT: ${route.driverInfo.phone || ''} - ${plate}`, '', '', '', '', '', '']);
       } else {
         data.push([routeHeaderText, '', '', '', '', '', '']);
       }
@@ -895,6 +883,14 @@ export class ExcelExportService {
   /**
    * Group registrations by station
    */
+  /** "60F01800" -> "60F 01800" (giữ nguyên nếu không đúng dạng) */
+  private formatLicensePlate(plate: string): string {
+    const raw = String(plate || '').trim();
+    const compact = raw.replace(/[\s.\-]/g, '').toUpperCase();
+    const m = /^(\d{2}[A-Z]{1,2})(\d{5})$/.exec(compact) || /^(\d{2}[A-Z]{1,2}\d)(\d{4,5})$/.exec(compact);
+    return m ? `${m[1]} ${m[2]}` : raw;
+  }
+
   private async groupRegistrationsByStation(registrations: Registration[]): Promise<{ [station: string]: Registration[] }> {
     const grouped: { [station: string]: Registration[] } = {};
     
@@ -907,9 +903,8 @@ export class ExcelExportService {
       grouped[station].push(reg);
     }
     
-    // Sort stations within the route
-    const sortedGrouped = await this.sortStationsByOrder(grouped);
-    return sortedGrouped;
+    // Danh sách đã được xếp theo quy luật chung (overtime-grouping.util.ts): giữ nguyên thứ tự trạm
+    return grouped;
   }
   
   /**

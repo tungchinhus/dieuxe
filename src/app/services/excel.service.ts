@@ -336,26 +336,34 @@ export class ExcelService {
         // Extract data using found column indices
         const hoTen = this.getStringValue(row[colIndices.hoTen]) || '';
         const tramXe = this.getStringValue(row[colIndices.tramXe]) || '';
-        const dienThoai = this.getStringValue(row[colIndices.dienThoai]) || '';
-        
-        // Try to extract time from the found columns, or search in nearby columns
-        let thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianBatDau])) || '';
-        let thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianKetThuc])) || '';
-        
-        // If time not found in expected columns, try searching in nearby columns (for .xls files with different structure)
-        if (!thoiGianBatDau || !thoiGianKetThuc) {
-          for (let j = 0; j < Math.min(row.length, 10); j++) {
-            const cellValue = this.getStringValue(row[j]);
-            if (!thoiGianBatDau && this.extractTimeFromString(cellValue)) {
-              thoiGianBatDau = this.extractTimeFromString(cellValue);
-              console.log(`Found start time in column ${j}: ${thoiGianBatDau}`);
-            }
-            if (!thoiGianKetThuc && j > colIndices.thoiGianBatDau && this.extractTimeFromString(cellValue)) {
-              thoiGianKetThuc = this.extractTimeFromString(cellValue);
-              console.log(`Found end time in column ${j}: ${thoiGianKetThuc}`);
-              break; // Found end time, stop searching
-            }
+        // Điện thoại: chỉ nhận chuỗi giống số điện thoại; nếu cột bị lệch thì tìm trong cả dòng
+        let dienThoai = this.normalizePhone(this.getStringValue(row[colIndices.dienThoai]));
+        if (!dienThoai) {
+          for (let j = 0; j < Math.min(row.length, 12) && !dienThoai; j++) {
+            if (j === colIndices.hoTen || j === colIndices.tramXe || j === colIndices.stt) continue;
+            dienThoai = this.normalizePhone(this.getStringValue(row[j]));
           }
+        }
+
+        // Giờ: chỉ lấy từ đúng cột Từ/Đến và phải là giờ hợp lệ (tránh đọc nhầm số điện thoại, tên trạm)
+        let thoiGianBatDau = this.validTime(this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianBatDau])));
+        let thoiGianKetThuc = this.validTime(this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianKetThuc])));
+
+        // Nếu cột giờ bị lệch: chỉ tìm ở các cột sau họ tên/trạm/điện thoại, ô phải có dạng giờ rõ ràng (15h45, 15:45)
+        if (!thoiGianBatDau || !thoiGianKetThuc) {
+          const startCol = Math.max(colIndices.dienThoai, colIndices.tramXe, colIndices.hoTen) + 1;
+          const found: string[] = [];
+          for (let j = startCol; j < Math.min(row.length, startCol + 6); j++) {
+            const cellValue = this.getStringValue(row[j]);
+            if (!/\d{1,2}\s*[h:]\s*\d{2}/i.test(cellValue)) continue;
+            const t = this.validTime(this.extractTimeFromString(cellValue));
+            if (t) found.push(t);
+          }
+          if (!thoiGianBatDau && found.length) thoiGianBatDau = found[0];
+          if (!thoiGianKetThuc && found.length > 1) thoiGianKetThuc = found[1];
+        }
+        if (thoiGianBatDau && thoiGianKetThuc && thoiGianKetThuc <= thoiGianBatDau) {
+          thoiGianKetThuc = '';
         }
         
         // Use default time for overtime work if not found (15h45 - 19h)
@@ -369,7 +377,7 @@ export class ExcelService {
         }
         
         // Skip rows that are missing required fields (Họ tên and Trạm xe are required)
-        if (!hoTen || !tramXe) {
+        if (!hoTen || !tramXe || !/\p{L}/u.test(hoTen)) {
           skippedRows++;
           console.warn(
             `Skipping row ${i} due to missing required data. ` +
@@ -561,6 +569,22 @@ export class ExcelService {
    * @param timeString - Time string from Excel
    * @returns Formatted time string (HH:mm)
    */
+  /** Trả về số điện thoại (9-11 chữ số, bắt đầu bằng 0 hoặc 84) hoặc '' */
+  private normalizePhone(value: string): string {
+    if (!value) return '';
+    const digits = value.replace(/[\s.\-()]/g, '');
+    if (/^(0\d{8,10}|84\d{8,10})$/.test(digits)) return digits;
+    if (/^\d{9}$/.test(digits)) return '0' + digits; // Excel bỏ số 0 đầu
+    return '';
+  }
+
+  /** Giữ giờ hợp lệ HH:mm (00-23:00-59), ngược lại trả về '' */
+  private validTime(time: string): string {
+    const m = /^(\d{2}):(\d{2})$/.exec(time || '');
+    if (!m) return '';
+    return parseInt(m[1], 10) < 24 && parseInt(m[2], 10) < 60 ? time : '';
+  }
+
   private extractTimeFromString(timeString: string): string {
     if (!timeString) return '';
     

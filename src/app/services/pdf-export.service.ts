@@ -10,6 +10,8 @@ import { RouteDetail } from '../models/route-detail.model';
 // (Import dưới dùng cho map field; có thể giữ hoặc bỏ nếu không cần)
 import { DangKyPhanXe } from '../models/vehicle.model';
 
+import { groupOvertimeByRouteAndStation, compareRouteNames } from './overtime-grouping.util';
+
 export interface RouteInfo {
   routeName: string;
   vehicleType: '16chỗ' | '29chỗ' | '45chỗ' | 'Taxi' | 'Taxi 7 chỗ';
@@ -287,24 +289,13 @@ export class PdfExportService {
       await this.dataCacheService.loadAllData();
     }
 
-    for (const registration of registrations) {
-      let finalRouteName = 'Chưa phân tuyến';
-      
-      // Enhanced route assignment based on station column
-      if (registration.tramXe && registration.tramXe.trim() !== '') {
-        const mappedRoute = this.dataCacheService.getRouteForStation(registration.tramXe);
-        if (mappedRoute) {
-          finalRouteName = mappedRoute;
-          console.log(`PDF Export - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}"`);
-        } else {
-          // Fallback: try to determine route from station name patterns
-          finalRouteName = this.determineRouteFromStationName(registration.tramXe);
-          console.log(`PDF Export - Fallback mapping for employee ${registration.hoTen} from station "${registration.tramXe}" to route "${finalRouteName}"`);
-        }
-      }
-      
-      // Áp dụng logic ưu tiên gom HCM routes và xử lý "tự túc"
-      finalRouteName = this.applyHCMGroupingPriority(finalRouteName, registration.tramXe);
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
+
+    for (const registration of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(registration)!;
       
       if (!routeMap.has(finalRouteName)) {
         // Tìm thông tin xe được phân công cho tuyến này
@@ -393,11 +384,8 @@ export class PdfExportService {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với Excel export
-    const processedRoutes = await this.applyHCMOverflowLogicForPDF(routes);
-
-    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa
-    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+    // Trong mỗi tuyến: nhân viên cùng trạm đứng liền nhau, trạm theo thứ tự đón
+    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
 
     return finalRoutes;
   }
@@ -414,24 +402,13 @@ export class PdfExportService {
       await this.dataCacheService.loadAllData();
     }
 
-    for (const reg of registrations) {
-      let finalRouteName = 'Chưa phân tuyến';
-      
-      // Enhanced route assignment based on station column
-      if (reg.tramXe && reg.tramXe.trim() !== '') {
-        const mappedRoute = this.dataCacheService.getRouteForStation(reg.tramXe);
-        if (mappedRoute) {
-          finalRouteName = mappedRoute;
-          console.log(`PDF Export - Mapped employee ${reg.hoTen} from station "${reg.tramXe}" to route "${mappedRoute}"`);
-        } else {
-          // Fallback: try to determine route from station name patterns
-          finalRouteName = this.determineRouteFromStationName(reg.tramXe);
-          console.log(`PDF Export - Fallback mapping for employee ${reg.hoTen} from station "${reg.tramXe}" to route "${finalRouteName}"`);
-        }
-      }
+    // Quy luật xếp xe phụ trội: xem overtime-grouping.util.ts (dùng chung cho dialog, PDF, Excel)
+    const overtimeGroups = groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
+    const routeOfReg = new Map<Registration, string>();
+    overtimeGroups.forEach(g => g.registrations.forEach(r => routeOfReg.set(r, g.routeName)));
 
-      // Áp dụng logic ưu tiên gom HCM routes
-      finalRouteName = this.applyHCMGroupingPriority(finalRouteName, reg.tramXe);
+    for (const reg of overtimeGroups.flatMap(g => g.registrations)) {
+      const finalRouteName = routeOfReg.get(reg)!;
 
       if (!routeMap.has(finalRouteName)) {
         routeMap.set(finalRouteName, {
@@ -476,11 +453,8 @@ export class PdfExportService {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với Excel export
-    const processedRoutes = await this.applyHCMOverflowLogicForPDF(routes);
-
-    // Áp dụng logic phân chia tương tự cho các tuyến Biên Hòa
-    const finalRoutes = await this.applyBHDistributionLogic(processedRoutes);
+    // Trong mỗi tuyến: nhân viên cùng trạm đứng liền nhau, trạm theo thứ tự đón
+    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
 
     return finalRoutes;
   }
@@ -2634,7 +2608,9 @@ export class PdfExportService {
     }
     
     // Sắp xếp các trạm theo thuTu từ RouteDetail (Quản lý tuyến đường)
-    const sortedGrouped = await this.sortStationsByThuTu(grouped, finalRouteCode);
+    // Danh sách đã được xếp theo quy luật chung (overtime-grouping.util.ts): giữ nguyên thứ tự trạm
+    const sortedGrouped = grouped;
+    void finalRouteCode;
     
     return sortedGrouped;
   }

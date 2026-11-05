@@ -29,6 +29,7 @@ import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
 import { RouteDetailService } from '../../services/route-detail.service';
 import { DataCacheService } from '../../services/data-cache.service';
+import { groupOvertimeByRouteAndStation, selfTransportGroup } from '../../services/overtime-grouping.util';
 import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
 import { RouteVehicleAssignmentDialogComponent } from '../quan-ly-xe-dua-don/route-vehicle-assignment-dialog/route-vehicle-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
@@ -2174,7 +2175,8 @@ export class DangKyXeComponent implements OnInit {
             await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(
               result.routeAssignments,
               base,
-              routeGroups
+              // Excel: các xe theo quy luật chung + nhóm TỰ TÚC ở cuối (không ghi xe)
+              [...routeGroups, ...selfTransportGroup(todayRegistrations)]
             );
 
             // Show success message
@@ -2435,83 +2437,11 @@ export class DangKyXeComponent implements OnInit {
    * Group registrations by route using StationRouteMappingService to map by tramXe
    */
   private async groupRegistrationsByRouteForDialog(registrations: Registration[]): Promise<any[]> {
-    console.log('Dialog - Starting groupRegistrationsByRouteForDialog with', registrations.length, 'registrations');
-    const routeMap = new Map<string, any>();
-
-    for (const registration of registrations) {
-      let finalRouteName = 'Chưa phân tuyến';
-      
-      // Nếu đã có maTuyenXe, sử dụng nó
-      if (registration.maTuyenXe && registration.maTuyenXe.trim() !== '') {
-        finalRouteName = registration.maTuyenXe;
-        console.log(`Dialog - Using existing maTuyenXe "${finalRouteName}" for ${registration.hoTen}`);
-      } else if (registration.tramXe && registration.tramXe.trim() !== '') {
-        // Nếu chưa có maTuyenXe, map từ tramXe sử dụng cache
-        const mappedRoute = this.dataCacheService.getRouteForStation(registration.tramXe);
-        if (mappedRoute) {
-          finalRouteName = mappedRoute;
-          console.log(`Dialog - Mapped employee ${registration.hoTen} from station "${registration.tramXe}" to route "${mappedRoute}"`);
-        } else {
-          console.warn(`Dialog - No route mapping found for station "${registration.tramXe}"`);
-        }
-      }
-      
-      // Apply HCM grouping priority logic (same as PDF generation)
-      const originalRouteName = finalRouteName;
-      finalRouteName = this.applyHCMGroupingPriority(finalRouteName, registration.tramXe);
-      if (originalRouteName !== finalRouteName) {
-        console.log(`Dialog - HCM grouping priority changed route from "${originalRouteName}" to "${finalRouteName}" for ${registration.hoTen}`);
-      }
-      
-      if (!routeMap.has(finalRouteName)) {
-        routeMap.set(finalRouteName, {
-          routeName: finalRouteName,
-          registrations: []
-        });
-      }
-
-      routeMap.get(finalRouteName)!.registrations.push(registration);
+    // Nguyên tắc: gom nhân viên cùng tuyến và cùng trạm (xem overtime-grouping.util.ts)
+    if (!this.dataCacheService.isDataLoaded()) {
+      await this.dataCacheService.loadAllData();
     }
-
-    // Convert to array: giữ cả tuyến TỰ TÚC để Excel xuất đủ nhân viên (trước đây loại TỰ TÚC khiến file thiếu)
-    const routes = Array.from(routeMap.values()).filter(route => 
-      route.registrations && 
-      route.registrations.length > 0
-    );
-
-    console.log('Dialog - Routes before sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
-
-    // Sort routes: HCM01, HCM02, BH01, BH02, BH03, TỰ TÚC (và Chưa phân tuyến nếu có)
-    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'TỰ TÚC'];
-    
-    routes.sort((a, b) => {
-      const indexA = routeOrder.indexOf(a.routeName);
-      const indexB = routeOrder.indexOf(b.routeName);
-      
-      // If both routes are in the predefined order, sort by their position
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
-      }
-      
-      // If only one route is in the predefined order, prioritize it
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
-      
-      // If neither route is in the predefined order, sort alphabetically
-      return a.routeName.localeCompare(b.routeName);
-    });
-
-    console.log('Dialog - Routes after sorting:', routes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
-
-    // Áp dụng logic overflow HCM để đảm bảo tính nhất quán với PDF export
-    let processedRoutes = await this.applyHCMOverflowLogicForDialog(routes);
-
-    // Áp dụng logic phân chia Biên Hòa giống PDF export
-    processedRoutes = await this.applyBHDistributionLogicForDialog(processedRoutes);
-
-    console.log('Dialog - Final processed routes:', processedRoutes.map(r => `${r.routeName} (${r.registrations?.length || 0} employees)`));
-
-    return processedRoutes;
+    return groupOvertimeByRouteAndStation(registrations, this.dataCacheService.getRouteDetails());
   }
 
   /**
