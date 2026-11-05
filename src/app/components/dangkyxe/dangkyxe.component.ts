@@ -29,7 +29,7 @@ import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
 import { RouteDetailService } from '../../services/route-detail.service';
 import { DataCacheService } from '../../services/data-cache.service';
-import { groupOvertimeByRouteAndStation } from '../../services/overtime-grouping.util';
+import { groupOvertimeByRouteAndStation, selfTransportGroup } from '../../services/overtime-grouping.util';
 import { StationAssignmentDialogComponent } from '../quan-ly-xe-dua-don/station-assignment-dialog/station-assignment-dialog.component';
 import { RouteVehicleAssignmentDialogComponent } from '../quan-ly-xe-dua-don/route-vehicle-assignment-dialog/route-vehicle-assignment-dialog.component';
 import { AuthService } from '../../services/auth.service';
@@ -2175,7 +2175,8 @@ export class DangKyXeComponent implements OnInit {
             await this.excelExportService.exportOvertimeReportExcelWithVehicleAssignments(
               result.routeAssignments,
               base,
-              routeGroups
+              // Excel: các xe theo quy luật chung + nhóm TỰ TÚC ở cuối (không ghi xe)
+              [...routeGroups, ...selfTransportGroup(todayRegistrations)]
             );
 
             // Show success message

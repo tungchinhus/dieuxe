@@ -40,7 +40,7 @@ export interface RouteVehicleAssignment {
   thuTu: number;
 }
 
-import { groupOvertimeByRouteAndStation, compareRouteNames } from './overtime-grouping.util';
+import { groupOvertimeByRouteAndStation, compareRouteNames, selfTransportGroup } from './overtime-grouping.util';
 
 export interface RouteInfo {
   routeName: string;
@@ -256,7 +256,11 @@ export class ExcelExportService {
       return a.routeName.localeCompare(b.routeName);
     });
 
-    const finalRoutes = [...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName));
+    const finalRoutes: RouteInfo[] = [
+      ...[...routes].sort((a, b) => compareRouteNames(a.routeName, b.routeName)),
+      // Nhóm TỰ TÚC ở cuối phiếu (không ghi xe)
+      ...selfTransportGroup(registrations).map(g => ({ routeName: g.routeName, registrations: g.registrations }))
+    ];
 
     return finalRoutes;
   }
@@ -813,7 +817,10 @@ export class ExcelExportService {
       data.push([]);
       const routeHeaderText = `TUYẾN: ${route.routeName}`;
       if (route.driverInfo) {
-        data.push([`${routeHeaderText} | Tài xế: ${route.driverInfo.name} | SĐT: ${route.driverInfo.phone} | Xe: ${route.driverInfo.vehicleNumber}`, '', '', '', '', '', '']);
+        // Theo mẫu danh sách phụ trội: "TUYẾN: HCM01 | TX THIỆN - SĐT: 0918688500 - 60B 06121"
+        const driverName = String(route.driverInfo.name || '').replace(/^\s*TX\s+/i, '').trim().toUpperCase();
+        const plate = this.formatLicensePlate(route.driverInfo.vehicleNumber);
+        data.push([`${routeHeaderText} | TX ${driverName} - SĐT: ${route.driverInfo.phone || ''} - ${plate}`, '', '', '', '', '', '']);
       } else {
         data.push([routeHeaderText, '', '', '', '', '', '']);
       }
@@ -876,6 +883,14 @@ export class ExcelExportService {
   /**
    * Group registrations by station
    */
+  /** "60F01800" -> "60F 01800" (giữ nguyên nếu không đúng dạng) */
+  private formatLicensePlate(plate: string): string {
+    const raw = String(plate || '').trim();
+    const compact = raw.replace(/[\s.\-]/g, '').toUpperCase();
+    const m = /^(\d{2}[A-Z]{1,2})(\d{5})$/.exec(compact) || /^(\d{2}[A-Z]{1,2}\d)(\d{4,5})$/.exec(compact);
+    return m ? `${m[1]} ${m[2]}` : raw;
+  }
+
   private async groupRegistrationsByStation(registrations: Registration[]): Promise<{ [station: string]: Registration[] }> {
     const grouped: { [station: string]: Registration[] } = {};
     
@@ -888,9 +903,8 @@ export class ExcelExportService {
       grouped[station].push(reg);
     }
     
-    // Sort stations within the route
-    const sortedGrouped = await this.sortStationsByOrder(grouped);
-    return sortedGrouped;
+    // Danh sách đã được xếp theo quy luật chung (overtime-grouping.util.ts): giữ nguyên thứ tự trạm
+    return grouped;
   }
   
   /**

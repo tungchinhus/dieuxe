@@ -2608,7 +2608,9 @@ export class PdfExportService {
     }
     
     // Sắp xếp các trạm theo thuTu từ RouteDetail (Quản lý tuyến đường)
-    const sortedGrouped = await this.sortStationsByThuTu(grouped, finalRouteCode);
+    // Danh sách đã được xếp theo quy luật chung (overtime-grouping.util.ts): giữ nguyên thứ tự trạm
+    const sortedGrouped = grouped;
+    void finalRouteCode;
     
     return sortedGrouped;
   }

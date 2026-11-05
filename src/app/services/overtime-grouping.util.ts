@@ -233,3 +233,14 @@ export function groupOvertimeByRouteAndStation<T extends Pick<Registration, 'hoT
   }
   return result;
 }
+
+/**
+ * Nhóm TỰ TÚC (không xếp xe) để in ở cuối phiếu Excel, giúp phiếu làm thêm giờ đủ người.
+ * Trả về [] nếu không có ai tự túc.
+ */
+export function selfTransportGroup<T extends Pick<Registration, 'hoTen' | 'tramXe'>>(
+  registrations: T[]
+): OvertimeRouteGroup<T>[] {
+  const regs = registrations.filter(r => !isInvalidRegistration(r) && isSelfTransportStation(r.tramXe));
+  return regs.length ? [{ routeName: SELF_TRANSPORT_ROUTE, registrations: regs }] : [];
+}
