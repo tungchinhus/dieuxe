@@ -19,11 +19,14 @@ import { SidenavService } from '../../services/sidenav.service';
 import { RegistrationFormDialogComponent } from './registration-form-dialog/registration-form-dialog.component';
 import { DuplicateDataDialogComponent } from './duplicate-data-dialog/duplicate-data-dialog.component';
 import { ImportErrorDialogComponent } from './import-error-dialog.component';
+import { ImportFormatErrorDialogComponent } from './import-format-error-dialog.component';
+import { ImportFormatError } from '../../services/excel-import-sanitize';
 import { Registration } from '../../models/registration.model';
 import { ExcelService } from '../../services/excel.service';
 import { VersionService } from '../../services/version.service';
 import { VehicleDataService } from '../../services/vehicle-data.service';
 import { PdfExportService } from '../../services/pdf-export.service';
+import { PhuTroiVehicleRoutePdfService } from '../../services/phu-troi-vehicle-route-pdf.service';
 import { ExcelExportService } from '../../services/excel-export.service';
 import { FirestoreService } from '../../services/firestore.service';
 import { StationAssignmentPdfExportService } from '../../services/station-assignment-pdf-export.service';
@@ -114,6 +117,7 @@ export class DangKyXeComponent implements OnInit {
     private versionService: VersionService,
     private vehicleDataService: VehicleDataService,
     private pdfExportService: PdfExportService,
+    private phuTroiVehicleRoutePdfService: PhuTroiVehicleRoutePdfService,
     private excelExportService: ExcelExportService,
     private firestoreService: FirestoreService,
     private stationAssignmentPdfExportService: StationAssignmentPdfExportService,
@@ -580,6 +584,12 @@ export class DangKyXeComponent implements OnInit {
     input.click();
   }
 
+  /** Báo file không đọc được (errors) và các dòng bị bỏ qua vì sai mẫu (warnings; phần còn lại đã nhập). */
+  private showImportFormatErrors(files: Array<{ fileName: string; errors: string[]; warnings?: string[] }>): void {
+    if (!files.length) return;
+    this.dialog.open(ImportFormatErrorDialogComponent, { width: '720px', maxWidth: '95vw', data: { files } });
+  }
+
   private async handleFileUploadHC(file: File): Promise<void> {
     try {
       console.log('HC File selected:', file.name);
@@ -589,6 +599,9 @@ export class DangKyXeComponent implements OnInit {
 
       // Read and process Excel file (only T7 and CN sheets)
       const registrations = await this.excelService.readExcelFileHC(file);
+      if (this.excelService.lastImportWarnings.length) {
+        this.showImportFormatErrors([{ fileName: file.name, errors: [], warnings: this.excelService.lastImportWarnings }]);
+      }
       console.log('HC Excel data processed:', registrations);
 
       if (registrations.length > 0) {
@@ -677,6 +690,10 @@ export class DangKyXeComponent implements OnInit {
 
     } catch (error) {
       console.error('HC import error:', error);
+      if (error instanceof ImportFormatError) {
+        this.showImportFormatErrors([{ fileName: file.name, errors: error.errors }]);
+        return;
+      }
       this.snackBar.open(`Lỗi khi xử lý file Excel HC: ${error}`, 'Đóng', {
         duration: 5000,
         horizontalPosition: 'right',
@@ -912,6 +929,9 @@ export class DangKyXeComponent implements OnInit {
 
       // Read and process Excel file
       const registrations = await this.excelService.readExcelFile(file);
+      if (this.excelService.lastImportWarnings.length) {
+        this.showImportFormatErrors([{ fileName: file.name, errors: [], warnings: this.excelService.lastImportWarnings }]);
+      }
       console.log('Excel data processed:', registrations);
 
       if (registrations.length > 0) {
@@ -1005,6 +1025,10 @@ export class DangKyXeComponent implements OnInit {
 
     } catch (error) {
       console.error('Error processing file:', error);
+      if (error instanceof ImportFormatError) {
+        this.showImportFormatErrors([{ fileName: file.name, errors: error.errors }]);
+        return;
+      }
       this.snackBar.open(`Lỗi khi xử lý file: ${error}`, 'Đóng', {
         duration: 5000,
         horizontalPosition: 'right',
@@ -1029,6 +1053,7 @@ export class DangKyXeComponent implements OnInit {
       const allFailedData: Array<{registration: Registration, reason: string}> = [];
       const allDuplicates: Registration[] = [];
       const allValidData: Registration[] = [];
+      const rejectedFiles: Array<{ fileName: string; errors: string[]; warnings?: string[] }> = [];
 
       // Process each file sequentially
       for (let i = 0; i < files.length; i++) {
@@ -1050,6 +1075,9 @@ export class DangKyXeComponent implements OnInit {
           
           // Read and process Excel file
           const registrations = await this.excelService.readExcelFile(file);
+          if (this.excelService.lastImportWarnings.length) {
+            rejectedFiles.push({ fileName: file.name, errors: [], warnings: this.excelService.lastImportWarnings });
+          }
           console.log(`File ${file.name} processed:`, registrations.length, 'registrations');
 
           if (registrations.length > 0) {
@@ -1065,6 +1093,10 @@ export class DangKyXeComponent implements OnInit {
           }
         } catch (error) {
           console.error(`Error processing file ${file.name}:`, error);
+          if (error instanceof ImportFormatError) {
+            rejectedFiles.push({ fileName: file.name, errors: error.errors });
+            continue;
+          }
           this.snackBar.open(
             `Lỗi khi xử lý file ${file.name}: ${error}`, 
             'Đóng', 
@@ -1076,6 +1108,9 @@ export class DangKyXeComponent implements OnInit {
           );
         }
       }
+
+      // File không đọc được và các dòng bị bỏ qua vì sai mẫu: báo chi tiết.
+      this.showImportFormatErrors(rejectedFiles);
 
       // Process all collected data
       if (totalRegistrations.length > 0) {
@@ -1219,6 +1254,7 @@ export class DangKyXeComponent implements OnInit {
       const allFailedData: Array<{registration: Registration, reason: string}> = [];
       const allDuplicates: Registration[] = [];
       const allValidData: Registration[] = [];
+      const rejectedFiles: Array<{ fileName: string; errors: string[]; warnings?: string[] }> = [];
 
       // Process each file sequentially
       for (let i = 0; i < files.length; i++) {
@@ -1240,6 +1276,9 @@ export class DangKyXeComponent implements OnInit {
           
           // Read and process Excel file (only T7 and CN sheets)
           const registrations = await this.excelService.readExcelFileHC(file);
+          if (this.excelService.lastImportWarnings.length) {
+            rejectedFiles.push({ fileName: file.name, errors: [], warnings: this.excelService.lastImportWarnings });
+          }
           console.log(`HC File ${file.name} processed:`, registrations.length, 'registrations');
 
           if (registrations.length > 0) {
@@ -1255,6 +1294,10 @@ export class DangKyXeComponent implements OnInit {
           }
         } catch (error) {
           console.error(`Error processing HC file ${file.name}:`, error);
+          if (error instanceof ImportFormatError) {
+            rejectedFiles.push({ fileName: file.name, errors: error.errors });
+            continue;
+          }
           this.snackBar.open(
             `Lỗi khi xử lý file HC ${file.name}: ${error}`, 
             'Đóng', 
@@ -1266,6 +1309,9 @@ export class DangKyXeComponent implements OnInit {
           );
         }
       }
+
+      // File không đọc được và các dòng bị bỏ qua vì sai mẫu: báo chi tiết.
+      this.showImportFormatErrors(rejectedFiles);
 
       // Process all collected data
       if (totalRegistrations.length > 0) {
@@ -2263,6 +2309,8 @@ export class DangKyXeComponent implements OnInit {
       console.log('Loaded vehicles from Firebase:', vehicles);
       console.log('Real route groups:', realRoutes);
 
+      const routeGroupsSnapshot = routeGroups;
+
       // Không cần mockDrivers nữa vì thông tin tài xế sẽ lấy trực tiếp từ xe
       const dialogRef = this.dialog.open(RouteVehicleAssignmentDialogComponent, {
         width: '1200px',
@@ -2277,8 +2325,34 @@ export class DangKyXeComponent implements OnInit {
 
       dialogRef.afterClosed().subscribe(async result => {
         if (result && result.routeAssignments) {
-          // Export to PDF after vehicle assignment
-          await this.exportOvertimeReportPDFWithVehicleAssignment(result);
+          const variant = result.pdfVariant as string | undefined;
+          const base = this.displayDate || this.startDate || new Date();
+          if (variant === 'vehicleRouteOrder') {
+            try {
+              await this.phuTroiVehicleRoutePdfService.exportVehicleRouteOrderedPdf({
+                routeGroups: routeGroupsSnapshot.map(g => ({
+                  routeName: g.routeName,
+                  registrations: g.registrations || []
+                })),
+                assignments: result.routeAssignments,
+                selectedDate: base
+              });
+              this.snackBar.open('Đã xuất PDF sắp theo lộ trình xe (logic riêng).', 'Đóng', {
+                duration: 4000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              });
+            } catch (e) {
+              console.error('Phu troi vehicle route PDF:', e);
+              this.snackBar.open('Lỗi khi xuất PDF theo lộ trình xe.', 'Đóng', {
+                duration: 5000,
+                horizontalPosition: 'right',
+                verticalPosition: 'top'
+              });
+            }
+          } else {
+            await this.exportOvertimeReportPDFWithVehicleAssignment(result);
+          }
         }
       });
 

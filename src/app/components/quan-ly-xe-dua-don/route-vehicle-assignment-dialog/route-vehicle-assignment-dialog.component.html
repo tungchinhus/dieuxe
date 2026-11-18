@@ -75,5 +75,13 @@
       <mat-spinner *ngIf="isExporting" diameter="20"></mat-spinner>
       {{ isExporting ? 'Đang xuất PDF...' : 'Xuất PDF' }}
     </button>
+    <button mat-raised-button
+            color="accent"
+            (click)="onExportVehicleRouteOrderedPdf()"
+            [disabled]="!canExport() || isExporting"
+            matTooltip="Gộp theo biển số xe, sắp nhân viên theo thứ tự trạm dọc lộ trình (logic tách riêng)">
+      <mat-icon *ngIf="!isExporting">route</mat-icon>
+      {{ isExporting ? '...' : 'PDF theo lộ trình xe' }}
+    </button>
   </div>
 </div>

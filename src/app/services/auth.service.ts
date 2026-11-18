@@ -402,6 +402,7 @@ export class AuthService {
         return 'Tài khoản đã bị vô hiệu hóa';
       case 'auth/user-not-found':
       case 'auth/wrong-password':
+      case 'auth/invalid-credential':
         return 'Tên đăng nhập hoặc mật khẩu không đúng';
       case 'auth/too-many-requests':
         return 'Bạn đã thử quá nhiều lần. Vui lòng thử lại sau';
