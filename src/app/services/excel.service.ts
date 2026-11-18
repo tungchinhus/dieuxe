@@ -4,6 +4,7 @@ import { Registration } from '../models/registration.model';
 import { RouteDetail, RouteDetailCreate } from '../models/route-detail.model';
 import { FirestoreService } from './firestore.service';
 import { NhanVien } from '../models/employee.model';
+import { ImportFormatError, parseTime, ParsedRegistrationRow, validateRegistrationSheet } from './excel-import-sanitize';
 
 @Injectable({
   providedIn: 'root'
@@ -12,6 +13,9 @@ export class ExcelService {
   private employeeCache: NhanVien[] | null = null;
   private cacheTimestamp: number = 0;
   private readonly CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+
+  /** Dòng bị bỏ qua / ô bị để trống ở lần đọc file gần nhất (readExcelFile / readExcelFileHC). Các dòng khác vẫn nhập. */
+  lastImportWarnings: string[] = [];
 
   constructor(private firestoreService: FirestoreService) {}
 
@@ -63,6 +67,11 @@ export class ExcelService {
       const fileType = this.detectFileType(file);
       
       console.log(`Reading Excel file: ${file.name}, Type: ${fileType}, Size: ${file.size} bytes`);
+      this.lastImportWarnings = [];
+      if (fileType === 'unknown') {
+        reject(new ImportFormatError(['Chỉ nhận file Excel .xlsx hoặc .xls.'], file.name));
+        return;
+      }
       
       reader.onload = async (e: any) => {
         try {
@@ -114,8 +123,16 @@ export class ExcelService {
           
           console.log(`Converted sheet "${firstSheetName}" to JSON: ${jsonData.length} rows`);
           
+          // Nhận cột theo tiêu đề; dòng sai mẫu chỉ bị bỏ qua riêng dòng đó. Chỉ từ chối khi không đọc được người nào.
+          const validation = validateRegistrationSheet(jsonData as unknown[][]);
+          if (!validation.valid) {
+            reject(new ImportFormatError(validation.errors.map(e => `Sheet "${firstSheetName}": ${e}`), file.name));
+            return;
+          }
+          this.lastImportWarnings = validation.warnings;
+          
           // Convert to Registration objects with database lookup
-          const registrations = await this.convertToRegistrations(jsonData);
+          const registrations = await this.convertParsedRows(validation.rows);
           resolve(registrations);
         } catch (error: any) {
           const errorMessage = error?.message || String(error);
@@ -146,6 +163,11 @@ export class ExcelService {
       const fileType = this.detectFileType(file);
       
       console.log(`Reading Excel HC file: ${file.name}, Type: ${fileType}, Size: ${file.size} bytes`);
+      this.lastImportWarnings = [];
+      if (fileType === 'unknown') {
+        reject(new ImportFormatError(['Chỉ nhận file Excel .xlsx hoặc .xls.'], file.name));
+        return;
+      }
       
       reader.onload = async (e: any) => {
         try {
@@ -178,39 +200,46 @@ export class ExcelService {
           
           const allRegistrations: Registration[] = [];
           const sheetNamesToRead = ['T7', 'CN'];
-          
-          // Read only T7 and CN sheets
+
+          // Đọc từng sheet T7/CN: dòng sai mẫu chỉ bỏ qua riêng dòng đó; sheet không đọc được người nào thì báo,
+          // nhưng sheet còn lại vẫn nhập. Chỉ từ chối cả file khi không sheet nào đọc được.
+          const formatErrors: string[] = [];
+          const warnings: string[] = [];
+          let foundSheet = false;
           for (const sheetName of sheetNamesToRead) {
-            if (workbook.SheetNames.includes(sheetName)) {
-              const worksheet = workbook.Sheets[sheetName];
-              
-              if (!worksheet) {
-                console.warn(`Sheet "${sheetName}" exists but cannot be read`);
-                continue;
-              }
-              
-              const jsonData = XLSX.utils.sheet_to_json(worksheet, { 
-                header: 1,
-                defval: '',
-                raw: false
-              });
-              
-              const registrations = await this.convertToRegistrations(jsonData);
-              
-              // Update ngày đăng ký based on sheet name
-              // T7: today + 1 day
-              // CN: today + 2 days
-              const registrationDate = this.getRegistrationDateForSheet(sheetName);
-              registrations.forEach(reg => {
-                reg.ngayDangKy = registrationDate;
-              });
-              
-              allRegistrations.push(...registrations);
-              console.log(`Read ${registrations.length} registrations from sheet "${sheetName}" with registration date: ${registrationDate}`);
-            } else {
+            const worksheet = workbook.Sheets[sheetName];
+            if (!workbook.SheetNames.includes(sheetName) || !worksheet) {
               console.warn(`Sheet "${sheetName}" not found in Excel file. Available sheets: ${workbook.SheetNames.join(', ')}`);
+              continue;
             }
+            foundSheet = true;
+            const rows = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: '', raw: false }) as unknown[][];
+            const validation = validateRegistrationSheet(rows);
+            warnings.push(...validation.warnings.map(w => `Sheet "${sheetName}": ${w}`));
+            if (!validation.valid) {
+              formatErrors.push(...validation.errors.map(e => `Sheet "${sheetName}": ${e}`));
+              continue;
+            }
+
+            const registrations = await this.convertParsedRows(validation.rows);
+
+            // Update ngày đăng ký based on sheet name
+            // T7: today + 1 day
+            // CN: today + 2 days
+            const registrationDate = this.getRegistrationDateForSheet(sheetName);
+            registrations.forEach(reg => {
+              reg.ngayDangKy = registrationDate;
+            });
+
+            allRegistrations.push(...registrations);
+            console.log(`Read ${registrations.length} registrations from sheet "${sheetName}" with registration date: ${registrationDate}`);
           }
+
+          if (foundSheet && allRegistrations.length === 0 && formatErrors.length > 0) {
+            reject(new ImportFormatError(formatErrors, file.name));
+            return;
+          }
+          this.lastImportWarnings = [...formatErrors, ...warnings];
           
           if (allRegistrations.length === 0) {
             reject(new Error(`Không tìm thấy sheet T7 hoặc CN trong file Excel. Các sheet có sẵn: ${workbook.SheetNames.join(', ')}`));
@@ -235,190 +264,36 @@ export class ExcelService {
   }
 
   /**
-   * Find column indices from header row
-   * @param headerRow - Header row data
-   * @returns Object with column indices
+   * Chuyển các dòng đã đọc và làm sạch (validateRegistrationSheet) thành Registration, tra tuyến theo trạm.
+   * Giờ trống thì dùng giờ phụ trội mặc định 15:45 – 19:00; "qua đêm" giữ nguyên là OVERNIGHT_END.
    */
-  private findColumnIndices(headerRow: any[]): {
-    stt: number;
-    hoTen: number;
-    tramXe: number;
-    dienThoai: number;
-    thoiGianBatDau: number;
-    thoiGianKetThuc: number;
-  } {
-    const indices = {
-      stt: 0,
-      hoTen: 1,
-      tramXe: 2,
-      dienThoai: 3,
-      thoiGianBatDau: 4,
-      thoiGianKetThuc: 5
-    };
-    
-    if (!headerRow || headerRow.length === 0) {
-      return indices;
-    }
-    
-    // Convert header row to lowercase string for searching
-    const headerString = headerRow.map(cell => this.getStringValue(cell).toLowerCase()).join(' ');
-    
-    // Find column indices by searching for header keywords
-    for (let i = 0; i < headerRow.length; i++) {
-      const cellValue = this.getStringValue(headerRow[i]).toLowerCase();
-      
-      if (cellValue.includes('stt') || cellValue.includes('số thứ tự')) {
-        indices.stt = i;
-      } else if (cellValue.includes('họ') && cellValue.includes('tên') || cellValue.includes('họ và tên')) {
-        indices.hoTen = i;
-      } else if (cellValue.includes('trạm') || cellValue.includes('trạm xe')) {
-        indices.tramXe = i;
-      } else if (cellValue.includes('điện thoại') || cellValue.includes('số điện thoại')) {
-        indices.dienThoai = i;
-      } else if (cellValue.includes('từ') || cellValue.includes('thời gian bắt đầu')) {
-        indices.thoiGianBatDau = i;
-      } else if (cellValue.includes('đến') || cellValue.includes('thời gian kết thúc')) {
-        indices.thoiGianKetThuc = i;
-      }
-    }
-    
-    console.log('Column indices found:', indices);
-    return indices;
-  }
-
-  /**
-   * Convert Excel data to Registration objects
-   * @param data - Raw Excel data
-   * @returns Promise with array of Registration objects
-   */
-  private async convertToRegistrations(data: any[]): Promise<Registration[]> {
+  private async convertParsedRows(rows: ParsedRegistrationRow[]): Promise<Registration[]> {
     const registrations: Registration[] = [];
-    let skippedRows = 0;
-    let processedRows = 0;
-    
-    // Find the header row (contains "STT" or "Họ và tên")
-    let headerRowIndex = -1;
-    let headerRow: any[] = [];
-    for (let i = 0; i < Math.min(20, data.length); i++) { // Check first 20 rows for header
-      const row = data[i];
-      if (row && row.length > 0) {
-        const rowString = row.join(' ').toLowerCase();
-        if (rowString.includes('stt') || rowString.includes('họ và tên') || rowString.includes('họ tên')) {
-          headerRowIndex = i;
-          headerRow = row;
-          console.log(`Found header row at index ${i}:`, row);
-          break;
-        }
-      }
-    }
-    
-    if (headerRowIndex === -1) {
-      console.warn('Header row not found, using default mapping');
-      headerRowIndex = 0;
-      headerRow = data[0] || [];
-    }
-    
-    // Find column indices from header
-    const colIndices = this.findColumnIndices(headerRow);
-    
-    // Process data rows starting from the row after header
-    for (let i = headerRowIndex + 1; i < data.length; i++) {
-      processedRows++;
-      const row = data[i];
-      
-      // Skip empty rows
-      if (!row || row.length === 0) {
-        skippedRows++;
-        continue;
-      }
-      
+    for (const row of rows) {
       try {
-        // Extract data using found column indices
-        const hoTen = this.getStringValue(row[colIndices.hoTen]) || '';
-        const tramXe = this.getStringValue(row[colIndices.tramXe]) || '';
-        const dienThoai = this.getStringValue(row[colIndices.dienThoai]) || '';
-        
-        // Try to extract time from the found columns, or search in nearby columns
-        let thoiGianBatDau = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianBatDau])) || '';
-        let thoiGianKetThuc = this.extractTimeFromString(this.getStringValue(row[colIndices.thoiGianKetThuc])) || '';
-        
-        // If time not found in expected columns, try searching in nearby columns (for .xls files with different structure)
-        if (!thoiGianBatDau || !thoiGianKetThuc) {
-          for (let j = 0; j < Math.min(row.length, 10); j++) {
-            const cellValue = this.getStringValue(row[j]);
-            if (!thoiGianBatDau && this.extractTimeFromString(cellValue)) {
-              thoiGianBatDau = this.extractTimeFromString(cellValue);
-              console.log(`Found start time in column ${j}: ${thoiGianBatDau}`);
-            }
-            if (!thoiGianKetThuc && j > colIndices.thoiGianBatDau && this.extractTimeFromString(cellValue)) {
-              thoiGianKetThuc = this.extractTimeFromString(cellValue);
-              console.log(`Found end time in column ${j}: ${thoiGianKetThuc}`);
-              break; // Found end time, stop searching
-            }
-          }
-        }
-        
-        // Use default time for overtime work if not found (15h45 - 19h)
-        if (!thoiGianBatDau) {
-          thoiGianBatDau = '15:45';
-          console.log(`Using default start time for row ${i}: 15:45`);
-        }
-        if (!thoiGianKetThuc) {
-          thoiGianKetThuc = '19:00';
-          console.log(`Using default end time for row ${i}: 19:00`);
-        }
-        
-        // Skip rows that are missing required fields (Họ tên and Trạm xe are required)
-        if (!hoTen || !tramXe) {
-          skippedRows++;
-          console.warn(
-            `Skipping row ${i} due to missing required data. ` +
-            `HoTen="${hoTen}", TramXe="${tramXe}"`
-          );
-          continue;
-        }
-        
-        
-        // Get route information using database lookup
-        const maTuyenXe = await this.extractRouteFromStationWithDatabase(tramXe, hoTen);
-        
-        // Generate employee ID from name if not available
-        const maNhanVien = this.generateEmployeeId(hoTen, i);
-        
-        const registration: Registration = {
-          id: `excel_${i}`, // Temporary ID for Excel import
-          maNhanVien: maNhanVien, // Generated from name
-          hoTen: hoTen, // Họ và tên
-          dienThoai: dienThoai, // Điện thoại
-          phongBan: '', // Default empty for now
-          ngayDangKy: this.getTodayVietnamDate(), // Extract from document title/date
-          loaiCa: this.extractShiftFromTime(thoiGianBatDau) || 'PT-cc', // Extract from start time
-          thoiGianBatDau: thoiGianBatDau, // Thời gian làm việc (Từ...)
-          thoiGianKetThuc: thoiGianKetThuc, // Thời gian làm việc (Đến...)
-          maTuyenXe: maTuyenXe, // Derived from database lookup
-          tramXe: tramXe, // Trạm xe
-          noiDungCongViec: '', // Default empty for overtime work
-          dangKyCom: false // Default false for overtime work
-        };
-        
-        // Debug: Log the extracted values
-        console.log(`✅ Row ${i} - Successfully converted: HoTen="${registration.hoTen}", TramXe="${registration.tramXe}", ThoiGian="${registration.thoiGianBatDau}-${registration.thoiGianKetThuc}"`);
-        registrations.push(registration);
+        const thoiGianBatDau = row.tu || '15:45';
+        const thoiGianKetThuc = row.den || '19:00';
+        const maTuyenXe = await this.extractRouteFromStationWithDatabase(row.tramXe, row.hoTen);
+        registrations.push({
+          id: `excel_${row.rowIndex}`, // Temporary ID for Excel import
+          maNhanVien: row.maNhanVien || this.generateEmployeeId(row.hoTen, row.rowIndex),
+          hoTen: row.hoTen,
+          dienThoai: row.dienThoai,
+          phongBan: '',
+          ngayDangKy: this.getTodayVietnamDate(),
+          loaiCa: this.extractShiftFromTime(thoiGianBatDau) || 'PT-cc',
+          thoiGianBatDau,
+          thoiGianKetThuc,
+          maTuyenXe,
+          tramXe: row.tramXe,
+          noiDungCongViec: row.noiDungCongViec,
+          dangKyCom: row.dangKyCom
+        });
       } catch (error) {
-        skippedRows++;
-        console.warn(`Error processing row ${i}:`, error);
-        continue;
+        console.warn(`Error processing row ${row.rowIndex + 1}:`, error);
       }
     }
-    
-    // Console log tổng kết đọc file Excel
-    console.log('========================================');
-    console.log('📊 TỔNG KẾT ĐỌC FILE EXCEL:');
-    console.log(`   ✅ Số nhân viên đọc được từ Excel: ${registrations.length}`);
-    console.log(`   ⏭️  Số dòng bị bỏ qua (thiếu dữ liệu/lỗi): ${skippedRows}`);
-    console.log(`   📝 Tổng số dòng đã xử lý: ${processedRows}`);
-    console.log('========================================');
-    
+    console.log(`📊 Đọc file Excel: ${registrations.length} nhân viên, ${this.lastImportWarnings.length} cảnh báo/dòng bỏ qua`);
     return registrations;
   }
 
@@ -562,52 +437,8 @@ export class ExcelService {
    * @returns Formatted time string (HH:mm)
    */
   private extractTimeFromString(timeString: string): string {
-    if (!timeString) return '';
-    
-    console.log(`Extracting time from: "${timeString}"`);
-    
-    // Look for time patterns like "15h45", "15:45", "15h 45"
-    const timeMatch = timeString.match(/(\d{1,2})[h:]\s*(\d{2})/);
-    if (timeMatch) {
-      const hours = timeMatch[1].padStart(2, '0');
-      const minutes = timeMatch[2];
-      const result = `${hours}:${minutes}`;
-      console.log(`Time pattern match: "${timeString}" -> "${result}"`);
-      return result;
-    }
-    
-    // Look for standard time format
-    const standardTimeMatch = timeString.match(/(\d{1,2}):(\d{2})/);
-    if (standardTimeMatch) {
-      const hours = standardTimeMatch[1].padStart(2, '0');
-      const minutes = standardTimeMatch[2];
-      const result = `${hours}:${minutes}`;
-      console.log(`Standard time match: "${timeString}" -> "${result}"`);
-      return result;
-    }
-    
-    // Look for simple hour format like "19h" -> "19:00"
-    const hourOnlyMatch = timeString.match(/(\d{1,2})h?$/);
-    if (hourOnlyMatch) {
-      const hours = hourOnlyMatch[1].padStart(2, '0');
-      const result = `${hours}:00`;
-      console.log(`Hour only match: "${timeString}" -> "${result}"`);
-      return result;
-    }
-    
-    // Look for 4-digit time like "1945" -> "19:45"
-    const fourDigitMatch = timeString.match(/^(\d{4})$/);
-    if (fourDigitMatch) {
-      const time = fourDigitMatch[1];
-      const hours = time.substring(0, 2);
-      const minutes = time.substring(2, 4);
-      const result = `${hours}:${minutes}`;
-      console.log(`4-digit time match: "${timeString}" -> "${result}"`);
-      return result;
-    }
-    
-    console.log(`No time pattern matched for: "${timeString}"`);
-    return '';
+    // Chỉ nhận giờ hợp lệ; số điện thoại hay ghi chú không được hiểu thành giờ (vd. 0918646042 → "42:00").
+    return parseTime(timeString);
   }
 
   /**

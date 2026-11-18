@@ -13,6 +13,7 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBarModule, MatSnackBar } from '@angular/material/snack-bar';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { StationAssignment, DriverInfo, VehicleInfo, XeDuaDon, LoaiXe } from '../../../models/vehicle.model';
 
 export interface RouteVehicleAssignmentDialogData {
@@ -60,7 +61,8 @@ export interface RouteVehicleAssignment {
     MatToolbarModule,
     MatChipsModule,
     MatProgressSpinnerModule,
-    MatSnackBarModule
+    MatSnackBarModule,
+    MatTooltipModule
   ],
   templateUrl: './route-vehicle-assignment-dialog.component.html',
   styleUrl: './route-vehicle-assignment-dialog.component.css'
@@ -108,9 +110,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         defaultVehicleType = 'TAXI';
       } else if (route.employeeCount >= 7 && route.employeeCount <= 15) {
         defaultVehicleType = '16C';
-      } else if (route.employeeCount >= 16 && route.employeeCount <= 29) {
+      } else if (route.employeeCount >= 16 && route.employeeCount <= 28) {
         defaultVehicleType = '29C';
-      } else if (route.employeeCount > 29) {
+      } else if (route.employeeCount > 28) {
         defaultVehicleType = '45C';
       }
 
@@ -215,10 +217,10 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
         prefix = 'TAXI - '; // Dưới 7 nhân viên: Taxi
       } else if (employeeCount >= 7 && employeeCount <= 15) {
         prefix = '16C - '; // 7 đến 15 nhân viên: Xe 16 chỗ
-      } else if (employeeCount >= 16 && employeeCount <= 29) {
-        prefix = '29C - '; // 16 đến 29 nhân viên: Xe 29 chỗ
-      } else if (employeeCount > 29) {
-        prefix = '45C - '; // Trên 29 nhân viên: Xe 45 chỗ
+      } else if (employeeCount >= 16 && employeeCount <= 28) {
+        prefix = '29C - '; // 16 đến 28 nhân viên: Xe 29 chỗ
+      } else if (employeeCount > 28) {
+        prefix = '45C - '; // Từ 29 nhân viên: Xe 45 chỗ
       }
     }
     
@@ -238,9 +240,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return 'TAXI - ';
     } else if (employeeCount >= 7 && employeeCount <= 15) {
       return '16C - ';
-    } else if (employeeCount >= 16 && employeeCount <= 29) {
+    } else if (employeeCount >= 16 && employeeCount <= 28) {
       return '29C - ';
-    } else if (employeeCount > 29) {
+    } else if (employeeCount > 28) {
       return '45C - ';
     }
     return '';
@@ -255,9 +257,9 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
       return 'TAXI';
     } else if (assignment.employeeCount >= 7 && assignment.employeeCount <= 15) {
       return '16C';
-    } else if (assignment.employeeCount >= 16 && assignment.employeeCount <= 29) {
+    } else if (assignment.employeeCount >= 16 && assignment.employeeCount <= 28) {
       return '29C';
-    } else if (assignment.employeeCount > 29) {
+    } else if (assignment.employeeCount > 28) {
       return '45C';
     }
     return '16C'; // default fallback
@@ -399,11 +401,31 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
     }
 
     this.isExporting = true;
-    
-    // Close dialog and return assignment data for PDF export
+
     this.dialogRef.close({
       routeAssignments: this.routeAssignments,
-      exportDate: new Date()
+      exportDate: new Date(),
+      pdfVariant: 'default' as const
+    });
+  }
+
+  /** Đóng dialog và báo app xuất PDF với logic sắp theo lộ trình xe (service riêng). */
+  onExportVehicleRouteOrderedPdf(): void {
+    if (!this.canExport()) {
+      this.snackBar.open('Vui lòng hoàn thành việc phân công xe cho tất cả các tuyến!', 'Đóng', {
+        duration: 3000,
+        horizontalPosition: 'right',
+        verticalPosition: 'top'
+      });
+      return;
+    }
+
+    this.isExporting = true;
+
+    this.dialogRef.close({
+      routeAssignments: this.routeAssignments,
+      exportDate: new Date(),
+      pdfVariant: 'vehicleRouteOrder' as const
     });
   }
 
@@ -497,13 +519,15 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
    * Đề xuất loại xe phù hợp với số nhân viên
    */
   getRecommendedVehicleType(employeeCount: number): string {
-    if (employeeCount <= 7) {
+    if (employeeCount < 4) {
+      return 'Taxi 4 chỗ';
+    } else if (employeeCount < 7) {
       return 'Taxi 7 chỗ';
-    } else if (employeeCount <= 16) {
+    } else if (employeeCount <= 15) {
       return 'Xe 16 chỗ';
-    } else if (employeeCount <= 29) {
+    } else if (employeeCount <= 28) {
       return 'Xe 29 chỗ';
-    } else if (employeeCount <= 45) {
+    } else if (employeeCount <= 44) {
       return 'Xe 45 chỗ';
     } else {
       return 'Nhiều xe 45 chỗ';
@@ -654,11 +678,12 @@ export class RouteVehicleAssignmentDialogComponent implements OnInit {
   private calculateVehicleScore(capacity: number, employeeCount: number): number {
     // Định nghĩa các ngưỡng sức chứa theo yêu cầu
     const thresholds = [
-      { min: 0, max: 7, idealCapacity: 7 },      // ≤ 7 nhân viên: Taxi 7 chỗ
-      { min: 8, max: 16, idealCapacity: 16 },    // 8-16 nhân viên: Xe 16 chỗ  
-      { min: 17, max: 29, idealCapacity: 29 },    // 17-29 nhân viên: Xe 29 chỗ
-      { min: 30, max: 45, idealCapacity: 45 },    // 30-45 nhân viên: Xe 45 chỗ
-      { min: 46, max: Infinity, idealCapacity: 45 } // > 45 nhân viên: Xe 45 chỗ
+      { min: 0, max: 3, idealCapacity: 4 },       // dưới 4 nhân viên: Taxi 4 chỗ
+      { min: 4, max: 6, idealCapacity: 7 },       // 4-6 nhân viên: Taxi 7 chỗ
+      { min: 7, max: 15, idealCapacity: 16 },     // 7-15 nhân viên: Xe 16 chỗ
+      { min: 16, max: 28, idealCapacity: 29 },    // 16-28 nhân viên: Xe 29 chỗ
+      { min: 29, max: 44, idealCapacity: 45 },    // 29-44 nhân viên: Xe 45 chỗ
+      { min: 45, max: Infinity, idealCapacity: 45 } // từ 45 nhân viên: Xe 45 chỗ
     ];
 
     // Tìm ngưỡng phù hợp với số nhân viên

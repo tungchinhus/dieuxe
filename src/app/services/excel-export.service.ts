@@ -4,6 +4,9 @@ import { firstValueFrom } from 'rxjs';
 import { FirestoreService } from './firestore.service';
 import { StationRouteMappingService } from './station-route-mapping.service';
 import { DataCacheService } from './data-cache.service';
+import { PhuTroiVehicleRouteSortService } from './phu-troi-vehicle-route-sort.service';
+import { PhuTroiVehiclePackingService, taxiSeatsOf } from './phu-troi-vehicle-packing.service';
+import { isPersonName, normalizePhone, parseEndTime, parseTime } from './excel-import-sanitize';
 
 export interface Registration {
   maNhanVien: string;
@@ -58,7 +61,9 @@ export class ExcelExportService {
   constructor(
     private firestoreService: FirestoreService,
     private stationRouteMappingService: StationRouteMappingService,
-    private dataCacheService: DataCacheService
+    private dataCacheService: DataCacheService,
+    private phuTroiVehicleRouteSortService: PhuTroiVehicleRouteSortService,
+    private phuTroiVehiclePackingService: PhuTroiVehiclePackingService
   ) {}
 
   /**
@@ -96,9 +101,14 @@ export class ExcelExportService {
         return;
       }
 
-      // 3) Tạo Excel workbook với ONE sheet chứa tất cả tuyến
+      // 3) Tạo Excel workbook với ONE sheet.
+      // Chuẩn hóa theo PDF: ưu tiên gom theo XE (biển số), không còn tách cứng theo route.
       const workbook = XLSX.utils.book_new();
-      const worksheet = await this.createSingleSheetWithAllRoutes(routeGroups);
+      const worksheet = await this.createSingleSheetWithVehicleRouteOrder(
+        routeGroups,
+        vehicleAssignments,
+        selectedDate || new Date()
+      );
 
       // Thêm worksheet vào workbook
       XLSX.utils.book_append_sheet(workbook, worksheet, 'Danh Sach Phu Troi');
@@ -802,6 +812,135 @@ export class ExcelExportService {
       .trim();
   }
 
+  private normalizePlateKey(plate: string): string {
+    if (!plate) return '';
+    return plate
+      .replace(/^\d{2}[A-Za-z]\s*-\s*/i, '')
+      .replace(/\s+/g, '')
+      .toUpperCase();
+  }
+
+  private formatExportDate(selectedDate: Date): string {
+    return `Ngày ${selectedDate.getDate()}/${selectedDate.getMonth() + 1}/${selectedDate.getFullYear()}`;
+  }
+
+  /**
+   * Chuẩn hóa theo file PDF mẫu:
+   * - Mặc định mỗi TUYẾN một khối: cùng trạm đứng liền nhau theo thứ tự đón, không xét sức chứa xe
+   * - (Khi packIntoVehicles = true: mỗi XE một khối, cùng trạm đi chung xe theo sức chứa, hết xe thì taxi; tự túc liệt kê riêng ở cuối)
+   * - STT reset theo từng xe
+   * - Cuối mỗi khối có dòng TUYẾN|Tài xế|SĐT|Xe (không liệt kê danh sách trạm)
+   */
+  private async createSingleSheetWithVehicleRouteOrder(
+    routeGroups: RouteInfo[],
+    vehicleAssignments: RouteVehicleAssignment[],
+    selectedDate: Date
+  ): Promise<XLSX.WorkSheet> {
+    const data: any[][] = [];
+
+    data.push(['PHIẾU BÁO LÀM THÊM GIỜ']);
+    data.push([this.formatExportDate(selectedDate)]);
+    data.push(['STT', 'Họ và tên', 'Trạm xe', 'Điện thoại', '', 'Từ...', 'Đến...']);
+
+    const routeOrder = ['HCM01', 'HCM02', 'BH01', 'BH02', 'BH03', 'TỰ TÚC'];
+    // Bỏ dòng rác không phải tên người (vd. "(2)"); dữ liệu cũ có thể còn lẫn trong tuyến "Chưa phân tuyến".
+    const cleanRoutes = routeGroups.map(route => ({
+      ...route,
+      registrations: (route.registrations || []).filter(reg => isPersonName(reg.hoTen))
+    }));
+    const sortedRoutes = [...cleanRoutes]
+      .filter(route => route.registrations?.length)
+      .sort((a, b) => {
+        const ai = routeOrder.indexOf(a.routeName);
+        const bi = routeOrder.indexOf(b.routeName);
+        if (ai !== -1 && bi !== -1) return ai - bi;
+        if (ai !== -1) return -1;
+        if (bi !== -1) return 1;
+        return a.routeName.localeCompare(b.routeName, 'vi');
+      });
+
+    // Mỗi khối = một xe: danh sách nhân viên (STT reset), dòng TUYẾN|Tài xế|SĐT|Xe, dòng trống.
+    const writeBlock = (regs: Registration[], headerLine: string): void => {
+      let stt = 1;
+      for (const reg of regs) {
+        data.push([
+          stt++,
+          String(reg.hoTen || '').trim(),
+          String(reg.tramXe || '').trim(),
+          // Dữ liệu cũ có thể lệch cột: SĐT là tên trạm, giờ là "42:00" → để trống / dùng giờ mặc định.
+          normalizePhone(reg.dienThoai),
+          '',
+          parseTime(reg.thoiGianBatDau) || '15:45',
+          parseEndTime(reg.thoiGianKetThuc) || '19:00'
+        ]);
+      }
+      data.push([headerLine, '', '', '', '', '', '']);
+      data.push(['', '', '', '', '', '', '']);
+    };
+
+    const headerOf = (route: RouteInfo): string => {
+      const assignment = vehicleAssignments.find(v => v.routeCode === route.routeName);
+      const driverName = assignment?.assignedDriver?.driverName || route.driverInfo?.name || '';
+      const driverPhone = assignment?.assignedDriver?.phoneNumber || route.driverInfo?.phone || '';
+      let vehicleNumber =
+        assignment?.assignedVehicle?.licensePlate || route.driverInfo?.vehicleNumber || '';
+      // Tuyến đi taxi: dưới 4 người taxi 4 chỗ, 4 đến 6 người taxi 7 chỗ.
+      if (/^TAXI\s*-/i.test(vehicleNumber)) {
+        const seats = taxiSeatsOf(route.registrations?.length || 0);
+        vehicleNumber = vehicleNumber.replace(/^TAXI\s*-/i, `TAXI ${seats} chỗ -`);
+      }
+      return `TUYẾN: ${route.routeName} | Tài xế: ${driverName} | SĐT: ${driverPhone} | Xe: ${vehicleNumber}`;
+    };
+
+    // Mặc định: mỗi tuyến một khối, cùng tuyến cùng trạm đứng liền nhau, KHÔNG xét số ghế/không chia xe — để người xếp xe
+    // chép sang file Excel của mình rồi tự chia. Đặt true để xếp thẳng vào từng xe (xem phu-troi-vehicle-packing.service.ts).
+    const packIntoVehicles = false;
+    const loads = packIntoVehicles
+      ? this.phuTroiVehiclePackingService.planFromAssignments(sortedRoutes, vehicleAssignments)
+      : [];
+    if (loads.length > 0) {
+      for (const load of loads) {
+        writeBlock(
+          load.registrations,
+          load.isTaxi
+            ? `TUYẾN: TAXI | Xe: ${load.plateDisplay}`
+            : `TUYẾN: ${load.routeLabel} | Tài xế: ${load.driverName} | SĐT: ${load.driverPhone} | Xe: ${load.plateDisplay}`
+        );
+      }
+      // Người đi tự túc (kể cả "Ca qua đêm" nằm ở tuyến khác) không lên xe nhưng vẫn liệt kê riêng ở cuối.
+      const selfRoute = sortedRoutes.find(r => r.routeName === 'TỰ TÚC');
+      const selfRegs = [
+        ...(selfRoute?.registrations || []),
+        ...sortedRoutes
+          .filter(r => r.routeName !== 'TỰ TÚC')
+          .flatMap(r => r.registrations || [])
+          .filter(reg => this.phuTroiVehiclePackingService.isSelfCommute(reg))
+      ];
+      if (selfRegs.length) {
+        const selfHeader = selfRoute ? headerOf(selfRoute) : 'TUYẾN: TỰ TÚC';
+        writeBlock(this.phuTroiVehicleRouteSortService.sortRegistrations(selfRegs), selfHeader);
+      }
+    } else {
+      // Mỗi tuyến một khối, sắp theo thứ tự trạm.
+      for (const route of sortedRoutes) {
+        const sortedRegs = this.phuTroiVehicleRouteSortService.sortRegistrations(route.registrations || []);
+        if (sortedRegs.length) writeBlock(sortedRegs, headerOf(route));
+      }
+    }
+
+    const worksheet = XLSX.utils.aoa_to_sheet(data);
+    worksheet['!cols'] = [
+      { wch: 5 },
+      { wch: 25 },
+      { wch: 30 },
+      { wch: 15 },
+      { wch: 8 },
+      { wch: 10 },
+      { wch: 10 }
+    ];
+    return worksheet;
+  }
+
   /**
    * Create single sheet with all routes and stations grouped (like PDF)
    */
@@ -848,10 +987,6 @@ export class ExcelExportService {
           const dienThoai = String(emp.dienThoai || '').trim(); // Điện thoại - Column D (must be phone)
           const thoiGianBatDau = String(emp.thoiGianBatDau || '').trim(); // Từ... - Column F
           const thoiGianKetThuc = String(emp.thoiGianKetThuc || '').trim(); // Đến... - Column G
-          
-          // #region agent log
-          if(hoTen&&hoTen.includes('Trần Thanh Hùng')){fetch('http://127.0.0.1:7242/ingest/a8508535-ed0c-4922-87ac-bc19c30df599',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'excel-export.service.ts:561',message:'Writing Trần Thanh Hùng to Excel',data:{routeName:route.routeName,station,hoTen,tramXe,dienThoai,thoiGianBatDau,thoiGianKetThuc,routeSttCounter},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'C'})}).catch(()=>{});}
-          // #endregion
           
           // Debug: Verify data before pushing
           if (hoTen && hoTen.match(/^\d+$/)) {
